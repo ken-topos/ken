@@ -3854,6 +3854,86 @@ pub(in crate::cranelift_backend) enum D8gMutation {
     WithholdContextSuffix,
 }
 
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D6c` — the pre-emission SELECTION refusal set.**
+///
+/// ⛔ **Not `D8f`'s set, despite sharing vocabulary.** `D8f` is about which call
+/// consumes a pending checked-IH marker. These are about **selecting the raw/IH
+/// target and its `SelectedRecursiveArgument` member**, before any instruction
+/// exists. Say which you mean whenever you write "the omission refusal" here.
+///
+/// Each variant moves **one** producer input at the selection seam and nothing
+/// else, so a refusal is attributable to that input rather than to a rewritten
+/// resolver. Every arm bumps the application counter when it fires, which is what
+/// makes "the mutation reached the seat" a measurement instead of an assumption.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) enum D6cSelectionMutation {
+    Exact,
+    /// Skip the `SelectedRecursiveArgument` member — the pre-`D6a` defect, where
+    /// the induction hypothesis silently stood in for the argument too.
+    OmitSelectedArgument,
+    /// Push the member twice, so one run names two selected arguments.
+    DuplicateSelectedArgument,
+    /// Name a source position other than the one the unit projects a worker for.
+    WrongSourcePosition,
+    /// Emit the run's IH prefix and argument segment in the opposite order.
+    WrongOrder,
+    /// Claim a member for a recursive position this specialization projects no
+    /// worker for — availability the plan does not grant.
+    FabricatedAvailability,
+    /// Build the argument binding over a different closure/body origin than the
+    /// one the unit selected.
+    WrongClosureBody,
+    /// Build the argument binding with a capture run that is not the envelope's
+    /// worker-capture segment.
+    WrongCaptureRun,
+    /// Cross the two routes: the hypothesis takes the raw route while a context
+    /// was resolved, and the argument takes the context route.
+    CrossRouteTargets,
+}
+
+#[cfg(test)]
+thread_local! {
+    static D6C_SELECTION_MUTATION: std::cell::Cell<D6cSelectionMutation> =
+        const { std::cell::Cell::new(D6cSelectionMutation::Exact) };
+    static D6C_SELECTION_APPLICATIONS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d6c_selection_mutation() -> D6cSelectionMutation {
+    D6C_SELECTION_MUTATION.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn record_d6c_selection_application() {
+    D6C_SELECTION_APPLICATIONS.with(|cell| cell.set(cell.get() + 1));
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d6c_selection_applications() -> usize {
+    D6C_SELECTION_APPLICATIONS.with(std::cell::Cell::get)
+}
+
+/// Arm one `D6c` selection mutation for the duration of `body`, restoring on the
+/// way out however `body` leaves. Returns `(result, applications)`.
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn with_d6c_selection_mutation<T>(
+    mutation: D6cSelectionMutation,
+    body: impl FnOnce() -> T,
+) -> (T, usize) {
+    struct Restore;
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            D6C_SELECTION_MUTATION.with(|cell| cell.set(D6cSelectionMutation::Exact));
+        }
+    }
+    D6C_SELECTION_MUTATION.with(|cell| cell.set(mutation));
+    D6C_SELECTION_APPLICATIONS.with(|cell| cell.set(0));
+    let _restore = Restore;
+    let result = body();
+    (result, d6c_selection_applications())
+}
+
 #[cfg(test)]
 thread_local! {
     static D8G_MUTATION: std::cell::Cell<D8gMutation> =

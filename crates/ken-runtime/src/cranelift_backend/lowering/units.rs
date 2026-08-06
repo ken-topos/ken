@@ -1153,6 +1153,28 @@ pub(super) fn continuation_case_binder_run(
     // reversed and forward order coincide. It is written as the law states it
     // rather than collapsed to the single-position case, so that admitting a
     // second worker later is a change to the projection and not to this order.
+    // `D6c` — FABRICATED AVAILABILITY, under test only. A second recursive
+    // position is claimed for this case, which the specialization projects no
+    // worker for. ⛔ The claim is added to the segment's own input rather than
+    // to its output: the loop below is untouched, so what refuses is the
+    // production guard that owns availability, not a rewritten loop.
+    #[cfg(test)]
+    let fabricated: Vec<usize>;
+    #[cfg(test)]
+    let recursive_positions = if crate::cranelift_backend::lowering::d6c_selection_mutation()
+        == crate::cranelift_backend::lowering::D6cSelectionMutation::FabricatedAvailability
+    {
+        crate::cranelift_backend::lowering::record_d6c_selection_application();
+        fabricated = recursive_positions
+            .iter()
+            .copied()
+            .chain(std::iter::once(worker_position.wrapping_add(1)))
+            .collect();
+        fabricated.as_slice()
+    } else {
+        recursive_positions
+    };
+
     for position in recursive_positions.iter().rev().copied() {
         if position != worker_position {
             return Err(backend_module(format!(
@@ -1193,6 +1215,38 @@ pub(super) fn continuation_case_binder_run(
             // ruled `worker_position` never reaches here. So this member is
             // always the *selected* recursive argument, and `D6a` deliberately
             // does not generalize to a multi-worker population.
+            //
+            // `D6c` — the four run-shape mutations, under test only. Each moves
+            // ONE producer input of this run and leaves the rest of the segment
+            // exactly as it was, so a refusal downstream is attributable to that
+            // input rather than to a rewritten builder.
+            #[cfg(test)]
+            match crate::cranelift_backend::lowering::d6c_selection_mutation() {
+                // The pre-`D6a` defect exactly: the position is skipped and the
+                // IH stands in for the argument as well.
+                crate::cranelift_backend::lowering::D6cSelectionMutation::OmitSelectedArgument => {
+                    crate::cranelift_backend::lowering::record_d6c_selection_application();
+                    continue;
+                }
+                // One run naming two selected arguments.
+                crate::cranelift_backend::lowering::D6cSelectionMutation::DuplicateSelectedArgument => {
+                    crate::cranelift_backend::lowering::record_d6c_selection_application();
+                    run.push(ContinuationCaseBinderSource::SelectedRecursiveArgument {
+                        source_position,
+                    });
+                }
+                // A source position the unit projects no worker for. ⛔ Chosen
+                // by arithmetic on the ruled position rather than from the
+                // envelope, so the value is not one the plan named anywhere.
+                crate::cranelift_backend::lowering::D6cSelectionMutation::WrongSourcePosition => {
+                    crate::cranelift_backend::lowering::record_d6c_selection_application();
+                    run.push(ContinuationCaseBinderSource::SelectedRecursiveArgument {
+                        source_position: source_position.wrapping_add(1),
+                    });
+                    continue;
+                }
+                _ => {}
+            }
             run.push(ContinuationCaseBinderSource::SelectedRecursiveArgument { source_position });
             continue;
         }
@@ -1213,6 +1267,27 @@ pub(super) fn continuation_case_binder_run(
                 ))
             })?;
         run.push(ContinuationCaseBinderSource::Ordinary(index));
+    }
+
+    // `D6c` — WRONG ORDER, under test only. The IH prefix and the argument
+    // segment are exchanged and nothing else moves: the same members, the same
+    // count, the same continuation-input tail. ⛔ Applied before segment 3 so
+    // the tail stays in its ruled place and the perturbation is confined to the
+    // two segments whose order is the law under test.
+    #[cfg(test)]
+    if crate::cranelift_backend::lowering::d6c_selection_mutation()
+        == crate::cranelift_backend::lowering::D6cSelectionMutation::WrongOrder
+    {
+        let hypotheses = run
+            .iter()
+            .filter(|source| {
+                matches!(source, ContinuationCaseBinderSource::InductionHypothesis)
+            })
+            .count();
+        if hypotheses > 0 && hypotheses < run.len() {
+            crate::cranelift_backend::lowering::record_d6c_selection_application();
+            run.rotate_left(hypotheses);
+        }
     }
 
     // Segment 3 -- the tail environment: this frame's continuation inputs, in
@@ -1689,6 +1764,22 @@ pub(super) fn define_continuation_bodies<M: Module>(
                 Some(_) => StaticWorkerCallRoute::GeneratedContext,
                 None => StaticWorkerCallRoute::RawWorker,
             };
+            // `D6c` — CROSS-ROUTING, the hypothesis half. It takes the raw route
+            // while this unit DID resolve a context; the argument below takes
+            // the context route. ⛔ Only where a context was actually resolved:
+            // on a route-degenerate unit both members lawfully carry
+            // `RawWorker`, so there is no crossing to make and the arm declines
+            // rather than counting an application it did not perform.
+            #[cfg(test)]
+            let induction_route = if crate::cranelift_backend::lowering::d6c_selection_mutation()
+                == crate::cranelift_backend::lowering::D6cSelectionMutation::CrossRouteTargets
+                && retargeted_worker_body.is_some()
+            {
+                crate::cranelift_backend::lowering::record_d6c_selection_application();
+                StaticWorkerCallRoute::RawWorker
+            } else {
+                induction_route
+            };
 
             // The EXISTING constructor, with the projected identity and arity.
             let worker = compiler.construct_static_worker_binding(
@@ -1724,13 +1815,91 @@ pub(super) fn define_continuation_bodies<M: Module>(
             // ⛔ Nothing new crosses the ABI. This adds no slot, carrier, tag,
             // descriptor or source occurrence -- it is a second compiler-only
             // binding over operands this frame has already loaded.
-            let recursive_argument = compiler.construct_static_worker_binding(
-                unit.worker_closure_origin,
+            // `D6c` — the three binding-construction mutations, under test only.
+            // Each moves ONE argument handed to the existing constructor; the
+            // constructor itself, the hypothesis above and the run below are all
+            // untouched, so the guard that refuses is the one that owns the
+            // moved input.
+            #[cfg(test)]
+            let (argument_body_origin, argument_captures, argument_route) = {
+                use crate::cranelift_backend::lowering::D6cSelectionMutation as Mutation;
+                match crate::cranelift_backend::lowering::d6c_selection_mutation() {
+                    // A body this unit did not select. ⛔ The substituted value
+                    // is a REAL planner-issued origin -- this continuation's own
+                    // frame occurrence -- rather than an arithmetic neighbour.
+                    // A fabricated id could be refused merely for being unknown;
+                    // a real origin naming the wrong role is the case the guard
+                    // actually has to catch. The control asserts it differs from
+                    // the selected body.
+                    Mutation::WrongClosureBody => {
+                        crate::cranelift_backend::lowering::record_d6c_selection_application();
+                        (
+                            unit.continuation_origin,
+                            worker_captures.clone(),
+                            StaticWorkerCallRoute::RawWorker,
+                        )
+                    }
+                    // A capture run that is not the envelope's worker-capture
+                    // segment: drop an operand where there is one, otherwise add
+                    // one the envelope holds.
+                    //
+                    // ⛔ The counter fires ONLY if the vector actually changed.
+                    // A unit with no captures and no ordinary operand to borrow
+                    // leaves this arm the IDENTITY, and counting an application
+                    // there would report a perturbation that never happened --
+                    // which is precisely how a control comes to prove the
+                    // opposite of what it claims.
+                    Mutation::WrongCaptureRun => {
+                        let mut perturbed = worker_captures.clone();
+                        if perturbed.pop().is_none() {
+                            perturbed.extend(ordinary.first().cloned());
+                        }
+                        if perturbed.len() != worker_captures.len() {
+                            crate::cranelift_backend::lowering::record_d6c_selection_application();
+                        }
+                        (
+                            unit.worker_body_origin,
+                            perturbed,
+                            StaticWorkerCallRoute::RawWorker,
+                        )
+                    }
+                    // The argument takes the context route. Paired with the
+                    // hypothesis taking the raw route above, this is the
+                    // cross-routing the two members must never permit.
+                    //
+                    // ⛔ Only where a context was actually resolved. On a
+                    // route-degenerate unit both members lawfully carry
+                    // `RawWorker`, so there is no crossing to perform; applying
+                    // it there would move a route no law distinguishes and count
+                    // an application for a perturbation with no content.
+                    Mutation::CrossRouteTargets if retargeted_worker_body.is_some() => {
+                        crate::cranelift_backend::lowering::record_d6c_selection_application();
+                        (
+                            unit.worker_body_origin,
+                            worker_captures.clone(),
+                            StaticWorkerCallRoute::GeneratedContext,
+                        )
+                    }
+                    _ => (
+                        unit.worker_body_origin,
+                        worker_captures.clone(),
+                        StaticWorkerCallRoute::RawWorker,
+                    ),
+                }
+            };
+            #[cfg(not(test))]
+            let (argument_body_origin, argument_captures, argument_route) = (
                 unit.worker_body_origin,
-                unit.worker_declared_arity,
-                unit.worker_capture_count,
                 worker_captures,
                 StaticWorkerCallRoute::RawWorker,
+            );
+            let recursive_argument = compiler.construct_static_worker_binding(
+                unit.worker_closure_origin,
+                argument_body_origin,
+                unit.worker_declared_arity,
+                unit.worker_capture_count,
+                argument_captures,
+                argument_route,
                 // `D8i` — the SPECIALIZATION's selected recursive argument.
                 // ⛔ Direct, and the contrast with `D8d`'s composed argument is
                 // the point: the same source closure at the same position

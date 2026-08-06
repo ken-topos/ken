@@ -23938,3 +23938,182 @@ fn d6b_every_raw_emission_sits_where_the_tables_agree_and_every_context_emission
          correspondence from a constant"
     );
 }
+
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D6c` — the pre-emission SELECTION refusal set:
+/// five moved inputs, five guards that own them.**
+///
+/// ⛔ **NOT `D8f`'s refusal set.** `D8f` is about which call consumes a pending
+/// checked-IH marker. This is about **selecting the raw/IH target and its
+/// `SelectedRecursiveArgument` member**, before any instruction exists. The two
+/// share vocabulary and share nothing else; discharging one discharges none of
+/// the other.
+///
+/// ## The plane
+///
+/// Entirely the **refusal** plane, per `TWO PROOF PLANES`. Each row below owes
+/// four things and this control asserts all four: the mutation **fired**
+/// (application count), the **typed** error matched by category **plus** a
+/// discriminating reason, **zero** post-emission records, and the exact positive
+/// rerun separately. ⛔ No independently enumerated expectation population is
+/// built, and no bad-but-emittable call is arranged — an earlier fail-closed
+/// guard is stronger, not weaker.
+///
+/// ## The five, and the guard that owns each
+///
+/// | moved input | owning guard |
+/// |---|---|
+/// | wrong source position | the binder run's own position check, against the unit's ruled recursive position |
+/// | fabricated availability | the IH prefix's unprojected-position hard stop |
+/// | wrong closure/body | the static-worker constructor's raw-template lookup |
+/// | wrong capture run | the constructor's declared-versus-projected capture count |
+/// | raw/IH cross-routing | the route's own table, which has no raw callee for a retargeted body |
+///
+/// ⭐ **Each mutation moves exactly ONE argument at the selection seam** and
+/// leaves the constructor, the hypothesis and the rest of the run untouched, so
+/// a refusal is attributable to that input and not to a rewritten resolver.
+///
+/// ## Two mutations that DECLINE rather than lie
+///
+/// `WrongCaptureRun` and `CrossRouteTargets` have nothing to move on a unit with
+/// no captures, or on a route-degenerate unit where both members lawfully carry
+/// the raw route. There they leave the seam identical and **do not count an
+/// application**. ⛔ That is deliberate: a counter that ticked for a perturbation
+/// it did not perform would let this row read a green as a defence when the
+/// mutation never happened.
+///
+/// ## THE GAP — three of the eight named refusals are NOT here
+///
+/// **Omission, duplicate and wrong order have no production guard that owns
+/// them**, measured rather than assumed, and they are reported to the frame owner
+/// rather than approximated here. They are absent from this row because a control
+/// asserting a refusal that production does not perform would be a false green,
+/// and one asserting the incidental downstream failure instead would credit the
+/// wrong mechanism. See the `D6c` handoff for the measurement.
+///
+/// **Promise class: durable invariant.** Each clause is a typed refusal keyed to
+/// the input it perturbs. A fixture that grows keeps it green; only a guard
+/// ceasing to own its input reds it, which is a contract decision.
+#[test]
+fn d6c_each_moved_selection_input_is_refused_by_the_guard_that_owns_it_before_emission() {
+    use crate::cranelift_backend::lowering::{
+        d8g_emissions, reset_d8g_emissions, with_d6c_selection_mutation, D6cSelectionMutation,
+    };
+    use crate::cranelift_backend::surface::{BackendFailure, CraneliftBackendError};
+
+    /// `(mutation, typed category, the discriminating fact the reason must name)`
+    ///
+    /// ⛔ The category comes from the error's own typed shape, never from a
+    /// substring of the whole formatted value. The reason fragment is what makes
+    /// the match discriminating: without it, any refusal of the same category
+    /// would satisfy the row.
+    const OWNED: &[(D6cSelectionMutation, &str, &str)] = &[
+        (
+            D6cSelectionMutation::WrongSourcePosition,
+            "Module",
+            "the binder run names a selected recursive argument at source position",
+        ),
+        (
+            D6cSelectionMutation::FabricatedAvailability,
+            "Module",
+            "that the continuation specialization projects no worker for",
+        ),
+        (
+            D6cSelectionMutation::WrongClosureBody,
+            "StaticWorkerBinding",
+            "no raw worker template for body origin",
+        ),
+        (
+            D6cSelectionMutation::WrongCaptureRun,
+            "StaticWorkerBinding",
+            "lexical captures but",
+        ),
+        (
+            D6cSelectionMutation::CrossRouteTargets,
+            "Call",
+            "route has no callee",
+        ),
+    ];
+
+    for (mutation, expected_category, discriminating) in OWNED {
+        reset_d8g_emissions();
+        let (outcome, applications) = with_d6c_selection_mutation(*mutation, || {
+            crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
+                "ken_d6c_refusal",
+                false,
+            )
+            .map(|_| ())
+        });
+
+        // 1. The mutation FIRED. A green defence from a perturbation that never
+        //    reached the seat proves the opposite of what it looks like.
+        assert!(
+            applications > 0,
+            "{mutation:?} never reached the selection seam, so the refusal below would be about \
+             some other program entirely"
+        );
+
+        // 2. The typed error, by category PLUS a discriminating reason.
+        let (category, reason) = match &outcome {
+            Err(CraneliftBackendError::Unsupported(unsupported)) => {
+                (unsupported.construct, unsupported.reason.clone())
+            }
+            Err(CraneliftBackendError::Backend(BackendFailure::Module(reason))) => {
+                ("Module", reason.clone())
+            }
+            Err(other) => panic!(
+                "{mutation:?} must be refused by a guard that owns the moved input, not by an \
+                 unrelated backend failure: {other:?}"
+            ),
+            Ok(()) => panic!(
+                "{mutation:?} COMPILED. The moved input reached emission unrefused, so no \
+                 production guard owns it and this row must not pretend otherwise"
+            ),
+        };
+        assert_eq!(
+            category, *expected_category,
+            "{mutation:?} must be refused by the guard that owns it. A different category means \
+             the perturbation was caught somewhere downstream that does not own this input, which \
+             credits the wrong mechanism: {reason}"
+        );
+        assert!(
+            reason.contains(discriminating),
+            "{mutation:?}: the refusal must name the moved input. Category alone would be \
+             satisfied by any refusal of the same kind, so this fragment is what makes the match \
+             discriminating; got {reason}"
+        );
+
+        // 3. ZERO post-emission records. The refusal is pre-emission, so no
+        //    instruction may exist -- this is what separates a fail-closed guard
+        //    from a downstream relation failure.
+        assert!(
+            d8g_emissions().is_empty(),
+            "{mutation:?} refused, but a static-worker call was still emitted first. A \
+             pre-emission guard that lets an instruction be written is not the plane this row \
+             claims: {:?}",
+            d8g_emissions()
+        );
+    }
+
+    // 4. The exact positive, rerun SEPARATELY. Without it every refusal above is
+    //    consistent with a fixture that simply cannot compile.
+    reset_d8g_emissions();
+    let (exact, applications) = with_d6c_selection_mutation(D6cSelectionMutation::Exact, || {
+        crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
+            "ken_d6c_exact",
+            false,
+        )
+        .map(|_| ())
+        .map_err(|error| format!("{error:?}"))
+    });
+    assert_eq!(
+        applications, 0,
+        "the exact run must apply NO mutation, or the positive below is not the unperturbed program"
+    );
+    exact.expect("THE EXACT POSITIVE: the unperturbed witness compiles");
+    assert!(
+        !d8g_emissions().is_empty(),
+        "and it emits, so the zero-emission assertions above are a fact about the refusals rather \
+         than about a witness that never emits at all"
+    );
+}
