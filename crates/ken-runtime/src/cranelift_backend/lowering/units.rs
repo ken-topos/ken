@@ -1824,6 +1824,40 @@ pub(super) fn define_continuation_bodies<M: Module>(
                 env.push(binding);
             }
 
+            // `D6b` — the same instant, structured. The trace below renders the
+            // ROUTE of each static-worker member; this record carries the body
+            // origin beside it, which is what lets a control ask whether the
+            // mixed pair is over ONE body rather than merely mixed.
+            #[cfg(test)]
+            crate::cranelift_backend::lowering::record_d6b_specialization_body(
+                crate::cranelift_backend::lowering::D6bSpecializationBody {
+                    unit: unit.id,
+                    worker_body_origin: unit.worker_body_origin,
+                    retargeted: retargeted_worker_body,
+                    worker_call_targets: compiler
+                        .function_local
+                        .worker_calls
+                        .keys()
+                        .copied()
+                        .collect(),
+                    raw_worker_call_targets: compiler
+                        .function_local
+                        .raw_worker_calls
+                        .keys()
+                        .copied()
+                        .collect(),
+                    members: env
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(position, binding)| match binding {
+                            LoweringEnvironmentBinding::StaticWorker(worker) => {
+                                Some((position, worker.route, worker.body_origin))
+                            }
+                            LoweringEnvironmentBinding::Value(_) => None,
+                        })
+                        .collect(),
+                },
+            );
             #[cfg(test)]
             d5a_trace(format!(
                 "  SPEC-BODY {:?} alt={} binders={} ordinary={} envelope={:?} env=[{}]",

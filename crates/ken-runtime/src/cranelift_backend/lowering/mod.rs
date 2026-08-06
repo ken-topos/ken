@@ -3749,6 +3749,60 @@ thread_local! {
     /// shaped alike.
     static D8G_EMISSIONS: std::cell::RefCell<Vec<D8gEmission>> =
         const { std::cell::RefCell::new(Vec::new()) };
+    /// `D6b` — one specialization body's two declared call tables and the
+    /// static-worker members its case environment installed.
+    static D6B_BODIES: std::cell::RefCell<Vec<D6bSpecializationBody>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D6b` — one specialization body's route/table
+/// situation, recorded where the body is defined.**
+///
+/// The subject is the ASYMMETRIC law's precondition, which no other family
+/// observes: whether this body was actually retargeted, and — separately — what
+/// each of its two declared call tables can answer for. Clauses 3 and 4 of the
+/// law both turn on that pair, and until this record existed the only evidence
+/// for it was the text of a refusal message.
+#[cfg(test)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) struct D6bSpecializationBody {
+    pub(in crate::cranelift_backend) unit: ContinuationSpecializationId,
+    /// The worker body this specialization selected.
+    pub(in crate::cranelift_backend) worker_body_origin: StaticOriginId,
+    /// The retarget's own outcome: `Some` iff a generated execution context
+    /// replaced this body's entry in `worker_calls`.
+    pub(in crate::cranelift_backend) retargeted: Option<StaticOriginId>,
+    /// Which body origins `worker_calls` can answer for in this function.
+    pub(in crate::cranelift_backend) worker_call_targets: BTreeSet<StaticOriginId>,
+    /// Which body origins `raw_worker_calls` can answer for in this function.
+    ///
+    /// ⛔ Recorded as its OWN set rather than as a difference against the one
+    /// above. A retargeted body is present in one and absent from the other, and
+    /// that asymmetry is the whole subject -- deriving either side from the
+    /// other would make it true by construction.
+    pub(in crate::cranelift_backend) raw_worker_call_targets: BTreeSet<StaticOriginId>,
+    /// The case environment's static-worker members, in binder-run order:
+    /// `(run position, route, the body origin the member names)`.
+    ///
+    /// ⛔ The body origin travels WITH the route. `D6a` binds both members over
+    /// one worker body by design, so a pair of routes with the origins dropped
+    /// cannot say whether the mixed pair is over one body or two.
+    pub(in crate::cranelift_backend) members: Vec<(usize, StaticWorkerCallRoute, StaticOriginId)>,
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn record_d6b_specialization_body(body: D6bSpecializationBody) {
+    D6B_BODIES.with(|log| log.borrow_mut().push(body));
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d6b_specialization_bodies() -> Vec<D6bSpecializationBody> {
+    D6B_BODIES.with(|log| log.borrow().clone())
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn reset_d6b_specialization_bodies() {
+    D6B_BODIES.with(|log| log.borrow_mut().clear());
 }
 
 /// `D8g` — one static-worker call, as the shared emitter wrote it.

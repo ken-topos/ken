@@ -198,7 +198,13 @@ fn px8tr_nested_post_effect_fixture() -> (
                     call_template_id: 100,
                     checked_occurrence_path: vec![30],
                     body: Box::new(RuntimeExpr::Call {
-                        callee: Box::new(RuntimeExpr::Var(0)),
+                        callee: Box::new(RuntimeExpr::Var(
+                            if px8tr_call_selected_recursive_argument() {
+                                2
+                            } else {
+                                0
+                            },
+                        )),
                         // `D8p` — under test only, nest an ORDINARY call on the
                         // same recursor binder inside the checked application.
                         // The nested call instantiates a semantic IH layer of
@@ -347,6 +353,37 @@ fn px8tr_nest_ordinary_ih_call() -> bool {
 
 #[cfg(not(test))]
 fn px8tr_nest_ordinary_ih_call() -> bool {
+    false
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D6b`** — call the SELECTED RECURSIVE
+/// ARGUMENT, under test only.
+///
+/// `Var(2)` is that member: the `Vis` case has `argument_binders = 2` and
+/// `recursive_positions = [1]`, so
+/// [`continuation_case_binder_run`](crate::cranelift_backend::lowering::units::continuation_case_binder_run)
+/// lays the run out as `[IH, ordinary field 0, SelectedRecursiveArgument{1}, ..]`.
+/// ⛔ Not `Var(0)`: that is the induction hypothesis, which every existing
+/// witness already calls, and calling it is what leaves the argument member
+/// proven as a binding and never as a call.
+#[cfg(test)]
+thread_local! {
+    static PX8TR_CALL_SELECTED_RECURSIVE_ARGUMENT: std::cell::Cell<bool> =
+        const { std::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+pub(crate) fn set_px8tr_call_selected_recursive_argument(armed: bool) {
+    PX8TR_CALL_SELECTED_RECURSIVE_ARGUMENT.with(|cell| cell.set(armed));
+}
+
+#[cfg(test)]
+fn px8tr_call_selected_recursive_argument() -> bool {
+    PX8TR_CALL_SELECTED_RECURSIVE_ARGUMENT.with(std::cell::Cell::get)
+}
+
+#[cfg(not(test))]
+fn px8tr_call_selected_recursive_argument() -> bool {
     false
 }
 

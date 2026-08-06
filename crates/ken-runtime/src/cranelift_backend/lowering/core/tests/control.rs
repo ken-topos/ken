@@ -23377,3 +23377,341 @@ fn d8g_each_producer_input_mutation_is_caught_by_the_guard_that_owns_it() {
     outcome.expect("and the exact witness compiles");
     d8g_the_functionized_population_binds_its_table_and_suffix_at_the_shared_emitter();
 }
+
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D6b` — the mixed pair sits over ONE worker
+/// body, and only where a retarget happened do the two tables disagree there.**
+///
+/// ## What this row is about, and why nothing else could see it
+///
+/// Clauses 3 and 4 of the asymmetric route law both turn on one fact: *did this
+/// body actually get retargeted, and can each of its two declared call tables
+/// answer for the worker body it selected?* Until this row, the only evidence
+/// for that pair was the **text of a refusal message** — `D8g`'s `WrongTable`
+/// mutation reds with *"no `raw_worker_calls` target for body origin"*, and the
+/// frame drew the population conclusion from it. ⛔ A refusal message is an
+/// inference, not a measurement; this row measures the tables directly, at the
+/// body-definition seat, with no mutation armed.
+///
+/// ## The independent side
+///
+/// The planner's own populations, from a plan built separately from the emission
+/// run: the continuation-context population says which worker bodies have a
+/// generated execution context, and the emittable/executable unit populations say
+/// which bodies have a declared `Function` at all. ⛔ Nothing below is derived
+/// from the retarget's own outcome, from the tables, or from the other's absence.
+///
+/// ## Clause 1 — the retarget agrees with the planner
+///
+/// A body is retargeted exactly when the planner declares a context for the
+/// worker body it selected. Both directions, so neither a missed retarget nor a
+/// spurious one passes.
+///
+/// ## Clause 2 — the mixed pair is over ONE body
+///
+/// A retargeted specialization installs exactly two static-worker members: the
+/// induction hypothesis, routed `GeneratedContext`, and the selected recursive
+/// argument, routed `RawWorker` — **both naming the same worker body origin**.
+/// ⭐ That single-origin fact is what makes the pair `D6a`'s subject rather than
+/// two unrelated workers that happen to differ in route, and it is why the route
+/// cannot be recovered from the origin.
+///
+/// A body that resolved no context installs the same two members over the same
+/// one origin with **both** routes `RawWorker` — lawful and route-degenerate.
+///
+/// ## Clause 3 — the tables, and the asymmetry that is the law's precondition
+///
+/// Where a retarget happened, `worker_calls` answers for the selected body and
+/// `raw_worker_calls` does **not**. Where none happened, **both** answer.
+/// Clause 4 of the law — *"a table swap is observational identity, not a missing
+/// negative"* — is exactly the second case, and this row is what makes that a
+/// measured precondition instead of an assumption carried in prose.
+///
+/// ## Clause 4 — WHY the raw table cannot answer, taken from the planner
+///
+/// The retargeted body is in the planner's **emittable** population and absent
+/// from its **executable** one: it has a descriptor and no `Function`. ⛔ Read
+/// from the plan, not from the table's absence, so the two are independent
+/// statements of one fact rather than one fact restated.
+///
+/// ## MEASURED / CLAIMED / THE GAP
+///
+/// **MEASURED:** the retarget outcome, both tables' answerable sets, and the
+/// route and body origin of every static-worker member each specialization body
+/// installed.
+///
+/// **CLAIMED:** that the asymmetric law's precondition holds as stated — the
+/// tables diverge exactly at a retargeted body and nowhere else.
+///
+/// **THE GAP:** this row observes what the tables *can answer for*. It does not
+/// observe a call, so it says nothing about which table a given emission read;
+/// that is
+/// [`d8g_the_functionized_population_binds_its_table_and_suffix_at_the_shared_emitter`]'s
+/// subject, at the emitter.
+///
+/// ## Promise class
+///
+/// **Durable invariant**, with ONE exception named honestly. Clauses 1, 2 and 4
+/// and the equal-tables half of clause 3 are relations that survive any fixture
+/// growth. The clause asserting `raw_worker_calls` **cannot** answer for a
+/// retargeted body is a **transition sentinel**: it is the current
+/// representation, and `D6b`'s outstanding raw-target declared-call-table
+/// obligation is precisely the change that would retire it. It is written to red
+/// loudly, and it names that obligation, so completing the representation forces
+/// this row back through review rather than silently passing.
+#[test]
+fn d6b_the_mixed_pair_is_over_one_body_and_only_a_retarget_makes_the_two_tables_disagree() {
+    use crate::cranelift_backend::lowering::{
+        d6b_specialization_bodies, reset_d6b_specialization_bodies,
+    };
+
+    reset_d6b_specialization_bodies();
+    crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
+        "ken_d6b_tables",
+        false,
+    )
+    .map(|_| ())
+    .map_err(|error| format!("{error:?}"))
+    .expect("the mixed A/B witness compiles");
+    let bodies = d6b_specialization_bodies();
+    assert!(
+        !bodies.is_empty(),
+        "no specialization body was defined, so every clause below would run vacuously"
+    );
+
+    // The independent side. Both read a plan built separately from the emission
+    // run above, so no expectation here is an echo of that compile.
+    let planned_contexts = with_d5a_witness_plan(|plan| {
+        plan.continuation_contexts()
+            .expect("contexts")
+            .into_iter()
+            .map(|context| context.worker_body_origin())
+            .collect::<BTreeSet<_>>()
+    });
+    let (emittable, executable) = with_d5a_witness_plan(|plan| {
+        (
+            plan.emittable_units()
+                .expect("emittable units")
+                .iter()
+                .map(|unit| unit.origin())
+                .collect::<BTreeSet<_>>(),
+            plan.executable_units()
+                .expect("executable units")
+                .iter()
+                .map(|unit| unit.origin())
+                .collect::<BTreeSet<_>>(),
+        )
+    });
+
+    let mut retargeted_bodies = 0usize;
+    let mut plain_bodies = 0usize;
+    for body in &bodies {
+        let selected = body.worker_body_origin;
+
+        // Clause 1 — the retarget outcome against the planner, both directions.
+        assert_eq!(
+            body.retargeted.is_some(),
+            planned_contexts.contains(&selected),
+            "a body is retargeted exactly when the PLANNER declares a generated context for the \
+             worker body it selected. Asserted both ways, so neither a missed retarget nor a \
+             spurious one passes: {body:?}"
+        );
+        if let Some(retargeted) = body.retargeted {
+            assert_eq!(
+                retargeted, selected,
+                "and the retarget names the body this specialization selected, never another: \
+                 {body:?}"
+            );
+        }
+
+        // Clause 2 — two members, one origin, and the routes the law states.
+        assert_eq!(
+            body.members.len(),
+            2,
+            "a specialization with one recursive constructor argument installs exactly two \
+             static-worker members: the induction hypothesis and the selected recursive argument. \
+             One means the argument position was skipped -- the pre-`D6a` defect: {body:?}"
+        );
+        assert!(
+            body.members.iter().all(|(_, _, origin)| *origin == selected),
+            "and BOTH members name the worker body this specialization selected. Two members over \
+             two different origins would not be `D6a`'s pair at all, and the route below would be \
+             recoverable from the origin rather than a separate fact: {body:?}"
+        );
+        let routes = body
+            .members
+            .iter()
+            .map(|(_, route, _)| *route)
+            .collect::<Vec<_>>();
+        let positions = body
+            .members
+            .iter()
+            .map(|(position, _, _)| *position)
+            .collect::<Vec<_>>();
+        assert!(
+            positions[0] < positions[1],
+            "the members are recorded in binder-run order, so the induction hypothesis precedes \
+             the selected recursive argument: {body:?}"
+        );
+
+        if body.retargeted.is_some() {
+            retargeted_bodies += 1;
+            assert_eq!(
+                routes,
+                vec![
+                    StaticWorkerCallRoute::GeneratedContext,
+                    StaticWorkerCallRoute::RawWorker,
+                ],
+                "THE MIXED PAIR: where a context was resolved, the induction hypothesis routes to \
+                 it and the selected recursive argument stays raw -- over the one body origin \
+                 asserted above. Equal routes here would mean the retarget moved both members, or \
+                 that one binding was reused for both: {body:?}"
+            );
+
+            // Clause 3 — the asymmetry, measured on both tables.
+            assert!(
+                body.worker_call_targets.contains(&selected),
+                "`worker_calls` must answer for the retargeted body: the retarget inserts the \
+                 generated context under exactly this origin: {body:?}"
+            );
+            // ⛔ TRANSITION SENTINEL. This is the CURRENT representation, and
+            // `D6b`'s outstanding raw-target declared-call-table obligation is
+            // the event that retires it: completing it makes `raw_worker_calls`
+            // answer here and reds this clause deliberately, forcing the row
+            // back through review rather than letting the change pass silently.
+            assert!(
+                !body.raw_worker_call_targets.contains(&selected),
+                "TRANSITION SENTINEL -- `raw_worker_calls` currently CANNOT answer for a \
+                 retargeted body, so the raw route over it has no callee. This is the open \
+                 raw-target declared-call-table obligation; when that lands, this clause is the \
+                 one that must be re-ruled: {body:?}"
+            );
+
+            // Clause 4 — WHY, from the planner rather than from the absence.
+            assert!(
+                emittable.contains(&selected),
+                "the retargeted body keeps its DESCRIPTOR -- it is still emittable, which is what \
+                 lets the static-worker constructor validate against its raw contract: {body:?}"
+            );
+            assert!(
+                !executable.contains(&selected),
+                "and it has no `Function`: the planner's executable population excludes it once it \
+                 is fully retargeted. ⭐ THIS is why the raw table cannot answer above, stated \
+                 from the PLAN rather than inferred from the table's own absence: {body:?}"
+            );
+        } else {
+            plain_bodies += 1;
+            assert_eq!(
+                routes,
+                vec![
+                    StaticWorkerCallRoute::RawWorker,
+                    StaticWorkerCallRoute::RawWorker,
+                ],
+                "where the planner issued no context, BOTH members lawfully carry the raw route \
+                 and are separated by their run positions alone: {body:?}"
+            );
+            assert!(
+                body.worker_call_targets.contains(&selected)
+                    && body.raw_worker_call_targets.contains(&selected),
+                "CLAUSE 4's PRECONDITION, measured: with no retarget both tables answer for this \
+                 body, so a table swap here is observational identity and NOT a missing negative. \
+                 This is the fact the retired symmetric-mirror requirement assumed away: {body:?}"
+            );
+        }
+    }
+
+    assert!(
+        retargeted_bodies > 0 && plain_bodies > 0,
+        "the witness must reach BOTH kinds ({retargeted_bodies} retargeted, {plain_bodies} not). \
+         With one kind this row cannot tell 'the tables diverge exactly at a retarget' from 'they \
+         always diverge' or from 'they never do': {bodies:?}"
+    );
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D6b` — calling the selected recursive argument
+/// from ordinary source fails closed BEFORE any worker seat, and the reason is
+/// not the raw table.**
+///
+/// ## Why this row exists
+///
+/// `D6b` owes a witness in which the selected recursive argument is *actually
+/// called*. This row is the measurement of why that witness could not be built
+/// from ordinary source on this fixture, kept as a **behavioural** fact rather
+/// than a note somebody has to trust.
+///
+/// ## What is armed
+///
+/// One switch on the existing mixed fixture moves the checked application's
+/// callee from `Var(0)` to `Var(2)`. Both are members of the same case
+/// environment and the change is one index: `Var(0)` is the induction hypothesis
+/// and `Var(2)` is the selected recursive argument, per the binder run
+/// `[IH, ordinary field 0, SelectedRecursiveArgument{1}, ..]`.
+///
+/// ## The measured obstacle
+///
+/// The same case body is lowered **twice**: once into each specialization body,
+/// where the environment does bind both members as static workers, and once by
+/// the **source machine** into the ordinary unit body, where the selected
+/// recursive argument arrives as a carried boundary word. The source machine's
+/// callee edge is a specialized-only surface, so it fails closed there — ⛔
+/// **before** any specialization body is reached, and therefore before the raw
+/// table is ever consulted.
+///
+/// ⇒ The obstacle is upstream of the route mechanism entirely. A reader must not
+/// take this refusal as evidence about `raw_worker_calls`; that separate fact is
+/// measured directly by
+/// [`d6b_the_mixed_pair_is_over_one_body_and_only_a_retarget_makes_the_two_tables_disagree`].
+///
+/// ## The positive control
+///
+/// The identical fixture with the switch disarmed compiles. Without it, a
+/// refusal for any unrelated reason would read as this one.
+///
+/// **Promise class: durable invariant.** The claim is that a specialized-only
+/// surface refuses a carried word — a typed phase boundary, not a message. It is
+/// matched on the error's construct category with the callee edge named, never
+/// on formatted text alone.
+#[test]
+fn d6b_calling_the_selected_recursive_argument_from_ordinary_source_fails_closed_at_the_carrier() {
+    use crate::cranelift_backend::surface::{CraneliftBackendError, UnsupportedLowering};
+
+    // The positive control, first: the same fixture with nothing armed.
+    crate::cranelift_backend::test_objects::set_px8tr_call_selected_recursive_argument(false);
+    crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
+        "ken_d6b_control",
+        false,
+    )
+    .map(|_| ())
+    .map_err(|error| format!("{error:?}"))
+    .expect("POSITIVE CONTROL: the unarmed fixture compiles, so the refusal below is attributable \
+             to the one index that moved");
+
+    crate::cranelift_backend::test_objects::set_px8tr_call_selected_recursive_argument(true);
+    let outcome = crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
+        "ken_d6b_selected_argument_called",
+        false,
+    )
+    .map(|_| ());
+    crate::cranelift_backend::test_objects::set_px8tr_call_selected_recursive_argument(false);
+
+    match outcome {
+        Err(CraneliftBackendError::Unsupported(UnsupportedLowering { construct, reason })) => {
+            assert_eq!(
+                construct, "BoundaryCarrier",
+                "the refusal is the typed PHASE boundary, not a route, table or arity failure. A \
+                 different category would mean the call reached somewhere this row does not \
+                 describe: {reason}"
+            );
+            assert!(
+                reason.contains("a source-machine call's callee"),
+                "and it is the SOURCE MACHINE's callee edge that refused -- the ordinary unit \
+                 body's copy of this case, not a specialization body. That is what places the \
+                 obstacle upstream of the raw table: {reason}"
+            );
+        }
+        other => panic!(
+            "calling the selected recursive argument must fail closed at the carrier boundary; \
+             got {other:?}"
+        ),
+    }
+}
