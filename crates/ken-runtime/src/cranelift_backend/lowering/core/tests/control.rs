@@ -19338,3 +19338,264 @@ fn d8n_slot_locations() -> Vec<crate::CheckedRuntimeMarkerLocationV1> {
         })
         .collect()
 }
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8o` — every emitted body binds its own
+/// planner-issued authority, and none inherits the last body's.**
+///
+/// The census at `docs/notes/rt-contsrc-d8o-ambient-body-authority-census.md`
+/// found that of the three source-bearing body kinds only two wrote the ambient
+/// fields: a **specialization body wrote neither**, so it ran on whatever the
+/// previously defined body left behind. Four of the eight readers *decline*
+/// rather than refuse when the owner is absent, which is why that was silent.
+///
+/// ## Clause 1 — each body's authority comes from its own pass input
+///
+/// ⛔⛔ The expected pair is derived **from the plan**, per body kind, and never
+/// from the ambient field, the `FuncId`, a raw origin, or a selected composed
+/// identity. An expectation read back from the thing under test would agree
+/// with it however wrong both were.
+///
+/// | body kind | expected owner | expected unit |
+/// |---|---|---|
+/// | ordinary unit | `Predeclared(unit.function)` | `unit.function` |
+/// | specialization | `Specialization(unit.id)` | `unit.consumer_owner` |
+/// | generated context | `Specialization(context.enclosing)` | `context.raw_owner` |
+///
+/// ## Clause 2 — nothing inherits
+///
+/// Every body's INHERITED pair is `None`. ⭐ That is the half that proves the
+/// release, and it is mutation-backed: leaving the facts in place at release --
+/// the pre-repair behaviour for a specialization body -- makes a later body
+/// inherit them.
+///
+/// **Promise class: durable invariant.** Relations against plan-derived
+/// expectations; no literal identities.
+#[test]
+fn d8o_every_emitted_body_binds_its_own_planner_issued_authority() {
+    use crate::cranelift_backend::lowering::{
+        d8o_body_authorities, reset_d8o_body_authorities, set_d8o_inherit_residue,
+    };
+
+    reset_d8o_body_authorities();
+    let compiled = d8n_compile();
+    assert!(
+        compiled.is_none(),
+        "the D8o witness must still compile; this row measures the authority each body binds, \
+         not a refusal: {compiled:?}"
+    );
+    let bound = d8o_body_authorities();
+    assert!(
+        bound.len() >= 2,
+        "at least the ordinary unit body and the specialization body must bind, or this row is \
+         measuring a single-body program: {bound:?}"
+    );
+
+    // Clause 1 — the expectation set, derived from the plan.
+    let expected = d8o_expected_authorities();
+    for authority in &bound {
+        assert!(
+            expected.contains(&(authority.owner, authority.unit)),
+            "every emitted body must bind the pair its OWN pass input names. This pair is in no \
+             body descriptor, so it was inherited, inferred, or invented: {authority:?} against \
+             {expected:?}"
+        );
+    }
+    // ⭐ And a specialization body must actually be among them: the kind that
+    // bound nothing before this repair is the one the row exists for.
+    assert!(
+        bound.iter().any(|authority| matches!(
+            authority.owner,
+            crate::cranelift_backend::planning::ContinuationEmissionOwner::Specialization(_)
+        )),
+        "a specialization body must be among the bound bodies, or the repair's subject is \
+         unexercised: {bound:?}"
+    );
+
+    // Clause 2 — nothing inherits.
+    assert!(
+        bound
+            .iter()
+            .all(|authority| authority.inherited_owner.is_none()
+                && authority.inherited_unit.is_none()),
+        "no emitted body may inherit the previous body's ambient authority; every binding must \
+         see an empty enclosing scope: {bound:?}"
+    );
+
+    // And the mutation that removes the release brings inheritance back.
+    reset_d8o_body_authorities();
+    set_d8o_inherit_residue(true);
+    let _ = d8n_compile();
+    set_d8o_inherit_residue(false);
+    let leaked = d8o_body_authorities();
+    assert!(
+        leaked
+            .iter()
+            .any(|authority| authority.inherited_owner.is_some()),
+        "leaving the facts in place at release -- the pre-repair behaviour -- must make a later \
+         body inherit them. If nothing inherits even then, the release is not what clause 2 is \
+         measuring: {leaked:?}"
+    );
+}
+
+/// The `(owner, unit)` pairs the plan itself names, one per body kind.
+///
+/// ⛔ Built from planner views and unit descriptors only. Nothing here reads the
+/// ambient fields, a `FuncId`, a raw origin, or a composed identity.
+#[cfg(test)]
+fn d8o_expected_authorities() -> std::collections::BTreeSet<(
+    crate::cranelift_backend::planning::ContinuationEmissionOwner,
+    PredeclaredFunctionId,
+)> {
+    use crate::cranelift_backend::planning::ContinuationEmissionOwner;
+    let declaration = d8n_declaration();
+    let entry = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::DeclarationRef {
+            symbol: D8N_SYMBOL.to_string(),
+        }),
+        args: vec![RuntimeExpr::Construct {
+            constructor: "ctor:prelude::Unit::MkUnit".to_string(),
+            args: Vec::new(),
+        }],
+    };
+    let declarations = BTreeMap::from([(D8N_SYMBOL, &declaration)]);
+    let plan = plan_static_transition_graph_with_symbols(
+        &entry,
+        &declarations,
+        &crate::NativeProcessSymbols::legacy_prelude(),
+        AbiRootIngress::Value,
+        true,
+    )
+    .expect("the D8o witness plans");
+    let mut expected = std::collections::BTreeSet::new();
+    for unit in plan.emittable_units().expect("emittable units") {
+        expected.insert((
+            ContinuationEmissionOwner::Predeclared(unit.function()),
+            unit.function(),
+        ));
+    }
+    for unit in plan.continuation_units().expect("continuation units") {
+        expected.insert((
+            ContinuationEmissionOwner::Specialization(unit.id()),
+            unit.consumer_owner(),
+        ));
+    }
+    for context in plan.continuation_contexts().expect("contexts") {
+        expected.insert((
+            ContinuationEmissionOwner::Specialization(context.enclosing_specialization()),
+            context.raw_owner(),
+        ));
+    }
+    expected
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8o` — the bounded re-measurement of the two
+/// owner-keyed guards, composed with independent body-authority evidence.**
+///
+/// ⛔ **This does not reopen `D8a`–`D8k`.** Every prior mechanism and SHA stands;
+/// what is recorded here is the same two guards re-run on the `D8o` descendant,
+/// beside the evidence they were always missing.
+///
+/// ## Why they needed composing rather than replacing
+///
+/// `D8i` clause 2 and `D8j` verification 2 are **self-correlated**. Each
+/// mutation selects a foreign identity *relative to* `defining_emission_owner`,
+/// and each guard compares back to that same ambient field. So they prove
+/// disagreement **relative to ambient state** — not that the ambient state is
+/// the planner's. Neither was a false green on its ordinary/root witness, and
+/// neither was ever evidence for specialization-body owner correctness.
+///
+/// ⭐ `D8o` supplies the missing half: the bodies' authority is checked against
+/// **plan-derived** expectations by
+/// [`d8o_every_emitted_body_binds_its_own_planner_issued_authority`]. Composed,
+/// the pair says both "the guard fires on disagreement" and "the thing it
+/// agrees with is what the planner issued".
+///
+/// ## Recorded here
+///
+/// - `D8i` clause 2 — a real foreign authority at an ordinary binding site
+///   still refuses at construction, on the descendant.
+/// - `D8j` verification 2 — the wrong-claiming-owner refusal, and the exact run
+///   that must NOT refuse, both still hold on the descendant.
+/// - **The specialization-body composed-claim population is EMPTY**, recorded
+///   rather than fabricated: no lawful witness in reach makes a composed claim
+///   from inside a specialization body, so there is nothing to re-measure there
+///   and this row says so instead of inventing one.
+#[test]
+fn d8o_remeasures_the_two_owner_keyed_guards_on_the_descendant() {
+    use crate::cranelift_backend::lowering::{
+        d8i_discharges, reset_d8d_bindings, set_d8i_foreign_authority, D8jMutation,
+    };
+
+    // D8i clause 2, re-run.
+    reset_d8d_bindings();
+    set_d8i_foreign_authority(true);
+    let foreign = crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
+        "ken_d8o_foreign",
+        false,
+    );
+    set_d8i_foreign_authority(false);
+    let refusal = format!(
+        "{:?}",
+        foreign
+            .err()
+            .expect("D8i clause 2 must still refuse on the D8o descendant")
+    );
+    assert!(
+        refusal.contains("belongs to a different emitter"),
+        "and at its own guard, unchanged by D8o: {refusal}"
+    );
+
+    // D8j verification 2, both directions, re-run.
+    let (error, discharged, _, _) =
+        d8j_root_witness_compile("d8o_owner", D8jMutation::WrongClaimingOwner);
+    assert_eq!(
+        discharged, 0,
+        "D8j verification 2's negative must still leave the relation empty on the descendant"
+    );
+    assert!(
+        format!("{:?}", error.expect("the wrong claiming owner must refuse"))
+            .contains("only the emitting owner may answer"),
+        "and reach its own refusal"
+    );
+    let (_error, discharged, _, _) = d8j_root_witness_compile("d8o_exact", D8jMutation::Exact);
+    assert_eq!(
+        discharged, 1,
+        "and D8j verification 2's POSITIVE must still pass: the exact run discharges once. \
+         Without this the negative alone would be satisfied by a guard that refuses everything"
+    );
+
+    // The specialization-body composed-claim population, recorded as empty.
+    //
+    // ⛔ `d8i_discharges` records every binding constructed with its facet. A
+    // composed facet built inside a specialization body would appear here; none
+    // does, on any witness in reach. Recorded, not fabricated.
+    reset_d8d_bindings();
+    let _ = d8n_compile();
+    let composed = d8i_discharges()
+        .iter()
+        .filter_map(|record| record.composed)
+        .collect::<Vec<_>>();
+    assert!(
+        !composed.is_empty(),
+        "the witness must make at least one composed claim, or the population question below is \
+         not being asked at all: {composed:?}"
+    );
+    let from_specialization = composed
+        .iter()
+        .filter(|(owner, _)| {
+            matches!(
+                owner,
+                crate::cranelift_backend::planning::ContinuationEmissionOwner::Specialization(_)
+            )
+        })
+        .count();
+    assert_eq!(
+        from_specialization, 0,
+        "MEASURED, and recorded rather than fabricated: every composed claim in reach is owned by \
+         a Predeclared emitter, so the SPECIALIZATION-body composed-claim population is EMPTY and \
+         there is nothing to re-measure there. ⛔ D8j's own guard requires the claiming function \
+         to equal the identity's emission owner, so a Specialization-owned claim would be one \
+         made from inside a specialization body. If this ever becomes non-zero that population \
+         exists and needs its own owner-correctness evidence: {composed:?}"
+    );
+}

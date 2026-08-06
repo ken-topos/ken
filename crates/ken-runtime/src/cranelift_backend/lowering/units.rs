@@ -22,7 +22,7 @@
 //! filter here to get wrong.
 
 use super::*;
-use super::core::CheckedFrameFunctionScope;
+use super::core::{AmbientBodyAuthority, CheckedFrameFunctionScope};
 
 use cranelift_module::FuncId;
 
@@ -1261,6 +1261,11 @@ pub(super) fn define_continuation_bodies<M: Module>(
         worker_capture_count: usize,
         header_parameters: u32,
         header_captures: u32,
+        /// `D8o` — the owner of the source body this specialization lowers: the
+        /// continuation's own consumer. ⛔ Carried from the planner view rather
+        /// than derived here; it is an existing planner fact reaching the site
+        /// that needs it, not a new authority.
+        consumer_owner: PredeclaredFunctionId,
     }
     // `RT-WORKER-BIND` `D4` exposes its local declaration operation for a
     // separately emitted caller; a continuation function is exactly that, so
@@ -1287,6 +1292,7 @@ pub(super) fn define_continuation_bodies<M: Module>(
                 worker_capture_count: unit.worker_capture_count(),
                 header_parameters: unit.header().parameters,
                 header_captures: unit.header().captures,
+                consumer_owner: unit.consumer_owner(),
             })
         })
         .collect::<Result<Vec<_>, CraneliftBackendError>>()?;
@@ -1538,6 +1544,16 @@ pub(super) fn define_continuation_bodies<M: Module>(
         // transaction, spanning the specialization body exactly. ⛔ Opened before the builder and
         // closed after it, so every branch scope inside nests within it.
         let frame_scope = CheckedFrameFunctionScope::open(compiler)?;
+        // ⭐⭐ `D8o` — THE BINDING THIS PASS NEVER HAD. A specialization body
+        // used to run with whatever the previously defined body left in both
+        // ambient fields. The owner is exactly the planner's identity for this
+        // specialization; the unit is the owner of the source body it lowers,
+        // which is the continuation's own consumer.
+        let ambient = AmbientBodyAuthority::bind(
+            compiler,
+            ContinuationEmissionOwner::Specialization(unit.id),
+            unit.consumer_owner,
+        );
         let mut func_ctx = FunctionBuilderContext::new();
         {
             let mut builder = FunctionBuilder::new(&mut func, &mut func_ctx);
@@ -1858,6 +1874,7 @@ pub(super) fn define_continuation_bodies<M: Module>(
             builder.seal_all_blocks();
             builder.finalize();
         }
+        ambient.release(compiler);
         frame_scope.close(compiler)?;
         // Verify, then define THIS function -- a fresh context here would
         // define an empty body and silently discard everything emitted above.
@@ -2051,6 +2068,10 @@ pub(super) fn define_continuation_context_bodies<M: Module>(
         // transaction, spanning the generated-context body exactly. ⛔ Opened before the builder and
         // closed after it, so every branch scope inside nests within it.
         let frame_scope = CheckedFrameFunctionScope::open(compiler)?;
+        // `D8o` — same binding, same unchanged domain: the emission owner is the
+        // enclosing specialization and `defining_unit` stays the RAW owner,
+        // which is the distinction the two fields exist to keep.
+        let ambient = AmbientBodyAuthority::bind(compiler, emission_owner, context.raw_owner);
         let mut func_ctx = FunctionBuilderContext::new();
         {
             let mut builder = FunctionBuilder::new(&mut func, &mut func_ctx);
@@ -2096,8 +2117,6 @@ pub(super) fn define_continuation_context_bodies<M: Module>(
                 })?,
             )?;
             compiler.function_local = function_local;
-            compiler.defining_unit = Some(context.raw_owner);
-            compiler.defining_emission_owner = Some(emission_owner);
             compiler.open_aggregate_events(id)?;
 
             // The environment: Parameter slots then Capture slots, in slot
@@ -2166,7 +2185,8 @@ pub(super) fn define_continuation_context_bodies<M: Module>(
             builder.seal_all_blocks();
             builder.finalize();
         }
-        frame_scope.close(compiler)?;
+        ambient.release(compiler);
+    frame_scope.close(compiler)?;
         // The same emission-seam gate every other generated function passes: the
         // callee of each recorded causal emission is decoded back out of THIS
         // finished CLIF and compared with the planner-issued target.
@@ -3167,10 +3187,14 @@ fn define_unit_body<M: Module>(
         "UNIT-BODY entry function={:?} origin={:?}",
         unit.function, unit.origin
     ));
-    compiler.defining_unit = Some(unit.function);
-    // `D5a`: an ordinary predeclared unit body emits as itself.
-    compiler.defining_emission_owner =
-        Some(ContinuationEmissionOwner::Predeclared(unit.function));
+    // `D8o` — bound for this body's lifetime and released on exit, so no later
+    // Function inherits it. ⛔ The domain is unchanged: `D5a`'s rule that an
+    // ordinary predeclared unit body emits as itself.
+    let ambient = AmbientBodyAuthority::bind(
+        compiler,
+        ContinuationEmissionOwner::Predeclared(unit.function),
+        unit.function,
+    );
     compiler.open_aggregate_events(id)?;
     function_local.unit_calls = declared_calls.static_bodies;
     function_local.declaration_calls = declared_calls.declarations;
@@ -3497,6 +3521,7 @@ fn define_unit_body<M: Module>(
         builder.seal_all_blocks();
         builder.finalize();
     }
+    ambient.release(compiler);
     frame_scope.close(compiler)?;
     #[cfg(test)]
     d5a_trace(format!(

@@ -3729,6 +3729,69 @@ pub(in crate::cranelift_backend) fn d8n_slot_reconciliations() -> Vec<(Option<Fu
     D8N_SLOT_RECONCILIATIONS.with(|log| log.borrow().clone())
 }
 
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8o`** — what each emitted body was BOUND
+/// with, and what it INHERITED.
+///
+/// ⛔ Written at the binding from the facts the caller supplied, which are the
+/// planner's own for that body kind. The inherited pair is the half that proves
+/// the release: with it in place every body inherits `None`.
+#[cfg(test)]
+#[allow(clippy::type_complexity)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) struct D8oBodyAuthority {
+    pub(in crate::cranelift_backend) function: Option<FuncId>,
+    pub(in crate::cranelift_backend) owner: ContinuationEmissionOwner,
+    pub(in crate::cranelift_backend) unit: PredeclaredFunctionId,
+    pub(in crate::cranelift_backend) inherited_owner: Option<ContinuationEmissionOwner>,
+    pub(in crate::cranelift_backend) inherited_unit: Option<PredeclaredFunctionId>,
+}
+
+#[cfg(test)]
+thread_local! {
+    static D8O_BODY_AUTHORITIES: std::cell::RefCell<Vec<D8oBodyAuthority>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+    static D8O_INHERIT_RESIDUE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn record_d8o_body_authority(
+    function: Option<FuncId>,
+    owner: ContinuationEmissionOwner,
+    unit: PredeclaredFunctionId,
+    inherited_owner: Option<ContinuationEmissionOwner>,
+    inherited_unit: Option<PredeclaredFunctionId>,
+) {
+    D8O_BODY_AUTHORITIES.with(|log| {
+        log.borrow_mut().push(D8oBodyAuthority {
+            function,
+            owner,
+            unit,
+            inherited_owner,
+            inherited_unit,
+        })
+    });
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d8o_body_authorities() -> Vec<D8oBodyAuthority> {
+    D8O_BODY_AUTHORITIES.with(|log| log.borrow().clone())
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn reset_d8o_body_authorities() {
+    D8O_BODY_AUTHORITIES.with(|log| log.borrow_mut().clear());
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn set_d8o_inherit_residue(armed: bool) {
+    D8O_INHERIT_RESIDUE.with(|cell| cell.set(armed));
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d8o_inherit_residue() -> bool {
+    D8O_INHERIT_RESIDUE.with(std::cell::Cell::get)
+}
+
 #[cfg(test)]
 pub(in crate::cranelift_backend) fn reset_d8n_observations() {
     D8N_FRAME_CONSUMPTIONS.with(|log| log.borrow_mut().clear());

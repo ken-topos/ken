@@ -55,6 +55,82 @@ struct CheckedFrameBranchScope {
     union: BTreeSet<ConsumedSubcontinuationFrame>,
 }
 
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8o` — the ambient body-authority binding.**
+///
+/// ⭐⭐ **Both ambient facts are bound for the lifetime of ONE emitted body and
+/// cleared afterwards, so a later `Function` cannot inherit residue.** Before
+/// `D8o` only two of the three source-bearing body kinds wrote them: an
+/// ordinary unit body and a generated-context body did, and a **specialization
+/// body did not** -- so throughout it both fields held whatever the previously
+/// defined body left behind.
+///
+/// ⛔ **Why that was quiet, which is the census's real finding.** Of the eight
+/// production readers of `defining_emission_owner`, two fail closed and two
+/// compare -- residue there becomes a refusal, and someone sees it. The other
+/// **four DECLINE**: `composed_recursive_argument_binding` keeps the ordinary
+/// route, and the three synthesized-aggregate sites return `None`/`Ok(())`. A
+/// declining reader cannot tell "no body is being defined" from "a body is
+/// being defined and left the wrong value here", so a stale owner simply
+/// changes the answer. See `docs/notes/rt-contsrc-d8o-ambient-body-authority-
+/// census.md`.
+///
+/// ⛔ **The owner is supplied, never inferred.** Not from the `FuncId`, not
+/// from the raw body's origin, not from the prior ambient value: each body kind
+/// passes the exact fact the planner issued for it. A specialization body's
+/// owner is exactly `ContinuationEmissionOwner::Specialization(unit.id)`.
+///
+/// ⛔ On exit both fields are RESTORED to what the enclosing scope held, which
+/// is `None` at the top level. Clearing unconditionally would be wrong for a
+/// nested pass; restoring is correct for both and does not have to know which
+/// it is in.
+pub(super) struct AmbientBodyAuthority {
+    enclosing_owner: Option<ContinuationEmissionOwner>,
+    enclosing_unit: Option<PredeclaredFunctionId>,
+}
+
+impl AmbientBodyAuthority {
+    /// Bind one emitted body's authority, before any source lowering.
+    pub(super) fn bind(
+        compiler: &mut Lowering<'_>,
+        owner: ContinuationEmissionOwner,
+        unit: PredeclaredFunctionId,
+    ) -> Self {
+        let scope = Self {
+            enclosing_owner: compiler.defining_emission_owner,
+            enclosing_unit: compiler.defining_unit,
+        };
+        // `D8o` — the observation, at the binding itself: what this body was
+        // given, and what it INHERITED. ⛔ The inherited pair is the load-bearing
+        // half -- with the release in place it is `None` at every body, and a
+        // release that failed to restore would show up here as the previous
+        // body's facts arriving as this one's enclosing scope.
+        #[cfg(test)]
+        crate::cranelift_backend::lowering::record_d8o_body_authority(
+            compiler.defining_function_id,
+            owner,
+            unit,
+            scope.enclosing_owner,
+            scope.enclosing_unit,
+        );
+        compiler.defining_emission_owner = Some(owner);
+        compiler.defining_unit = Some(unit);
+        scope
+    }
+
+    /// Release it, restoring the enclosing scope's facts.
+    pub(super) fn release(self, compiler: &mut Lowering<'_>) {
+        // ⛔ `D8o` — the pre-repair behaviour, restored under test: the body's
+        // facts are LEFT in place instead of being rolled back, so the next
+        // body inherits them. That is exactly the residue this binding removes.
+        #[cfg(test)]
+        if crate::cranelift_backend::lowering::d8o_inherit_residue() {
+            return;
+        }
+        compiler.defining_emission_owner = self.enclosing_owner;
+        compiler.defining_unit = self.enclosing_unit;
+    }
+}
+
 /// **`RT-CONTSRC-PRODUCER-LOCAL` `D8n` — the per-`Function` checked-frame
 /// transaction.**
 ///
