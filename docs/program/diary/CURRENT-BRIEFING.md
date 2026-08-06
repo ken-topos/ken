@@ -33,21 +33,39 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-06 ~02:5xZ · `D8o` DISCHARGED; `D8m` witness is NEXT
+## LIVE — 2026-08-06 ~03:1xZ · `D8o` discharged; `D8m` MATRIX in flight
 
 **Verify `origin/main` before trusting anything below.**
 `RT-CONTSRC-PRODUCER-LOCAL` is `active` in thread **`thr_6m43v75yndhtj`**.
 
 ### The one thing to do next
 
-**Wait for the `D8m` witness.** `D8o` is **DISCHARGED at exact `3aadbaae`**
-(`evt_3d58kezzyqzwn`), tree `ca86dceb`. The Architect named **runtime-leader**
-next mover, to release `D8m` from that accepted tip. **`D8n` is DISCHARGED at
-`3a63fe64`.** Then `D8f`, `D8g`, `D6b` closeout, `D6c`, candidate.
+**Wait for the `D8m` matrix completion.** `D8m` is **PARTIAL at exact
+`cc88e745`** — the tuple-withholding difference proof and the independent keyed
+seam relation are committed; the fixture/control matrix is **not**. Re-released
+`evt_a80rgykhcn0q`, implementer **working**. **`D8o` DISCHARGED `3aadbaae`,
+`D8n` DISCHARGED `3a63fe64`.** Then `D8f`, `D8g`, `D6b` closeout, `D6c`,
+candidate.
 
-**I posted the governing pointer to the leader at `evt_5q4p5tm2kx47c`** — the
-frame changed under `D8m` while `D8o` was in flight. ⛔ **Nothing there
-reopens `D8o` or changes `D8m`'s scope.**
+⛔ **`wp/RT-DECL-CLOSURE-PORT-typed-units` is 168 commits ahead of
+`origin/main` and `D8m` resumes from `cc88e745`, NOT from `main`.** ⛔ **Do NOT
+run `handoff-gate-compact.sh` on this ring** — it does `git reset --hard
+origin/main` on the seat's worktree to satisfy *"start new work from current
+`origin/main`"*, which is the wrong semantics mid-node. **I compacted the
+implementer by sending `/compact` to the pane directly** (ctx 88% to 0%,
+verified; branch intact).
+
+⭐ **What `D8m` still owes**, from the implementer's own handoff: the five
+plan/marker refusals; the same-shaped distinct-occurrence control against
+wrapper-origin substitution (**needs a REAL second occurrence** — the
+placeholder was removed and not replaced); two population clauses; frame/marker
+count equality; and that the one-shape-off controls **reach the bridge hazard
+rather than an earlier rejection**.
+
+⚠ **It stopped at a clean boundary deliberately**, saying the remaining work is
+the intricate fixture kind and *"that's exactly where my last several passes
+have each needed a correction."* **Read that as the frame working, not as a
+stall.**
 
 ⛔ **`D8o` took THREE rounds: mechanism accepted first pass, evidence blocked
 TWICE** (`evt_6gk0n7p2eazn2`, `evt_4y1q8s6cq5m11`). ⛔ **Do not re-cut `D8o`
