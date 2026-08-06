@@ -22778,6 +22778,8 @@ fn d8g_the_functionized_population_binds_its_table_and_suffix_at_the_shared_emit
                 emission.raw_operands,
                 emission.supplied_operands,
                 emission.captures,
+                emission.declared_arity,
+                emission.decoded_callee_origin,
             ),
         );
         assert!(
@@ -22807,46 +22809,61 @@ fn d8g_the_functionized_population_binds_its_table_and_suffix_at_the_shared_emit
         declared
     });
 
-    // Clause 2 — the table choice owns the suffix.
+    // Clause 2 — the planner's expectation, under the SAME key, and the route
+    // does not choose it.
+    //
+    // ⛔ The expected route is derived from whether the PLANNER issued a
+    // generated context for the target this call decodes -- not read off the
+    // emission. Letting the observed route pick its own branch is how the raw
+    // arm became a tautology: `supplied == raw` is trivially true for any call
+    // the emitter never appended to.
     let mut context_routed = 0usize;
     let mut raw_routed = 0usize;
-    for ((function, call), (target, route, raw, supplied, captures)) in &keyed {
-        match route {
-            StaticWorkerCallRoute::GeneratedContext => {
-                let declared = contexts.get(target).copied().unwrap_or_else(|| {
-                    panic!(
-                        "the call at {call:?} in {function:?} routed to a generated context, but \
-                         the PLANNER declares none for body {target:?}. The route is not a free \
-                         choice at the call edge: {contexts:?}"
-                    )
-                });
-                assert_eq!(
-                    supplied - raw,
-                    declared,
-                    "a context-routed call carries the raw run followed by EXACTLY the capture \
-                     run its generated context declares. Shorter drops continuation inputs; \
-                     longer is an arity error a large enough frame absorbs silently. Key \
-                     ({function:?}, {call:?})"
-                );
+    for ((function, call), (target, route, raw, supplied, captures, declared_arity, decoded)) in
+        &keyed
+    {
+        assert_eq!(
+            decoded, target,
+            "the DECODED callee -- the origin the route's own table answered with -- must be the \
+             body the binding names. These separate the moment the wrong table answers, under \
+             key ({function:?}, {call:?})"
+        );
+        assert_eq!(
+            *raw,
+            *declared_arity as usize + captures,
+            "the raw run is the worker's own declared contract: its arity plus its stored \
+             captures, under key ({function:?}, {call:?})"
+        );
+        let expected_suffix = contexts.get(target).copied();
+        let expected_route = match expected_suffix {
+            Some(_) => StaticWorkerCallRoute::GeneratedContext,
+            None => StaticWorkerCallRoute::RawWorker,
+        };
+        assert_eq!(
+            *route, expected_route,
+            "the route must be the one the PLANNER's context population implies for this target, \
+             under key ({function:?}, {call:?}). Derived before the observation is read"
+        );
+        match expected_suffix {
+            Some(declared) => {
                 assert!(
                     declared > 0,
-                    "a context declaring zero captures makes the prefix relation hold trivially \
-                     and this clause stops discriminating"
+                    "a context declaring zero captures makes the relation below hold trivially"
+                );
+                assert_eq!(
+                    *supplied,
+                    raw + declared,
+                    "a context-routed call carries the exact raw run PLUS the capture run its \
+                     generated context independently declares, under key ({function:?}, {call:?})"
                 );
                 context_routed += 1;
             }
-            StaticWorkerCallRoute::RawWorker => {
+            None => {
                 assert_eq!(
                     supplied, raw,
-                    "a raw-routed call is the raw operand run and nothing else -- and this holds \
-                     even where a generated context DOES exist for that body, which is the D6a \
-                     case where only the route separates two bindings on one body origin. Key \
-                     ({function:?}, {call:?})"
-                );
-                assert_eq!(
-                    *captures,
-                    supplied - raw + captures,
-                    "and its own capture run is what the raw contract accounts for, not a suffix"
+                    "and a raw-routed call carries the raw run only -- compared against the \
+                     planner's ABSENCE of a context for this target, not against itself, under \
+                     key ({function:?}, {call:?})"
                 );
                 raw_routed += 1;
             }
@@ -22859,6 +22876,7 @@ fn d8g_the_functionized_population_binds_its_table_and_suffix_at_the_shared_emit
          suffix is appended everywhere' or from 'none ever is'"
     );
 }
+
 
 /// **`RT-CONTSRC-PRODUCER-LOCAL` `D8g` — the composed population's selected
 /// recursive argument reaches its `D8b` target and the same emitter.**
@@ -22935,6 +22953,7 @@ fn d8g_the_composed_selected_argument_reaches_its_target_at_the_shared_emitter()
                 emission.captures,
                 emission.supplied_operands,
                 emission.composed_discharge,
+                emission.decoded_callee_origin,
             ),
         );
         assert!(
@@ -22970,8 +22989,40 @@ fn d8g_the_composed_selected_argument_reaches_its_target_at_the_shared_emitter()
         true,
     )
     .expect("the composed witness plans");
+    // The exact D8b call, by FULL causal coordinate -- not `.first()`, and not
+    // by observed-set order. The coordinate is the D8a selector's four source
+    // fields; the emission owner is deliberately not among them, because D8g's
+    // own measurement at 1b367065 established it separates nothing.
     let calls = plan.continuation_calls().expect("continuation calls");
-    let call = calls.first().expect("one planned composed call");
+    let coordinate = |call: &ContinuationCallView<'_>| {
+        (
+            call.producer_construct_origin(),
+            call.continuation_origin(),
+            call.producer_alternative(),
+            call.recursive_position(),
+        )
+    };
+    let coordinates = calls.iter().map(coordinate).collect::<BTreeSet<_>>();
+    assert_eq!(
+        coordinates.len(),
+        calls.len(),
+        "the planner's composed calls must be distinct under their causal coordinate, or naming \
+         one by coordinate is ambiguous"
+    );
+    let wanted = *coordinates
+        .iter()
+        .next()
+        .expect("the witness plans a composed call");
+    let matching = calls
+        .iter()
+        .filter(|call| coordinate(call) == wanted)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        matching.len(),
+        1,
+        "exactly ONE planned call carries this causal coordinate: {wanted:?}"
+    );
+    let call = matching[0];
     let units = plan.continuation_units().expect("continuation units");
     let target = units
         .iter()
@@ -22986,7 +23037,7 @@ fn d8g_the_composed_selected_argument_reaches_its_target_at_the_shared_emitter()
     // Clause 2 — the composed discharge sits on the ordinary-unit body.
     let composed = keyed
         .iter()
-        .filter(|(_, (_, _, _, _, discharge))| *discharge)
+        .filter(|(_, (_, _, _, _, discharge, _))| *discharge)
         .map(|(key, _)| *key)
         .collect::<Vec<_>>();
     assert_eq!(
@@ -23015,8 +23066,39 @@ fn d8g_the_composed_selected_argument_reaches_its_target_at_the_shared_emitter()
          only thing separating them"
     );
 
-    // Clause 3 — target and operand run against the planner.
-    for (key, (target_body, declared_arity, captures, supplied, _)) in &keyed {
+    // The application occurrence, from independent source/planner child-origin
+    // authority -- the same walk D8f uses, not from an observation.
+    // From the composed call's own continuation origin: case 0's body (the
+    // `CheckedSubcontinuationFrame`), the bridge match it wraps, that match's
+    // case 0 body (the slot marker), the slot marker's body (the invocation
+    // marker), and the marker's body (the application itself).
+    let named_application = {
+        let mut cursor = call.continuation_origin();
+        for step in [1usize, 0, 1, 0, 0] {
+            cursor = plan
+                .child_static_origin(cursor, step)
+                .expect("the planner names this child occurrence");
+        }
+        cursor
+    };
+    let emitted_at = keyed.keys().map(|(_, call)| *call).collect::<BTreeSet<_>>();
+    assert_eq!(
+        emitted_at,
+        BTreeSet::from([named_application]),
+        "both emitted keys must sit at the ONE application occurrence the planner's child-origin \
+         walk names for this composed call. A different occurrence means the emission is not the \
+         one this coordinate is about: {keyed:?}"
+    );
+
+    // Clause 3 — target, decode and operand run against the planner.
+    for (key, (target_body, declared_arity, captures, supplied, _, decoded)) in &keyed {
+        assert_eq!(
+            decoded, target_body,
+            "the DECODED callee -- what the route's own table answered with, read where the \
+             instruction was emitted against it -- must be the body the binding names. This is a \
+             decode and not a restatement of the binding: the two separate the moment the wrong \
+             table answers, under key {key:?}"
+        );
         assert_eq!(
             (*target_body, *declared_arity, *captures),
             planned,
@@ -23031,4 +23113,64 @@ fn d8g_the_composed_selected_argument_reaches_its_target_at_the_shared_emitter()
              from the other, under key {key:?}"
         );
     }
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8g` — the two producer-input mutations, each
+/// proved to have fired and to be caught by its own relation first.**
+///
+/// Both are durable `#[cfg(test)]` RAII switches in production, restored however
+/// the body leaves, with an application counter. A control that silently never
+/// applied is a green that proves the opposite of what it claims, so the count
+/// is asserted before the refusal is.
+///
+/// ## Wrong table
+///
+/// Each route reads the other's target table. The call key, the binding, the
+/// route field and the operand run are all untouched -- only which table answers
+/// moves. The decoded callee then differs from the body the binding names, and
+/// the functionized relation's decode clause is where that lands.
+///
+/// ## Withheld context suffix
+///
+/// The sole producer of the generated-context capture run is withheld; the raw
+/// run and the call itself stay exact. The context-routed call then carries the
+/// raw run alone, against a planner that independently declares a capture run
+/// for that target.
+///
+/// **Promise class: durable invariant.**
+#[test]
+fn d8g_the_producer_input_mutations_fire_and_are_caught_by_their_own_relation() {
+    use crate::cranelift_backend::lowering::{with_d8g_mutation, D8gMutation};
+
+    for (mutation, expected) in [
+        (D8gMutation::WrongTable, "wrong table"),
+        (D8gMutation::WithholdContextSuffix, "withheld context suffix"),
+    ] {
+        let (outcome, applications) = with_d8g_mutation(mutation, || {
+            std::panic::catch_unwind(
+                d8g_the_functionized_population_binds_its_table_and_suffix_at_the_shared_emitter,
+            )
+        });
+        assert!(
+            applications > 0,
+            "the {expected} mutation must have FIRED. Zero applications means the switch never \
+             reached its site and the refusal below, if any, is about something else"
+        );
+        assert!(
+            outcome.is_err(),
+            "and the functionized relation must reject it: {expected} moved a producer input the \
+             relation owns, so a green here means the relation is not comparing that input"
+        );
+    }
+
+    // And the switch is restored however the body leaves -- the panic above
+    // unwound through it.
+    let (_, applications) = with_d8g_mutation(D8gMutation::Exact, || {
+        d8g_the_functionized_population_binds_its_table_and_suffix_at_the_shared_emitter()
+    });
+    assert_eq!(
+        applications, 0,
+        "with no mutation armed the switch must not apply, and the relation must pass -- which \
+         also shows the RAII restore survived the unwinding panics above"
+    );
 }

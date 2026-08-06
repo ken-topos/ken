@@ -8123,7 +8123,21 @@ impl<'a> Lowering<'a> {
                         ),
                     ));
                 }
-                inputs.extend(extra.operands.iter().cloned());
+                // `D8g` — WITHHOLD THE SUFFIX, under test only. The sole
+                // producer of the generated-context capture run is withheld and
+                // the raw run and the call itself stay exact, so the difference
+                // this isolates is the suffix and nothing else.
+                #[cfg(test)]
+                let withhold = crate::cranelift_backend::lowering::d8g_mutation()
+                    == crate::cranelift_backend::lowering::D8gMutation::WithholdContextSuffix;
+                #[cfg(not(test))]
+                let withhold = false;
+                if withhold {
+                    #[cfg(test)]
+                    crate::cranelift_backend::lowering::record_d8g_mutation_application();
+                } else {
+                    inputs.extend(extra.operands.iter().cloned());
+                }
             }
             StaticWorkerCallRoute::RawWorker => {
                 // ⛔ Appends NOTHING, unconditionally -- not even when this
@@ -8142,11 +8156,28 @@ impl<'a> Lowering<'a> {
         // `worker_calls[body]` is the generated context and the raw callee
         // survives only in `raw_worker_calls`; taking whichever entry exists is
         // the inference `D6a` made impossible.
-        let (table, table_name) = match worker.route {
-            StaticWorkerCallRoute::GeneratedContext => {
+        // `D8g` — WRONG TABLE, under test only. Each route reads the other's
+        // table. The call key, the binding, the route field and the operand run
+        // are all untouched; only which table answers moves, which is the one
+        // producer input the table-choice relation is about.
+        #[cfg(test)]
+        let swap_tables = if crate::cranelift_backend::lowering::d8g_mutation()
+            == crate::cranelift_backend::lowering::D8gMutation::WrongTable
+        {
+            crate::cranelift_backend::lowering::record_d8g_mutation_application();
+            true
+        } else {
+            false
+        };
+        #[cfg(not(test))]
+        let swap_tables = false;
+        let (table, table_name) = match (worker.route, swap_tables) {
+            (StaticWorkerCallRoute::GeneratedContext, false)
+            | (StaticWorkerCallRoute::RawWorker, true) => {
                 (&self.function_local.worker_calls, "worker_calls")
             }
-            StaticWorkerCallRoute::RawWorker => {
+            (StaticWorkerCallRoute::RawWorker, false)
+            | (StaticWorkerCallRoute::GeneratedContext, true) => {
                 (&self.function_local.raw_worker_calls, "raw_worker_calls")
             }
         };
@@ -8167,6 +8198,9 @@ impl<'a> Lowering<'a> {
                     ),
                 )
             })?;
+        // `D8g` — the decoded callee, captured where the table answered.
+        #[cfg(test)]
+        let decoded_callee_origin = exact.origin;
 
         // `AC-5` clause (b): the redirect selects a **distinct** target by
         // `AC-6`'s definition of same-shape -- **same declared arity and same
@@ -8262,6 +8296,7 @@ impl<'a> Lowering<'a> {
                 raw_operands,
                 supplied_operands: inputs.len(),
                 composed_discharge: worker.composed_continuation_authority().is_ok(),
+                decoded_callee_origin,
             },
         );
         // `D8j` — the instruction is HANDED BACK, not recorded. Which consumer

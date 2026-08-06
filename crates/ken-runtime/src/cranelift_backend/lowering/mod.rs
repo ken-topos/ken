@@ -3769,6 +3769,76 @@ pub(in crate::cranelift_backend) struct D8gEmission {
     pub(in crate::cranelift_backend) supplied_operands: usize,
     /// Whether this binding carries a composed causal authority.
     pub(in crate::cranelift_backend) composed_discharge: bool,
+    /// **The DECODED callee**: the target origin the route's own table resolved
+    /// for this call, read off the declared record the instruction is emitted
+    /// against.
+    ///
+    /// ⛔ Not `target_body_origin`, which is the BINDING's expectation. The two
+    /// agree on a lawful program and separate the moment the wrong table
+    /// answers, which is what makes this a decode rather than a restatement.
+    pub(in crate::cranelift_backend) decoded_callee_origin: StaticOriginId,
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8g`** — the durable producer-input mutations,
+/// with application counters.
+///
+/// ⛔ Each moves ONE producer input at the emitter and nothing else. The
+/// counters are what make "the mutation fired" a measurement rather than an
+/// assumption: a control that silently never applied is a green that proves the
+/// opposite of what it claims.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) enum D8gMutation {
+    Exact,
+    /// Each route reads the OTHER route's target table. The call key, the
+    /// binding, the operand run and the route field all stay exact; only which
+    /// table answers moves.
+    WrongTable,
+    /// The sole producer of the generated-context capture suffix is withheld.
+    /// The raw run and the call itself stay exact.
+    WithholdContextSuffix,
+}
+
+#[cfg(test)]
+thread_local! {
+    static D8G_MUTATION: std::cell::Cell<D8gMutation> =
+        const { std::cell::Cell::new(D8gMutation::Exact) };
+    static D8G_MUTATION_APPLICATIONS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d8g_mutation() -> D8gMutation {
+    D8G_MUTATION.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn record_d8g_mutation_application() {
+    D8G_MUTATION_APPLICATIONS.with(|cell| cell.set(cell.get() + 1));
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d8g_mutation_applications() -> usize {
+    D8G_MUTATION_APPLICATIONS.with(std::cell::Cell::get)
+}
+
+/// Arm a `D8g` mutation for the duration of `body`, restoring on the way out
+/// however `body` leaves. Returns `(result, applications)`.
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn with_d8g_mutation<T>(
+    mutation: D8gMutation,
+    body: impl FnOnce() -> T,
+) -> (T, usize) {
+    struct Restore;
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            D8G_MUTATION.with(|cell| cell.set(D8gMutation::Exact));
+        }
+    }
+    D8G_MUTATION.with(|cell| cell.set(mutation));
+    D8G_MUTATION_APPLICATIONS.with(|cell| cell.set(0));
+    let _restore = Restore;
+    let result = body();
+    (result, d8g_mutation_applications())
 }
 
 #[cfg(test)]
