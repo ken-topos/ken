@@ -21202,3 +21202,359 @@ fn d8m_the_ordinary_bridge_arm_is_reached_and_untouched() {
         );
     }
 }
+
+#[cfg(test)]
+const D8F_SYMBOL: &str = "decl:fixture::d8f::witness";
+
+/// The `D8f` occupancy witness: the `D8n` composed checked-bridge witness with
+/// its checked-IH application wrapped in an invocation marker, and an ORDINARY
+/// call on the same selected recursive argument placed inside that wrapper as
+/// the checked application's own argument.
+///
+/// The machine evaluates the argument before the application, so the ordinary
+/// call reaches the static-worker seat with the marker pending and must leave it
+/// pending. Both calls are the same worker at the same arity in the same frame:
+/// route, arity, binder index and first-call order are all blind here by
+/// construction, which is the whole point.
+#[cfg(test)]
+fn d8f_witness(with_ordinary_call: bool) -> RuntimeExpr {
+    let expr = d8n_witness();
+    let RuntimeExpr::Let { value, body } = expr else {
+        panic!("let")
+    };
+    let RuntimeExpr::ComputationalMatch {
+        scrutinee,
+        cases,
+        default,
+    } = *value
+    else {
+        panic!("eliminator")
+    };
+    let RuntimeExpr::CheckedSubcontinuationFrame {
+        frame_id,
+        body: bridge,
+    } = &cases[0].body
+    else {
+        panic!("marked bridge")
+    };
+    let RuntimeExpr::ComputationalMatch {
+        scrutinee: bridge_scrutinee,
+        cases: bridge_cases,
+        default: bridge_default,
+    } = bridge.as_ref()
+    else {
+        panic!("bridge")
+    };
+    let marked_cases = bridge_cases
+        .iter()
+        .map(|case| {
+            let RuntimeExpr::CheckedComputationalIHSlots {
+                slot_template_ids,
+                checked_occurrence_paths,
+                body,
+            } = &case.body
+            else {
+                panic!("slot marker")
+            };
+            let RuntimeExpr::Call { callee, args } = body.as_ref() else {
+                panic!("the slot marker wraps the IH application")
+            };
+            crate::RuntimeComputationalMatchCase {
+                constructor: case.constructor.clone(),
+                argument_binders: case.argument_binders,
+                recursive_positions: case.recursive_positions.clone(),
+                body: RuntimeExpr::CheckedComputationalIHSlots {
+                    slot_template_ids: slot_template_ids.clone(),
+                    checked_occurrence_paths: checked_occurrence_paths.clone(),
+                    body: Box::new(RuntimeExpr::CheckedComputationalIHInvocation {
+                        call_template_id: 100,
+                        checked_occurrence_path: vec![30],
+                        body: Box::new(RuntimeExpr::Call {
+                            callee: callee.clone(),
+                            // The ordinary selected-argument call: the SAME
+                            // worker, the SAME arity, at a DIFFERENT occurrence.
+                            args: if with_ordinary_call {
+                                vec![RuntimeExpr::Call {
+                                    callee: callee.clone(),
+                                    args: args.clone(),
+                                }]
+                            } else {
+                                args.clone()
+                            },
+                        }),
+                    }),
+                },
+            }
+        })
+        .collect();
+    let mut cases = cases.clone();
+    cases[0] = crate::RuntimeComputationalMatchCase {
+        constructor: cases[0].constructor.clone(),
+        argument_binders: cases[0].argument_binders,
+        recursive_positions: cases[0].recursive_positions.clone(),
+        body: RuntimeExpr::CheckedSubcontinuationFrame {
+            frame_id: *frame_id,
+            body: Box::new(RuntimeExpr::ComputationalMatch {
+                scrutinee: bridge_scrutinee.clone(),
+                cases: marked_cases,
+                default: bridge_default.clone(),
+            }),
+        },
+    };
+    RuntimeExpr::Let {
+        value: Box::new(RuntimeExpr::ComputationalMatch {
+            scrutinee,
+            cases,
+            default,
+        }),
+        body,
+    }
+}
+
+#[cfg(test)]
+fn d8f_declaration(with_ordinary_call: bool) -> RuntimeDeclaration {
+    RuntimeDeclaration {
+        symbol: D8F_SYMBOL.to_string(),
+        kind: RuntimeDeclarationKind::Transparent {
+            body: RuntimeExpr::Closure {
+                captures: Vec::new(),
+                params: vec!["state".to_string()],
+                body: Box::new(d8f_witness(with_ordinary_call)),
+            },
+        },
+        metadata: RuntimeSymbolMetadata {
+            lowerability: Some(RuntimeLowerabilityStatus::Supported),
+            ..RuntimeSymbolMetadata::empty()
+        },
+    }
+}
+
+/// Every checked marker location in the `D8f` witness, measured by the
+/// production collector.
+#[cfg(test)]
+fn d8f_marker_sets(with_ordinary_call: bool) -> crate::cranelift_backend::planning::CheckedOrientedMarkerSets {
+    let declaration = d8f_declaration(with_ordinary_call);
+    let RuntimeDeclarationKind::Transparent { body } = &declaration.kind else {
+        panic!("transparent")
+    };
+    let mut sets = crate::cranelift_backend::planning::CheckedOrientedMarkerSets::default();
+    crate::cranelift_backend::planning::collect_checked_oriented_markers(
+        body,
+        &mut sets,
+        D8F_SYMBOL,
+        &mut Vec::new(),
+    )
+    .expect("the witness's markers collect");
+    sets
+}
+
+#[cfg(test)]
+fn d8f_located(
+    paths: &std::collections::BTreeSet<Vec<u64>>,
+) -> Vec<crate::CheckedRuntimeMarkerLocationV1> {
+    let mut paths = paths.iter().cloned().collect::<Vec<_>>();
+    paths.sort();
+    paths
+        .into_iter()
+        .map(|runtime_path| crate::CheckedRuntimeMarkerLocationV1 {
+            declaration: D8F_SYMBOL.to_string(),
+            runtime_path,
+        })
+        .collect()
+}
+
+#[cfg(test)]
+fn d8f_plan(with_ordinary_call: bool) -> crate::OrientedSubcontinuationPlanV1 {
+    let declaration = d8f_declaration(with_ordinary_call);
+    let RuntimeDeclarationKind::Transparent { body } = &declaration.kind else {
+        panic!("transparent")
+    };
+    let RuntimeExpr::Closure { body, .. } = body else {
+        panic!("closure")
+    };
+    let mut plan = d8m_plan(body, 7);
+    for frame in &mut plan.frames {
+        frame.declaration = D8F_SYMBOL.to_string();
+        frame.occurrence_binding_fingerprint =
+            crate::compiler_private_oriented_occurrence_binding_fingerprint(frame);
+    }
+    let sets = d8f_marker_sets(with_ordinary_call);
+    let slot_paths = sets
+        .computational_ih_slots
+        .get(&(200, vec![20]))
+        .expect("the witness's slot marker is located");
+    let mut slot = crate::CheckedComputationalIHSlotTemplateV1 {
+        slot_template_id: 200,
+        declaration: D8F_SYMBOL.to_string(),
+        checked_match_ordinal: 0,
+        checked_occurrence_path: vec![20],
+        frame_template_id: 7,
+        constructor: "ctor:prelude::Result::Ok".to_string(),
+        recursive_position: 0,
+        method_binder_ordinal: 4,
+        local_telescope: Vec::new(),
+        ih_interface: oriented_test_interface(1),
+        segment_site_id: 9,
+        frame_templates: vec![7],
+        input_interface: oriented_test_interface(1),
+        output_interface: oriented_test_interface(2),
+        runtime_marker_locations: d8f_located(slot_paths),
+        occurrence_binding_fingerprint: 0,
+    };
+    slot.occurrence_binding_fingerprint =
+        crate::compiler_private_computational_ih_slot_binding_fingerprint(&slot);
+    plan.computational_ih_slots = vec![slot];
+    let call_paths = sets
+        .computational_ih_calls
+        .get(&(100, vec![30]))
+        .expect("the witness's invocation marker is located");
+    let mut call = crate::CheckedComputationalIHCallTemplateV1 {
+        call_template_id: 100,
+        declaration: D8F_SYMBOL.to_string(),
+        checked_occurrence_path: vec![30],
+        slot_template_id: 200,
+        arity: 1,
+        local_telescope: Vec::new(),
+        result_interface: oriented_test_interface(1),
+        callee_segment_site_id: 9,
+        callee_frame_templates: vec![7],
+        parent_frame_template_id: Some(7),
+        parent_segment_site_id: Some(9),
+        caller_interface: oriented_test_interface(1),
+        runtime_marker_locations: d8f_located(call_paths),
+        occurrence_binding_fingerprint: 0,
+    };
+    call.occurrence_binding_fingerprint =
+        crate::compiler_private_computational_ih_call_binding_fingerprint(&call);
+    plan.computational_ih_calls = vec![call];
+    plan
+}
+
+#[cfg(test)]
+fn d8f_compile(with_ordinary_call: bool) -> Option<CraneliftBackendError> {
+    let declaration = d8f_declaration(with_ordinary_call);
+    let entry = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::DeclarationRef {
+            symbol: D8F_SYMBOL.to_string(),
+        }),
+        args: vec![RuntimeExpr::Construct {
+            constructor: "ctor:prelude::Unit::MkUnit".to_string(),
+            args: Vec::new(),
+        }],
+    };
+    compile_expr_into_module(
+        new_object_module("d8f").expect("module"),
+        "ken_d8f",
+        Linkage::Export,
+        &entry,
+        &NativeSeedEnvironment::empty(),
+        BTreeMap::from([(D8F_SYMBOL, &declaration)]),
+        None,
+        true,
+        None,
+        Some(test_only_distinguished_root_join_plan()),
+        Some(d8f_plan(with_ordinary_call)),
+    )
+    .err()
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8f` — TRANSITION SENTINEL. The composed
+/// route still cannot host a checked-IH invocation marker, and the reason is no
+/// longer the one `D8m` retired.**
+///
+/// `D8f`'s occupancy rule is correct and unwitnessed: mutating the seat's
+/// occurrence comparison to ALWAYS admit -- the pre-`D8f` behaviour -- leaves the
+/// whole suite green, so no landed fixture poses the question. The witness the
+/// checkpoint needs is one where, inside a pending invocation marker, an
+/// ordinary call on the same selected recursive argument reaches the
+/// static-worker seat and must leave the marker for the occurrence that owns it.
+///
+/// ## What this row pins
+///
+/// The `D8n` composed checked-bridge witness -- which compiles, and whose bridge
+/// carries a real source frame identity since `D8m` -- with a checked-IH
+/// invocation marker added around its application. It refuses, and **it refuses
+/// identically with and without the ordinary call**. That equality is the
+/// finding: the obstacle is the marker in a composed body, not the occupancy
+/// shape, so building a better occupancy fixture on this route cannot help.
+///
+/// The refusal is *"a checked computational-IH marker is a specialized-only
+/// surface and a carried boundary word has no compile-time template for it to
+/// read"*. Measured cause: the ordinary unit body that lowers this case body has
+/// no static-worker seat at the application, so the marker is entered there,
+/// never consumed, and fails closed at
+/// `finish_checked_computational_ih_marker` before any specialization body is
+/// reached.
+///
+/// ## Why this is a sentinel and not a defect
+///
+/// It goes red when the composed route gains a specialized application in the
+/// ordinary unit body, or when the marker's close stops requiring one. **Either
+/// event is what makes the `D8f` witness constructible on this route**, and
+/// whoever lands it should invert this row into the positive occupancy witness
+/// rather than delete it.
+///
+/// ## MEASURED, but not committed here
+///
+/// Two further routes were measured this turn and are named so the next attempt
+/// does not repeat them. Neither is committed, because one needs a shared
+/// fixture mutated and the other a second witness family that adds nothing:
+///
+/// - **Non-composed (`px8tr`).** The landed object fixture hosts the invocation
+///   marker green. Nesting an ordinary call on the same recursor binder inside
+///   the marker's application -- replacing its `args: vec![unit()]` with
+///   `args: vec![Call { callee: Var(0), args: vec![unit()] }]` in
+///   `test_objects.rs` -- refuses with *"oriented segment mixes checked and
+///   inferred computational frames"*, detail `(Some(7), None, ...)`. The
+///   ordinary call instantiates a semantic IH layer, and a segment carrying any
+///   checked frame requires every semantic layer to carry a checked invocation
+///   id. **The call that must leave the marker pending is exactly the call that
+///   would have to have consumed one.**
+/// - **A composed static-worker call as the checked application's argument**, so
+///   the seat is reached without instantiating an IH layer. Refuses with
+///   *"source open occurrence disagrees with the closure-selected dynamic
+///   parent"*.
+/// - The `D8e` declaration-owned composed family was also built and refuses
+///   exactly as this one does, for the same measured cause.
+///
+/// **Promise class: transition sentinel.** Named for the boundary, not for a
+/// count, and naming the event that retires it.
+#[test]
+fn d8f_the_composed_route_still_cannot_host_an_invocation_marker() {
+    let mut refusals = Vec::new();
+    for with_ordinary_call in [false, true] {
+        let outcome = d8f_compile(with_ordinary_call);
+        refusals.push(format!(
+            "{:?}",
+            outcome.unwrap_or_else(|| panic!(
+                "the composed route must still refuse the invocation marker \
+                 (with_ordinary_call={with_ordinary_call}). If it compiles, the obstacle this \
+                 sentinel names is gone and the D8f occupancy witness is constructible here -- \
+                 invert this row into that witness rather than deleting it"
+            ))
+        ));
+    }
+    for refusal in &refusals {
+        assert!(
+            refusal.contains(
+                "a checked computational-IH marker is a specialized-only surface"
+            ),
+            "and it must be THAT refusal. The pre-D8m obstacle was 'detached from its checked \
+             frame', which D8m retired; a different message here means the route moved again and \
+             this sentinel's stated cause is stale: {refusal}"
+        );
+        assert!(
+            !refusal.contains("detached from its checked frame"),
+            "specifically not the pre-D8m refusal. If this fires, D8m's transport has regressed \
+             on this fixture and that is a finding about D8m, not about D8f: {refusal}"
+        );
+    }
+    assert_eq!(
+        refusals[0], refusals[1],
+        "THE FINDING: the refusal is identical with and without the ordinary selected-argument \
+         call, so what closes this route is the marker in a composed body -- not the occupancy \
+         shape D8f is about. A difference here would mean the ordinary call has become \
+         load-bearing, which is the first sign this route can carry the witness"
+    );
+}
+

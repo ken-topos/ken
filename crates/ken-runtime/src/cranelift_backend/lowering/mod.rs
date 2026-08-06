@@ -13397,37 +13397,48 @@ impl<'a> Lowering<'a> {
         // fixture poses the occupancy question, and this mechanism is
         // correct-and-unwitnessed rather than proved.
         //
-        // ⛔⛔ **BOTH ROUTES TO A WITNESS ARE CLOSED, measured, and the second
-        // is structural.** This is a hard stop, not an unfinished fixture.
+        // ⛔⛔ **EVERY ROUTE TO A WITNESS MEASURED SO FAR IS CLOSED.** This is a
+        // hard stop, not an unfinished fixture. The committed sentinel is
+        // `d8f_the_composed_route_still_cannot_host_an_invocation_marker`.
         //
-        // Route 1 -- a NON-COMPOSED checked wrapper (`px8tr`). An ordinary call
-        // on the selected recursive argument refuses in the DECLARATION's own
-        // lowering ("a source-machine call's callee is a specialized-only
-        // surface"): that case body is lowered both there and in the
-        // specialization, and the binder run's static workers exist only in the
-        // second. The same shape with the induction hypothesis as the inner
-        // callee refuses in plan validation ("oriented segment mixes checked and
-        // inferred computational frames").
+        // ⚠ **Route 2's reason below was RESTATED after `D8m` landed.** It
+        // previously read that a composed bridge frame can never carry a checked
+        // identity, because `immediate_binder_eliminator` synthesized it with
+        // `checked_frame_id: None`. `D8m` retired exactly that: the bridge now
+        // transports the source marker's whole tuple, and the composed route
+        // reaches strictly further than it did. The route is still closed, by a
+        // different law one step downstream.
         //
-        // Route 2 -- a COMPOSED checked wrapper, where both lowerings DO carry a
-        // static worker at the callee position. Transport validation passes:
-        // frame marker, slot and call templates, occurrence paths and
-        // fingerprints all reconcile. Lowering then refuses with
-        // **"computational IH slot marker is detached from its checked frame"**
-        // (`computational_ih_slots_for_case`, which requires `checked_frame_id`
-        // to be `Some`).
+        // Route 1 -- a NON-COMPOSED checked wrapper (`px8tr`), which hosts the
+        // invocation marker green. Nesting an ordinary call on the same recursor
+        // binder inside the marker's application refuses in plan validation with
+        // "oriented segment mixes checked and inferred computational frames",
+        // detail `(Some(7), None, ...)`. The ordinary call instantiates a
+        // semantic IH layer, and a segment carrying any checked frame requires
+        // every semantic layer to carry a checked invocation id. ⇒ **The call
+        // that must leave the marker pending is exactly the call that would have
+        // to have consumed one.**
         //
-        // ⭐ That refusal is structural and cannot be fixtured around. The frame
-        // in force inside a composed case body is the BRIDGE, synthesized by
-        // `immediate_binder_eliminator` with `checked_frame_id: None` -- it has
-        // no source expression, so no `CheckedSubcontinuationFrame` marker can
-        // ever supply it one. A checked IH wrapper inside a composed bridge case
-        // body therefore needs a way for a lowering-synthesized frame to carry a
-        // checked frame identity, which is planner/marker mechanism this
-        // checkpoint must not add.
+        // Route 2 -- a COMPOSED checked wrapper. Transport validation passes and
+        // the bridge now carries the source frame identity, so the pre-`D8m`
+        // "detached from its checked frame" refusal is gone. Lowering instead
+        // refuses at `finish_checked_computational_ih_marker` with "a checked
+        // computational-IH marker is a specialized-only surface": the ordinary
+        // unit body that lowers the case body has no static-worker seat at the
+        // application, so the marker is entered there, never consumed, and fails
+        // closed before any specialization body is reached.
         //
-        // ⇒ The occupancy property is correct and unwitnessable at this
-        // checkpoint. The attempt is preserved rather than discarded.
+        // ⭐ Measured with AND without the ordinary call, identically. ⇒ What
+        // closes route 2 is the marker in a composed body, not the occupancy
+        // shape -- so a better occupancy fixture on this route cannot help.
+        //
+        // Route 3 -- a COMPOSED static-worker call as the checked application's
+        // argument, so the seat is reached without instantiating an IH layer.
+        // Refuses with "source open occurrence disagrees with the
+        // closure-selected dynamic parent".
+        //
+        // ⇒ The occupancy property is correct and unwitnessed. The attempt is
+        // preserved rather than discarded.
         if static_origin != pending.application_origin {
             return Ok(false);
         }
