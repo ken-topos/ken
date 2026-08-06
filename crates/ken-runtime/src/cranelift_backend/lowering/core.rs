@@ -49,6 +49,54 @@ fn d8m_suppress_transported_tuple() -> bool {
     D8M_SUPPRESS_TRANSPORTED_TUPLE.with(std::cell::Cell::get)
 }
 
+/// **`D8m`** — give the bridge the WRAPPER's own occurrence instead of the
+/// wrapped match's, which is child 0 of it.
+///
+/// The marker names the frame; the match IS the frame. Every origin-keyed
+/// lookup downstream -- case bodies, the planner's continuation origin -- has to
+/// land on the match, and substituting the wrapper is the one-node-off error a
+/// single checked occurrence cannot see: with one occurrence any origin that
+/// resolves at all resolves to the only candidate.
+#[cfg(test)]
+thread_local! {
+    static D8M_WRAPPER_ORIGIN_SUBSTITUTION: std::cell::Cell<bool> =
+        const { std::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn set_d8m_wrapper_origin_substitution(armed: bool) {
+    D8M_WRAPPER_ORIGIN_SUBSTITUTION.with(|cell| cell.set(armed));
+}
+
+#[cfg(test)]
+fn d8m_wrapper_origin_substitution() -> bool {
+    D8M_WRAPPER_ORIGIN_SUBSTITUTION.with(std::cell::Cell::get)
+}
+
+/// **`D8m`** — consume the marker with a default the source match does not
+/// carry.
+///
+/// The bridge consumes through the existing pair, and that pair holds the
+/// marker to the shape the plan transported for it. Withholding the tuple proves
+/// the identity is carried; this proves the identity is carried FOR THE MATCH
+/// THE MARKER WRAPPED, rather than for whatever shape the bridge happens to hold
+/// by the time it consumes.
+#[cfg(test)]
+thread_local! {
+    static D8M_FOREIGN_CONSUMED_SHAPE: std::cell::Cell<bool> =
+        const { std::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn set_d8m_foreign_consumed_shape(armed: bool) {
+    D8M_FOREIGN_CONSUMED_SHAPE.with(|cell| cell.set(armed));
+}
+
+#[cfg(test)]
+fn d8m_foreign_consumed_shape() -> bool {
+    D8M_FOREIGN_CONSUMED_SHAPE.with(std::cell::Cell::get)
+}
+
 /// **`D8n`** — restore the compile-wide consumed-frame lifetime.
 #[cfg(test)]
 thread_local! {
@@ -2326,6 +2374,13 @@ impl<'a> Lowering<'a> {
                     let mut composed = Vec::with_capacity(2);
                     composed.push(match consumer {
                         ImmediateBinderEliminator::Computational { cases, default } => {
+                            // `D8m` — which arm this composed site took, at the
+                            // one place that knows.
+                            #[cfg(test)]
+                            crate::cranelift_backend::lowering::record_d8m_bridge_arm(
+                                self.defining_function_id,
+                                crate::cranelift_backend::lowering::D8mBridgeArm::Computational,
+                            );
                             EliminatorFrame::Computational(ComputationalEliminatorFrame {
                                 cases,
                                 default,
@@ -2360,10 +2415,35 @@ impl<'a> Lowering<'a> {
                             cases,
                             default,
                         } => {
+                            #[cfg(test)]
+                            crate::cranelift_backend::lowering::record_d8m_bridge_arm(
+                                self.defining_function_id,
+                                crate::cranelift_backend::lowering::D8mBridgeArm::CheckedComputational,
+                            );
                             self.enter_checked_subcontinuation_frame(frame_id)?;
+                            // ⛔ `D8m` — CONSUME WITH A SHAPE THE SOURCE MATCH
+                            // DOES NOT CARRY, under test only. Same marker, same
+                            // cases, one field of the default changed: the
+                            // consumption law must refuse, which is what makes
+                            // "the bridge is held to the match the marker
+                            // wrapped" a measured fact rather than a reading of
+                            // the call site.
+                            let consumed_default = default;
+                            #[cfg(test)]
+                            let foreign_default = RuntimeTrap {
+                                code: default.code.clone(),
+                                message: format!("{} foreign", default.message),
+                            };
+                            #[cfg(test)]
+                            let consumed_default = if d8m_foreign_consumed_shape() {
+                                &foreign_default
+                            } else {
+                                consumed_default
+                            };
                             // ⭐ `D8m` — the SAME derivation the direct path
                             // uses, whole. All four facts, not the id alone.
-                            let checked = self.checked_computational_frame(cases, default)?;
+                            let checked =
+                                self.checked_computational_frame(cases, consumed_default)?;
                             // ⛔ `D8m` — SUPPRESS THE TRANSPORTED TUPLE, under
                             // test only. The marker is still entered and
                             // consumed above, so the plan side is untouched and
@@ -2391,13 +2471,23 @@ impl<'a> Lowering<'a> {
                                 // origin-keyed lookup downstream -- case bodies,
                                 // the planner's continuation origin -- must land
                                 // on the match.
-                                static_origin: self
-                                    .child_occurrence(
-                                        case_body.static_origin,
-                                        0,
-                                        case_body.expr,
-                                    )?
-                                    .static_origin,
+                                static_origin: {
+                                    let wrapped = self
+                                        .child_occurrence(case_body.static_origin, 0, case_body.expr)?
+                                        .static_origin;
+                                    // `D8m` — SUBSTITUTE THE WRAPPER'S OWN
+                                    // OCCURRENCE, under test only. One node off,
+                                    // and the only difference is which of two
+                                    // nested occurrences downstream lookups key
+                                    // on.
+                                    #[cfg(test)]
+                                    let wrapped = if d8m_wrapper_origin_substitution() {
+                                        case_body.static_origin
+                                    } else {
+                                        wrapped
+                                    };
+                                    wrapped
+                                },
                                 retained_scrutinee_index: None,
                                 deferred_constructor_case: Some(&deferred),
                                 provenance: self.mint_recursor_frame_provenance(),
@@ -2413,6 +2503,11 @@ impl<'a> Lowering<'a> {
                             })
                         }
                         ImmediateBinderEliminator::Ordinary { cases, default } => {
+                            #[cfg(test)]
+                            crate::cranelift_backend::lowering::record_d8m_bridge_arm(
+                                self.defining_function_id,
+                                crate::cranelift_backend::lowering::D8mBridgeArm::Ordinary,
+                            );
                             EliminatorFrame::Ordinary(OrdinaryEliminatorFrame {
                                 cases,
                                 default,

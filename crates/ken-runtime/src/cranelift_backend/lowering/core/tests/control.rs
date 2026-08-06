@@ -19011,6 +19011,15 @@ fn d8n_witness() -> RuntimeExpr {
 
 #[cfg(test)]
 fn add_ih_slot_markers(expr: &RuntimeExpr) -> RuntimeExpr {
+    add_ih_slot_markers_with(expr, 200, 20)
+}
+
+#[cfg(test)]
+fn add_ih_slot_markers_with(
+    expr: &RuntimeExpr,
+    slot_template_id: u64,
+    checked_occurrence_tag: u64,
+) -> RuntimeExpr {
     let RuntimeExpr::Let { value, body } = expr else { panic!("let") };
     let RuntimeExpr::ComputationalMatch { scrutinee, cases, default } = value.as_ref() else {
         panic!("eliminator")
@@ -19038,8 +19047,8 @@ fn add_ih_slot_markers(expr: &RuntimeExpr) -> RuntimeExpr {
             argument_binders: case.argument_binders,
             recursive_positions: case.recursive_positions.clone(),
             body: RuntimeExpr::CheckedComputationalIHSlots {
-                slot_template_ids: vec![200],
-                checked_occurrence_paths: vec![vec![20]],
+                slot_template_ids: vec![slot_template_id],
+                checked_occurrence_paths: vec![vec![checked_occurrence_tag]],
                 body: Box::new(case.body.clone()),
             },
         })
@@ -19853,9 +19862,11 @@ fn d8m_the_transported_tuple_is_what_carries_the_source_frame() {
     assert_eq!(
         permuted, observed,
         "MEASURED: this witness's two bodies observe the same plan-named frame and slot, so a \
-         swap is a no-op and the keyed relation is not discriminated by it here. If this ever \
-         differs, the permutation has become a real control and this expectation should be \
-         inverted rather than deleted"
+         swap is a no-op and the keyed relation is not discriminated by it here. The witness \
+         property that would make it bite is two subjects holding DISTINCT values, and \
+         d8m_two_distinct_occurrences_each_keep_their_own_frame is where that exists: there the \
+         permutation is enforced rather than recorded. If this ever differs, the permutation has \
+         become a real control here too and this expectation should be inverted rather than deleted"
     );
 
     // Clause 2 — withdrawing the transported tuple.
@@ -19896,4 +19907,934 @@ fn d8m_plan_named_ids() -> (u64, u64) {
             .map(|slot| slot.slot_template_id)
             .unwrap_or(200),
     )
+}
+
+#[cfg(test)]
+const D8M2_SYMBOL: &str = "decl:fixture::d8m2::witness";
+
+/// How one checked composed occurrence of the `D8m` bridge is spelled: its
+/// source frame marker id, its checked-IH slot template, the occurrence tag that
+/// slot marker carries, and whether the frame marker is present at all.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug)]
+struct D8mOccurrence {
+    frame_id: u64,
+    slot_template_id: u64,
+    occurrence_tag: u64,
+    /// Whether the source carries the `CheckedSubcontinuationFrame` marker here.
+    marked: bool,
+    /// Whether the bridge's case body carries a checked-IH slot marker.
+    slot_marked: bool,
+}
+
+/// One occurrence, as the eliminator alone -- the `d8n` witness with its hosting
+/// `Let` removed, so two of them can sit side by side in ONE scope.
+///
+/// Siblings in a `Construct`, not nested `Let`s: the composed method binder the
+/// bridge case bodies reach for is counted from the deforestation environment,
+/// and an enclosing binder would shift it. Two arguments of one constructor are
+/// in the same scope as the single `Let`-hosted occurrence these are built from.
+#[cfg(test)]
+fn d8m_occurrence_eliminator(occurrence: D8mOccurrence) -> RuntimeExpr {
+    let hosted = if occurrence.slot_marked {
+        add_ih_slot_markers_with(
+            &d8m_witness(occurrence.frame_id),
+            occurrence.slot_template_id,
+            occurrence.occurrence_tag,
+        )
+    } else {
+        d8m_witness(occurrence.frame_id)
+    };
+    let hosted = if occurrence.marked {
+        hosted
+    } else {
+        // The frame marker is removed and the slot marker inside it is kept:
+        // that is what "the source declared no frame HERE" means, and it is the
+        // shape the omission control needs.
+        strip_bridge_marker(&hosted, false)
+    };
+    let RuntimeExpr::Let { value, .. } = hosted else {
+        panic!("let")
+    };
+    *value
+}
+
+/// **The real second occurrence.** Two structurally identical checked composed
+/// bridges, at two distinct source occurrences, carrying distinct frame ids and
+/// distinct checked-IH slot templates.
+///
+/// Their matches are identical, so their frame fingerprints are equal. That is
+/// deliberate: it makes the pair invisible to every shape-keyed check and leaves
+/// the frame IDENTITY as the only thing that distinguishes them.
+#[cfg(test)]
+fn d8m_two_occurrence_body(first: D8mOccurrence, second: D8mOccurrence) -> RuntimeExpr {
+    RuntimeExpr::Let {
+        value: Box::new(RuntimeExpr::Construct {
+            constructor: "ctor:fixture::D8M::Pair".to_string(),
+            args: vec![
+                d8m_occurrence_eliminator(first),
+                d8m_occurrence_eliminator(second),
+            ],
+        }),
+        body: Box::new(RuntimeExpr::Var(0)),
+    }
+}
+
+#[cfg(test)]
+fn d8m_two_occurrence_declaration(
+    first: D8mOccurrence,
+    second: D8mOccurrence,
+) -> RuntimeDeclaration {
+    RuntimeDeclaration {
+        symbol: D8M2_SYMBOL.to_string(),
+        kind: RuntimeDeclarationKind::Transparent {
+            body: RuntimeExpr::Closure {
+                captures: Vec::new(),
+                params: vec!["state".to_string()],
+                body: Box::new(d8m_two_occurrence_body(first, second)),
+            },
+        },
+        metadata: RuntimeSymbolMetadata {
+            lowerability: Some(RuntimeLowerabilityStatus::Supported),
+            ..RuntimeSymbolMetadata::empty()
+        },
+    }
+}
+
+/// Every checked-IH slot marker location in the witness, keyed by the template
+/// it names.
+///
+/// Measured from the witness by the production collector, never spelled by
+/// hand: a hand-written path is a second authority for where the marker is.
+#[cfg(test)]
+fn d8m_two_occurrence_slot_locations(
+    first: D8mOccurrence,
+    second: D8mOccurrence,
+) -> BTreeMap<u64, Vec<crate::CheckedRuntimeMarkerLocationV1>> {
+    let declaration = d8m_two_occurrence_declaration(first, second);
+    let RuntimeDeclarationKind::Transparent { body } = &declaration.kind else {
+        panic!("transparent")
+    };
+    let mut sets = crate::cranelift_backend::planning::CheckedOrientedMarkerSets::default();
+    crate::cranelift_backend::planning::collect_checked_oriented_markers(
+        body,
+        &mut sets,
+        D8M2_SYMBOL,
+        &mut Vec::new(),
+    )
+    .expect("the witness's markers collect");
+    let mut located: BTreeMap<u64, Vec<crate::CheckedRuntimeMarkerLocationV1>> = BTreeMap::new();
+    for ((slot_template_id, _), paths) in &sets.computational_ih_slots {
+        let mut paths = paths.iter().cloned().collect::<Vec<_>>();
+        paths.sort();
+        located.entry(*slot_template_id).or_default().extend(
+            paths
+                .into_iter()
+                .map(|runtime_path| crate::CheckedRuntimeMarkerLocationV1 {
+                    declaration: D8M2_SYMBOL.to_string(),
+                    runtime_path,
+                }),
+        );
+    }
+    located
+}
+
+/// The oriented plan for the two-occurrence witness: one frame per MARKED
+/// occurrence, one slot template per occurrence.
+///
+/// `slot_frames` overrides which planned frame each slot template binds to; it
+/// is what the omission control needs, and passing `None` means "each slot binds
+/// to its own occurrence's frame".
+#[cfg(test)]
+fn d8m_two_occurrence_plan(
+    first: D8mOccurrence,
+    second: D8mOccurrence,
+    slot_frames: Option<(u64, u64)>,
+) -> crate::OrientedSubcontinuationPlanV1 {
+    let declaration = d8m_two_occurrence_declaration(first, second);
+    let RuntimeDeclarationKind::Transparent { body } = &declaration.kind else {
+        panic!("transparent")
+    };
+    let RuntimeExpr::Closure { body, .. } = body else {
+        panic!("closure")
+    };
+    let RuntimeExpr::Let { value, .. } = body.as_ref() else {
+        panic!("let")
+    };
+    let RuntimeExpr::Construct { args, .. } = value.as_ref() else {
+        panic!("pair")
+    };
+    let located = d8m_two_occurrence_slot_locations(first, second);
+    let mut frames = Vec::new();
+    let mut slots = Vec::new();
+    let slot_frames = slot_frames.unwrap_or((first.frame_id, second.frame_id));
+    for (position, (occurrence, slot_frame)) in [(first, slot_frames.0), (second, slot_frames.1)]
+        .into_iter()
+        .enumerate()
+    {
+        let RuntimeExpr::ComputationalMatch { cases, .. } = &args[position] else {
+            panic!("eliminator")
+        };
+        // The bridge match, reached through the frame marker when there is one.
+        let bridge = match &cases[0].body {
+            RuntimeExpr::CheckedSubcontinuationFrame { frame_id, body } => {
+                assert_eq!(*frame_id, occurrence.frame_id, "marker id is as spelled");
+                body.as_ref()
+            }
+            other => other,
+        };
+        let RuntimeExpr::ComputationalMatch { cases, default, .. } = bridge else {
+            panic!("bridge")
+        };
+        if occurrence.marked {
+            let mut frame = crate::OrientedSubcontinuationFramePlanV1 {
+                frame_id: occurrence.frame_id,
+                // Its own prompt region: a segment admits exactly one
+                // distinguished root, and these two occurrences are independent
+                // roots rather than one nested inside the other.
+                segment_site_id: 9 + position as u64,
+                declaration: D8M2_SYMBOL.to_string(),
+                checked_occurrence_path: vec![occurrence.frame_id],
+                semantic_position: position as u64,
+                input_interface: oriented_test_interface(1),
+                output_interface: oriented_test_interface(2),
+                runtime_frame_fingerprint:
+                    crate::compiler_private_computational_match_frame_fingerprint(cases, default),
+                occurrence_binding_fingerprint: 0,
+                control_witness: crate::OrientedControlWitnessV1::DistinguishedRoot,
+            };
+            frame.occurrence_binding_fingerprint =
+                crate::compiler_private_oriented_occurrence_binding_fingerprint(&frame);
+            frames.push(frame);
+        }
+        if !occurrence.slot_marked {
+            continue;
+        }
+        let mut slot = crate::CheckedComputationalIHSlotTemplateV1 {
+            slot_template_id: occurrence.slot_template_id,
+            declaration: D8M2_SYMBOL.to_string(),
+            checked_match_ordinal: position as u64,
+            checked_occurrence_path: vec![occurrence.occurrence_tag],
+            frame_template_id: slot_frame,
+            constructor: "ctor:prelude::Result::Ok".to_string(),
+            recursive_position: 0,
+            method_binder_ordinal: 4,
+            local_telescope: Vec::new(),
+            ih_interface: oriented_test_interface(1),
+            // The segment of the frame this slot binds to, not of the occurrence
+            // it sits in: a slot that names another occurrence's frame is IN
+            // that frame's prompt region, and spelling its own would refuse as a
+            // segment crossing before the bridge is ever reached.
+            segment_site_id: frames
+                .iter()
+                .find(|frame| frame.frame_id == slot_frame)
+                .map_or(9 + position as u64, |frame| frame.segment_site_id),
+            frame_templates: vec![slot_frame],
+            input_interface: oriented_test_interface(1),
+            output_interface: oriented_test_interface(2),
+            runtime_marker_locations: located
+                .get(&occurrence.slot_template_id)
+                .cloned()
+                .expect("every occurrence's slot marker was located"),
+            occurrence_binding_fingerprint: 0,
+        };
+        slot.occurrence_binding_fingerprint =
+            crate::compiler_private_computational_ih_slot_binding_fingerprint(&slot);
+        slots.push(slot);
+    }
+    crate::OrientedSubcontinuationPlanV1 {
+        representation_rule_version:
+            crate::OrientedSubcontinuationPlanV1::REPRESENTATION_RULE_VERSION,
+        frames,
+        recursive_calls: Vec::new(),
+        computational_ih_slots: slots,
+        computational_ih_calls: Vec::new(),
+    }
+}
+
+/// Compile the two-occurrence witness.
+///
+/// `source` spells the two occurrences as the SOURCE carries them; `planned`
+/// spells the two the PLAN was built for. Passing different values is how a
+/// control perturbs one side while the other stays lawful.
+#[cfg(test)]
+fn d8m_two_occurrence_compile(
+    source: (D8mOccurrence, D8mOccurrence),
+    planned: (D8mOccurrence, D8mOccurrence),
+    slot_frames: Option<(u64, u64)>,
+) -> Option<CraneliftBackendError> {
+    d8m_two_occurrence_compile_with(source, planned, slot_frames, |_| {}, |body| body.clone())
+}
+
+/// As above, with two escape hatches for the controls: `adjust` perturbs the
+/// PLAN after it is built lawfully, and `rewrite` perturbs the SOURCE after the
+/// plan has been derived from the unperturbed text.
+#[cfg(test)]
+fn d8m_two_occurrence_compile_with(
+    source: (D8mOccurrence, D8mOccurrence),
+    planned: (D8mOccurrence, D8mOccurrence),
+    slot_frames: Option<(u64, u64)>,
+    adjust: impl FnOnce(&mut crate::OrientedSubcontinuationPlanV1),
+    rewrite: impl FnOnce(&RuntimeExpr) -> RuntimeExpr,
+) -> Option<CraneliftBackendError> {
+    let lawful = d8m_two_occurrence_declaration(source.0, source.1);
+    let RuntimeDeclarationKind::Transparent { body } = &lawful.kind else {
+        panic!("transparent")
+    };
+    let declaration = RuntimeDeclaration {
+        symbol: D8M2_SYMBOL.to_string(),
+        kind: RuntimeDeclarationKind::Transparent {
+            body: rewrite(body),
+        },
+        metadata: lawful.metadata.clone(),
+    };
+    let entry = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::DeclarationRef {
+            symbol: D8M2_SYMBOL.to_string(),
+        }),
+        args: vec![RuntimeExpr::Construct {
+            constructor: "ctor:prelude::Unit::MkUnit".to_string(),
+            args: Vec::new(),
+        }],
+    };
+    let declarations = BTreeMap::from([(D8M2_SYMBOL, &declaration)]);
+    let mut plan = d8m_two_occurrence_plan(planned.0, planned.1, slot_frames);
+    adjust(&mut plan);
+    compile_expr_into_module(
+        new_object_module("d8m2").expect("module"),
+        "ken_d8m2",
+        Linkage::Export,
+        &entry,
+        &NativeSeedEnvironment::empty(),
+        declarations,
+        None,
+        true,
+        None,
+        Some(test_only_distinguished_root_join_plan()),
+        Some(plan),
+    )
+    .err()
+}
+
+/// Rewrite the default trap message of the SECOND occurrence's bridge match.
+///
+/// The frame fingerprint is computed over the match's cases and default, so this
+/// changes that occurrence's fingerprint and nothing else about the program's
+/// shape -- and it is applied to the source only, after the plan has been
+/// derived from the unperturbed text.
+#[cfg(test)]
+fn d8m_reshape_second_bridge(body: &RuntimeExpr) -> RuntimeExpr {
+    let RuntimeExpr::Closure { captures, params, body } = body else {
+        panic!("closure")
+    };
+    let RuntimeExpr::Let { value, body: rest } = body.as_ref() else {
+        panic!("let")
+    };
+    let RuntimeExpr::Construct { constructor, args } = value.as_ref() else {
+        panic!("pair")
+    };
+    let RuntimeExpr::ComputationalMatch { scrutinee, cases, default } = &args[1] else {
+        panic!("eliminator")
+    };
+    let RuntimeExpr::CheckedSubcontinuationFrame { frame_id, body: bridge } = &cases[0].body else {
+        panic!("marked bridge")
+    };
+    let RuntimeExpr::ComputationalMatch {
+        scrutinee: bridge_scrutinee,
+        cases: bridge_cases,
+        default: bridge_default,
+    } = bridge.as_ref()
+    else {
+        panic!("bridge")
+    };
+    let mut cases = cases.clone();
+    cases[0] = crate::RuntimeComputationalMatchCase {
+        constructor: cases[0].constructor.clone(),
+        argument_binders: cases[0].argument_binders,
+        recursive_positions: cases[0].recursive_positions.clone(),
+        body: RuntimeExpr::CheckedSubcontinuationFrame {
+            frame_id: *frame_id,
+            body: Box::new(RuntimeExpr::ComputationalMatch {
+                scrutinee: bridge_scrutinee.clone(),
+                cases: bridge_cases.clone(),
+                default: RuntimeTrap {
+                    code: bridge_default.code.clone(),
+                    message: format!("{} reshaped", bridge_default.message),
+                },
+            }),
+        },
+    };
+    let mut args = args.clone();
+    args[1] = RuntimeExpr::ComputationalMatch {
+        scrutinee: scrutinee.clone(),
+        cases,
+        default: default.clone(),
+    };
+    RuntimeExpr::Closure {
+        captures: captures.clone(),
+        params: params.clone(),
+        body: Box::new(RuntimeExpr::Let {
+            value: Box::new(RuntimeExpr::Construct {
+                constructor: constructor.clone(),
+                args,
+            }),
+            body: rest.clone(),
+        }),
+    }
+}
+
+/// The two occurrences the lawful witness carries.
+#[cfg(test)]
+fn d8m_lawful_occurrences() -> (D8mOccurrence, D8mOccurrence) {
+    (
+        D8mOccurrence {
+            frame_id: 7,
+            slot_template_id: 200,
+            occurrence_tag: 20,
+            marked: true,
+            slot_marked: true,
+        },
+        D8mOccurrence {
+            frame_id: 8,
+            slot_template_id: 201,
+            occurrence_tag: 21,
+            marked: true,
+            slot_marked: true,
+        },
+    )
+}
+
+/// The `(frame, slot)` pairs the PLAN names, keyed by frame.
+///
+/// The independent side of the pairing law: each planned checked-IH slot names
+/// the frame template it binds to, and that binding is the plan's own. Nothing
+/// here is read back out of the bridge, the transported tuple, or an
+/// observation.
+#[cfg(test)]
+fn d8m_planned_frame_slots(
+    first: D8mOccurrence,
+    second: D8mOccurrence,
+) -> BTreeMap<u64, BTreeSet<u64>> {
+    let plan = d8m_two_occurrence_plan(first, second, None);
+    let mut planned: BTreeMap<u64, BTreeSet<u64>> = BTreeMap::new();
+    for slot in &plan.computational_ih_slots {
+        planned
+            .entry(slot.frame_template_id)
+            .or_default()
+            .insert(slot.slot_template_id);
+    }
+    planned
+}
+
+/// What the checked seams observed, keyed by the frame the bridge transported.
+#[cfg(test)]
+fn d8m_observed_frame_slots() -> BTreeMap<u64, BTreeSet<u64>> {
+    let mut observed: BTreeMap<u64, BTreeSet<u64>> = BTreeMap::new();
+    for (_, frame_id, slot_template_id) in crate::cranelift_backend::lowering::d8m_slot_frame_pairs()
+    {
+        observed
+            .entry(frame_id)
+            .or_default()
+            .insert(slot_template_id);
+    }
+    observed
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8m` — two same-shaped occurrences each keep
+/// their OWN frame, and exchanging them is rejected.**
+///
+/// ## Why a second occurrence, and why this one
+///
+/// The `D8n` witness has one checked occurrence, so its frame and its slot are
+/// both singletons and every pairing of them is the same pairing. The
+/// anti-vacuity permutation the governing rule asks for is constructible there
+/// and provably not discriminating: the two bodies observe the same plan-named
+/// ids, so exchanging their observations is a no-op. That limit is recorded at
+/// `d8m_the_transported_tuple_is_what_carries_the_source_frame`.
+///
+/// This witness supplies the missing axis. Two structurally identical checked
+/// composed bridges sit side by side in one scope, carrying distinct frame ids
+/// and distinct slot templates. Their matches are identical, so their frame
+/// fingerprints are EQUAL -- which is deliberate: it makes the pair invisible to
+/// every shape-keyed check and leaves the transported identity as the only thing
+/// that tells them apart.
+///
+/// ## The independent side
+///
+/// `frame -> slot` as the PLAN names it, through each slot template's
+/// `frame_template_id`. Derived from the plan the compile is handed, never from
+/// the bridge descriptor, the ambient owner, or the transported tuple.
+///
+/// ## Clause 1 — the keyed pairing relation
+///
+/// The relation observed at the real slot seam must equal the planned one.
+///
+/// ## Clause 2 — the permutation, and here it BITES
+///
+/// Exchanging the two frames' observed slots leaves the bag of values identical,
+/// so an unkeyed comparison stays green. The keyed relation must reject it, and
+/// that rejection is measured, not argued.
+///
+/// ## Clause 3 — the body-keyed relation, with its limit stated
+///
+/// Keyed on `D8o`'s independently supplied body key: the ordinary unit body
+/// lowers the whole declaration and must observe BOTH planned pairs; each
+/// specialization body must observe exactly one, and together they must cover
+/// the plan. MEASURED limit: the independent side does not say WHICH
+/// specialization belongs to which occurrence, so a swap between the two
+/// specialization bodies is invisible to this clause. Clause 2 is where the
+/// discrimination lives, and it is keyed on the frame, whose independent side is
+/// complete.
+///
+/// **Promise class: durable invariant.** Two keyed relations against a
+/// plan-derived expectation, plus an enforced permutation.
+#[test]
+fn d8m_two_distinct_occurrences_each_keep_their_own_frame() {
+    use crate::cranelift_backend::lowering::{reset_d8n_observations, D8oBodyKey};
+
+    let (first, second) = d8m_lawful_occurrences();
+    reset_d8n_observations();
+    crate::cranelift_backend::lowering::reset_d8o_body_authorities();
+    let outcome = d8m_two_occurrence_compile((first, second), (first, second), None);
+    assert!(
+        outcome.is_none(),
+        "two same-shaped checked composed occurrences in one scope must compile; the whole matrix \
+         below is about what happens when one of them is perturbed, and none of it means anything \
+         if the lawful program does not build: {outcome:?}"
+    );
+
+    // Clause 1 — the keyed pairing relation.
+    let planned = d8m_planned_frame_slots(first, second);
+    let observed = d8m_observed_frame_slots();
+    assert_eq!(
+        planned.len(),
+        2,
+        "the witness must plan TWO distinct frames, or there is no second subject and the \
+         permutation below is the same no-op it was on the one-occurrence witness: {planned:?}"
+    );
+    assert_eq!(
+        observed, planned,
+        "each occurrence's bridge must transport ITS OWN frame to ITS OWN slot. The independent \
+         side is the plan's `frame_template_id` per slot template; the observed side is the pair \
+         the slot seam actually reconciled: {observed:?} vs {planned:?}"
+    );
+
+    // Clause 2 — the permutation, and it bites here.
+    let permuted = {
+        let frames = planned.keys().copied().collect::<Vec<_>>();
+        let mut permuted = observed.clone();
+        permuted.insert(frames[0], observed[&frames[1]].clone());
+        permuted.insert(frames[1], observed[&frames[0]].clone());
+        permuted
+    };
+    let bag = |relation: &BTreeMap<u64, BTreeSet<u64>>| {
+        let mut values = relation.values().cloned().collect::<Vec<_>>();
+        values.sort();
+        values
+    };
+    assert_eq!(
+        bag(&permuted),
+        bag(&observed),
+        "the permutation must be INVISIBLE to an unkeyed comparison, or it is not the control it \
+         claims to be: a swap that changes the bag would red anywhere"
+    );
+    assert_ne!(
+        permuted, planned,
+        "and VISIBLE to the keyed one. This is the assertion the one-occurrence witness could not \
+         make: there the two subjects held equal values and the swap was a no-op. Here they hold \
+         distinct values, so exchanging which frame reconciled which slot is a real difference and \
+         the plan-derived expectation must reject it"
+    );
+
+    // Clause 3 — the body-keyed relation, keyed on D8o's supplied body key.
+    let keys = crate::cranelift_backend::lowering::d8o_body_keys()
+        .into_iter()
+        .map(|(function, key)| (function.expect("body keys are labelled"), key))
+        .collect::<BTreeMap<_, _>>();
+    let mut by_body: BTreeMap<D8oBodyKey, BTreeSet<(u64, u64)>> = BTreeMap::new();
+    for (function, frame_id, slot_template_id) in
+        crate::cranelift_backend::lowering::d8m_slot_frame_pairs()
+    {
+        let function = function.expect("every reconciliation names its Function");
+        let key = *keys
+            .get(&function)
+            .expect("every reconciling body recorded its exact body key");
+        by_body
+            .entry(key)
+            .or_default()
+            .insert((frame_id, slot_template_id));
+    }
+    let planned_pairs = planned
+        .iter()
+        .flat_map(|(frame, slots)| slots.iter().map(move |slot| (*frame, *slot)))
+        .collect::<BTreeSet<_>>();
+    let ordinary = by_body
+        .iter()
+        .filter(|(key, _)| matches!(key, D8oBodyKey::OrdinaryUnit(_)))
+        .map(|(_, pairs)| pairs.clone())
+        .collect::<Vec<_>>();
+    let specializations = by_body
+        .iter()
+        .filter(|(key, _)| matches!(key, D8oBodyKey::ContinuationSpecialization(_)))
+        .map(|(_, pairs)| pairs.clone())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        ordinary,
+        vec![planned_pairs.clone()],
+        "exactly one ordinary unit body lowers this declaration, and it contains BOTH occurrences, \
+         so it must observe both planned pairs: {by_body:?}"
+    );
+    assert_eq!(
+        specializations.len(),
+        2,
+        "and each occurrence must derive its own specialization body. One would mean the two \
+         same-shaped occurrences had collapsed into a single specialization, which is exactly the \
+         confusion this witness exists to detect: {by_body:?}"
+    );
+    assert_eq!(
+        specializations.iter().map(|pairs| pairs.len()).collect::<Vec<_>>(),
+        vec![1, 1],
+        "each specialization body reaches exactly ONE checked occurrence: {by_body:?}"
+    );
+    assert_eq!(
+        specializations.iter().flatten().copied().collect::<BTreeSet<_>>(),
+        planned_pairs,
+        "and between them they cover the plan exactly -- the same pair twice would mean one \
+         occurrence was specialized and the other silently dropped: {by_body:?}"
+    );
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8m` — every way the transported identity can
+/// go wrong, and which plane catches it.**
+///
+/// Each control below carries a LAWFUL oriented plan and is stated with the
+/// plane that refuses it, because "it refuses" and "it refuses at the bridge"
+/// are different findings and only the second is about `D8m`. Two of the five
+/// hazards are caught earlier, by planning, and saying so is the point rather
+/// than an omission: a control that reds in plan validation proves nothing about
+/// the consumption the bridge performs.
+///
+/// ## Reaching the bridge at all
+///
+/// The two occurrences are structurally identical, so their frame fingerprints
+/// are equal, so exchanging their marker ids is invisible to the collector
+/// planning compares against. That is what makes a transplant reach lowering
+/// here and nowhere else.
+///
+/// ## The five, as measured
+///
+/// - **Transplant** — the two occurrences exchange frame ids. Planning is blind
+///   to it; the bridge transports occurrence one's neighbour's frame, and the
+///   slot binding law refuses. AT THE BRIDGE.
+/// - **Omission** — occurrence two loses its frame marker while keeping its slot
+///   marker, and the plan binds that slot to the surviving frame. The bridge is
+///   all-None there and the slot marker has nothing to attach to: the pre-`D8m`
+///   refusal, reached on a program whose plan is lawful. AT THE BRIDGE.
+/// - **Fingerprint** — the source's second bridge is reshaped after the plan is
+///   derived. Caught by PLANNING. See the residual below.
+/// - **Duplicate consumption** — two markers with one id are caught by PLANNING;
+///   the lowering-plane law is reached by restoring the pre-`D8n` compile-wide
+///   ledger, where one source occurrence lowered into two Functions consumes one
+///   pair twice. AT THE BRIDGE.
+/// - **Wrapper-origin substitution** — the bridge is given the marker's own
+///   occurrence instead of the wrapped match's, which is child 0 of it. Refused.
+///
+/// ## MEASURED / CLAIMED / THE GAP, on the fingerprint hazard
+///
+/// **MEASURED:** reshaping the source after deriving the plan refuses with
+/// *"checked plan frame fingerprint is stale"*, in planning. Arming the bridge
+/// to consume with a shape the source match does not carry refuses with
+/// *"checked Runtime marker no longer denotes its planned frame"*, at the
+/// consumption seam.
+///
+/// **CLAIMED:** the consumption-seam check holds the bridge to the match its own
+/// marker wrapped.
+///
+/// **THE GAP:** no source or plan input reaches that check. Planning collects
+/// each marker's fingerprint with
+/// `compiler_private_computational_match_frame_fingerprint` over the same cases
+/// and default the bridge later borrows, and requires agreement with the plan
+/// before lowering starts, so the two computations cannot disagree on any input.
+/// The attempted evasion is committed above rather than described: it reds in
+/// planning. The seam check is therefore a guard against the mechanism drifting
+/// -- a future bridge consuming with its own deforested cases rather than the
+/// source's -- and the armed control is the only thing that exercises it.
+///
+/// **Promise class: durable invariant.** Named refusals under existing laws,
+/// each labelled with the plane that produced it.
+#[test]
+fn d8m_the_checked_bridge_refuses_every_way_the_transported_identity_can_go_wrong() {
+    use crate::cranelift_backend::lowering::core::{
+        set_d8m_foreign_consumed_shape, set_d8m_wrapper_origin_substitution,
+        set_d8n_compile_wide_lifecycle,
+    };
+
+    let (first, second) = d8m_lawful_occurrences();
+    let refusal = |outcome: Option<CraneliftBackendError>, what: &str| -> String {
+        format!("{:?}", outcome.unwrap_or_else(|| panic!("{what} must refuse")))
+    };
+
+    // Transplant — the two occurrences exchange frame ids, plan untouched.
+    let transplanted = refusal(
+        d8m_two_occurrence_compile(
+            (
+                D8mOccurrence { frame_id: second.frame_id, ..first },
+                D8mOccurrence { frame_id: first.frame_id, ..second },
+            ),
+            (first, second),
+            None,
+        ),
+        "a transplanted marker",
+    );
+    assert!(
+        transplanted.contains("computational IH slot constructor/position/frame binding is stale"),
+        "a marker that carries its NEIGHBOUR's frame must be caught where the transported identity \
+         is used, not by shape: the two occurrences are structurally identical, so planning \
+         compares equal fingerprints and admits the exchange. If this refuses with a planning \
+         message the control has stopped reaching the bridge and proves nothing about D8m: \
+         {transplanted}"
+    );
+
+    // Omission — occurrence two loses its frame marker; its slot binds to the
+    // surviving frame, so the plan stays lawful and the program still reaches
+    // the bridge.
+    let omitted = refusal(
+        d8m_two_occurrence_compile(
+            (first, D8mOccurrence { marked: false, ..second }),
+            (first, D8mOccurrence { marked: false, ..second }),
+            Some((first.frame_id, first.frame_id)),
+        ),
+        "an omitted frame marker",
+    );
+    assert!(
+        omitted.contains("computational IH slot marker is detached from its checked frame"),
+        "an unwrapped bridge carries no identity, so a checked IH slot inside it has nothing to \
+         attach to. This is the exact pre-D8m refusal, and reaching it on a program whose plan is \
+         lawful is what makes the omission control live rather than a plan-validation red: \
+         {omitted}"
+    );
+
+    // Fingerprint — the attempted evasion, which planning catches.
+    let reshaped = refusal(
+        d8m_two_occurrence_compile_with(
+            (first, second),
+            (first, second),
+            None,
+            |_| {},
+            d8m_reshape_second_bridge,
+        ),
+        "a reshaped bridge",
+    );
+    assert!(
+        reshaped.contains("checked plan frame fingerprint is stale"),
+        "MEASURED, and the reason the consumption-seam fingerprint check has no input that \
+         reaches it: planning computes each marker's fingerprint over the same cases and default \
+         the bridge later borrows, and requires agreement before lowering starts: {reshaped}"
+    );
+
+    // Fingerprint — the seam law itself, reached by arming the bridge to consume
+    // with a shape the source match does not carry.
+    set_d8m_foreign_consumed_shape(true);
+    let foreign = d8m_two_occurrence_compile((first, second), (first, second), None);
+    set_d8m_foreign_consumed_shape(false);
+    let foreign = refusal(foreign, "a foreign consumed shape");
+    assert!(
+        foreign.contains("checked Runtime marker no longer denotes its planned frame"),
+        "the bridge consumes through the existing pair, and that pair holds the marker to the \
+         shape the plan transported for it. Same marker, same cases, one field of the default \
+         changed: {foreign}"
+    );
+
+    // Duplicate consumption — the source-level form, caught by planning.
+    let source_duplicate = refusal(
+        d8m_two_occurrence_compile(
+            (first, D8mOccurrence { frame_id: first.frame_id, ..second }),
+            (first, second),
+            None,
+        ),
+        "two markers with one frame id",
+    );
+    assert!(
+        source_duplicate.contains("Runtime IR repeats a checked subcontinuation frame marker"),
+        "two source occurrences cannot name one frame, and that is settled before lowering: \
+         {source_duplicate}"
+    );
+
+    // Duplicate consumption — the lowering-plane law, reached by restoring the
+    // pre-D8n compile-wide ledger lifetime.
+    set_d8n_compile_wide_lifecycle(true);
+    let wide = d8m_two_occurrence_compile((first, second), (first, second), None);
+    set_d8n_compile_wide_lifecycle(false);
+    let wide = refusal(wide, "a compile-wide consumed-frame ledger");
+    assert!(
+        wide.contains("checked Runtime frame marker was consumed more than once"),
+        "one source occurrence lowered into two Functions consumes its pair once in each, so a \
+         ledger shared across the compile sees a duplicate. That is the affine law firing at the \
+         consumption seam, on a lawful program: {wide}"
+    );
+
+    // Wrapper-origin substitution.
+    set_d8m_wrapper_origin_substitution(true);
+    let substituted = d8m_two_occurrence_compile((first, second), (first, second), None);
+    set_d8m_wrapper_origin_substitution(false);
+    let substituted = refusal(substituted, "a wrapper-origin substitution");
+    assert!(
+        substituted.contains("source match population was requested for a different occurrence kind"),
+        "the marker names the frame; the match IS the frame. Giving the bridge the wrapper's own \
+         occurrence instead of child 0 of it must refuse rather than silently key every downstream \
+         origin lookup on a node that is not a match: {substituted}"
+    );
+    // MEASURED, and stated because it bounds what the second occurrence buys:
+    // this substitution also refuses on the one-occurrence D8n witness. The
+    // planner's occurrence-kind law catches it regardless of how many candidate
+    // occurrences exist, so the distinct second occurrence is not what makes
+    // this control bite. It is what makes the transplant control above bite.
+    set_d8m_wrapper_origin_substitution(true);
+    let single = d8n_compile();
+    set_d8m_wrapper_origin_substitution(false);
+    assert!(
+        format!("{single:?}").contains("source match population was requested for a different occurrence kind"),
+        "the one-occurrence witness must refuse the same substitution the same way; if it ever \
+         stops doing so, the substitution has become occurrence-sensitive and the claim above \
+         about what the second occurrence buys needs restating: {single:?}"
+    );
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8m` — the bridge arm populations move only
+/// with the marker, and the frame counts stay in bijection.**
+///
+/// ## Clause 1 — the arms partition, and only the marker moves a site
+///
+/// The closed descriptor has three arms and they are disjoint by source
+/// constructor. On the lawful witness both composed sites take the checked arm.
+/// Unwrapping ONE occurrence moves exactly one site to the unwrapped arm and
+/// leaves the total unchanged: the ordinary arm's population is empty in both,
+/// so `D8m` did not take a program from it. That is what "the ordinary bridge
+/// population is unchanged" means as a measurement rather than as a reading of
+/// the match.
+///
+/// ## Clause 2 — an unwrapped bridge contributes nothing checked
+///
+/// With the second occurrence's frame AND slot markers both removed, the checked
+/// population is exactly the first occurrence's pair. An unwrapped bridge stays
+/// all-None: it does not borrow the surviving frame, and there is only one to
+/// borrow.
+///
+/// ## Clause 3 — plan frames and Runtime markers stay in bijection
+///
+/// Both directions, on a witness that has two of each: a plan naming a frame the
+/// source does not mark, and a source marker the plan does not name. Preserving
+/// an identity through the bridge must neither create nor consume a frame.
+///
+/// **Promise class: durable invariant.** A partition, an empty population
+/// established at the seam, and a bijection.
+#[test]
+fn d8m_the_bridge_arm_populations_move_only_with_the_marker() {
+    use crate::cranelift_backend::lowering::{
+        d8m_bridge_arms, d8m_slot_frame_pairs, reset_d8n_observations, D8mBridgeArm,
+    };
+
+    let (first, second) = d8m_lawful_occurrences();
+    let arms = |occurrences: (D8mOccurrence, D8mOccurrence)| {
+        reset_d8n_observations();
+        let outcome = d8m_two_occurrence_compile(occurrences, occurrences, None);
+        assert!(outcome.is_none(), "the witness must compile: {outcome:?}");
+        let mut counted: BTreeMap<D8mBridgeArm, usize> = BTreeMap::new();
+        for (_, arm) in d8m_bridge_arms() {
+            *counted.entry(arm).or_default() += 1;
+        }
+        (counted, d8m_slot_frame_pairs())
+    };
+
+    // Clause 1 — the partition.
+    let (checked_arms, _) = arms((first, second));
+    assert_eq!(
+        checked_arms,
+        BTreeMap::from([(D8mBridgeArm::CheckedComputational, 2)]),
+        "both composed sites take the checked arm on the lawful witness, and no site takes the \
+         ordinary one: {checked_arms:?}"
+    );
+    let plain_second = D8mOccurrence { marked: false, slot_marked: false, ..second };
+    let (mixed_arms, plain_pairs) = arms((first, plain_second));
+    assert_eq!(
+        mixed_arms,
+        BTreeMap::from([
+            (D8mBridgeArm::Computational, 1),
+            (D8mBridgeArm::CheckedComputational, 1),
+        ]),
+        "removing ONE marker moves exactly ONE site from the checked arm to the unwrapped one. \
+         The total is unchanged and the ordinary arm is still empty, so D8m neither created a \
+         composed site nor took one from the ordinary bridge: {mixed_arms:?}"
+    );
+
+    // Clause 2 — the unwrapped bridge contributes nothing checked.
+    let planned = d8m_planned_frame_slots(first, plain_second);
+    let observed = plain_pairs
+        .into_iter()
+        .map(|(_, frame_id, slot_template_id)| (frame_id, slot_template_id))
+        .collect::<BTreeSet<_>>();
+    let planned_pairs = planned
+        .iter()
+        .flat_map(|(frame, slots)| slots.iter().map(move |slot| (*frame, *slot)))
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        observed, planned_pairs,
+        "the checked population is exactly what the plan still names -- the first occurrence's \
+         pair. An unwrapped bridge must not borrow the surviving frame: {observed:?}"
+    );
+    assert_eq!(
+        planned_pairs.len(),
+        1,
+        "and there must be exactly one planned pair left, or clause 2 is not about an unwrapped \
+         bridge at all: {planned_pairs:?}"
+    );
+
+    // Clause 3 — the bijection, both directions, with the source side measured
+    // by the production collector rather than counted by hand.
+    let declaration = d8m_two_occurrence_declaration(first, second);
+    let RuntimeDeclarationKind::Transparent { body } = &declaration.kind else {
+        panic!("transparent")
+    };
+    let mut markers = BTreeMap::new();
+    crate::cranelift_backend::planning::collect_checked_subcontinuation_frames(body, &mut markers)
+        .expect("the witness's frame markers collect");
+    assert_eq!(
+        markers.len(),
+        d8m_two_occurrence_plan(first, second, None).frames.len(),
+        "the lawful witness's Runtime marker count and plan frame count are equal: {markers:?}"
+    );
+    assert_eq!(markers.len(), 2, "and both are two: {markers:?}");
+    let extra_planned = d8m_two_occurrence_compile_with(
+        (first, second),
+        (first, second),
+        None,
+        |plan| {
+            let mut extra = plan.frames[0].clone();
+            extra.frame_id = 9;
+            extra.checked_occurrence_path = vec![9];
+            extra.segment_site_id = 11;
+            extra.semantic_position = 2;
+            extra.occurrence_binding_fingerprint = 0;
+            extra.occurrence_binding_fingerprint =
+                crate::compiler_private_oriented_occurrence_binding_fingerprint(&extra);
+            plan.frames.push(extra);
+        },
+        |body| body.clone(),
+    );
+    assert!(
+        format!("{extra_planned:?}").contains("checked plan and Runtime marker sets differ"),
+        "a plan frame the source does not mark must refuse: {extra_planned:?}"
+    );
+    let extra_marked = d8m_two_occurrence_compile_with(
+        (first, second),
+        (first, second),
+        Some((first.frame_id, first.frame_id)),
+        |plan| plan.frames.retain(|frame| frame.frame_id != 8),
+        |body| body.clone(),
+    );
+    assert!(
+        format!("{extra_marked:?}").contains("checked plan and Runtime marker sets differ"),
+        "and so must a source marker the plan does not name. Preserving an identity through the \
+         bridge must neither create nor consume a frame: {extra_marked:?}"
+    );
 }

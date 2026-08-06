@@ -3706,6 +3706,37 @@ thread_local! {
         const { std::cell::RefCell::new(Vec::new()) };
     static D8N_SLOT_RECONCILIATIONS: std::cell::RefCell<Vec<(Option<FuncId>, u64)>> =
         const { std::cell::RefCell::new(Vec::new()) };
+    /// `D8m` — the pair the slot seam actually reconciled: the checked frame id
+    /// the bridge transported, and the plan slot template it was held to. Kept
+    /// separate from `D8N_SLOT_RECONCILIATIONS` so `D8n`'s accepted evidence
+    /// keeps the exact tuple it was reviewed with.
+    ///
+    /// This is the relation a witness with ONE checked occurrence cannot
+    /// discriminate: there, frame and slot are both singletons and any pairing
+    /// of them is the same pairing. With two distinct occurrences the two
+    /// subjects hold distinct values, so exchanging them is visible here and
+    /// invisible to a bag of frames beside a bag of slots.
+    static D8M_SLOT_FRAME_PAIRS: std::cell::RefCell<Vec<(Option<FuncId>, u64, u64)>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+    /// `D8m` — which arm of the closed bridge descriptor each composed site
+    /// actually took. The three arms are disjoint by source constructor, so this
+    /// is how "the ordinary and unwrapped populations are unchanged" becomes a
+    /// measurement rather than a reading of the match.
+    static D8M_BRIDGE_ARMS: std::cell::RefCell<Vec<(Option<FuncId>, D8mBridgeArm)>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// The arm of the closed immediate-binder bridge descriptor a composed site took.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) enum D8mBridgeArm {
+    /// A bare `ComputationalMatch` -- the unwrapped bridge, all-None.
+    Computational,
+    /// A `CheckedSubcontinuationFrame` wrapping a `ComputationalMatch` -- the
+    /// form `D8m` added.
+    CheckedComputational,
+    /// A bare `Match` -- the ordinary bridge.
+    Ordinary,
 }
 
 #[cfg(test)]
@@ -3725,6 +3756,36 @@ pub(in crate::cranelift_backend) fn record_d8n_slot_reconciliation(
 ) {
     D8N_SLOT_RECONCILIATIONS
         .with(|log| log.borrow_mut().push((defining_function, slot_template_id)));
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn record_d8m_slot_frame_pair(
+    defining_function: Option<FuncId>,
+    checked_frame_id: u64,
+    slot_template_id: u64,
+) {
+    D8M_SLOT_FRAME_PAIRS.with(|log| {
+        log.borrow_mut()
+            .push((defining_function, checked_frame_id, slot_template_id))
+    });
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d8m_slot_frame_pairs() -> Vec<(Option<FuncId>, u64, u64)> {
+    D8M_SLOT_FRAME_PAIRS.with(|log| log.borrow().clone())
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn record_d8m_bridge_arm(
+    defining_function: Option<FuncId>,
+    arm: D8mBridgeArm,
+) {
+    D8M_BRIDGE_ARMS.with(|log| log.borrow_mut().push((defining_function, arm)));
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d8m_bridge_arms() -> Vec<(Option<FuncId>, D8mBridgeArm)> {
+    D8M_BRIDGE_ARMS.with(|log| log.borrow().clone())
 }
 
 #[cfg(test)]
@@ -3868,6 +3929,8 @@ pub(in crate::cranelift_backend) fn d8o_inherit_residue() -> bool {
 pub(in crate::cranelift_backend) fn reset_d8n_observations() {
     D8N_FRAME_CONSUMPTIONS.with(|log| log.borrow_mut().clear());
     D8N_SLOT_RECONCILIATIONS.with(|log| log.borrow_mut().clear());
+    D8M_SLOT_FRAME_PAIRS.with(|log| log.borrow_mut().clear());
+    D8M_BRIDGE_ARMS.with(|log| log.borrow_mut().clear());
 }
 
 #[cfg(test)]
@@ -13865,6 +13928,17 @@ impl<'a> Lowering<'a> {
                 // the plan's own; the identity is the defining `FuncId`.
                 #[cfg(test)]
                 record_d8n_slot_reconciliation(self.defining_function_id, slot.slot_template_id);
+                // `D8m` — the same seam, recording the PAIR: the frame the
+                // bridge transported here beside the slot the plan held it to.
+                // The two are only meaningfully related when a program has more
+                // than one checked occurrence, which is what the two-occurrence
+                // witness supplies.
+                #[cfg(test)]
+                record_d8m_slot_frame_pair(
+                    self.defining_function_id,
+                    frame_id,
+                    slot.slot_template_id,
+                );
                 Ok(Some(slot_template_id))
             })
             .collect()
