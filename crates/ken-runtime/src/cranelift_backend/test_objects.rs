@@ -174,7 +174,7 @@ fn px8tr_nested_post_effect_fixture() -> (
         args: vec![
             unit(),
             RuntimeExpr::LexicalClosure {
-                captures: Vec::new(),
+                captures: px8tr_worker_captures(),
                 params: vec!["response".to_string()],
                 body: Box::new(terminal_body),
             },
@@ -239,6 +239,15 @@ fn px8tr_nested_post_effect_fixture() -> (
                     constructor: vis_constructor.clone(),
                     args: vec![
                         unit(),
+                        // ⛔ Capture-free, deliberately, even when the `D9b`
+                        // switch is armed. THIS closure is the scrutinee's
+                        // recursive field, so it is what the `ComputationalMatch`
+                        // eliminates into the case body's induction hypothesis —
+                        // and a capture-bearing closure here arrives carried,
+                        // making the IH a carried value that the case body's
+                        // `Call` then refuses as non-callable. The selected
+                        // worker `D9b` needs captures on is the one the case body
+                        // CONSTRUCTS, below.
                         RuntimeExpr::LexicalClosure {
                             captures: Vec::new(),
                             params: vec!["response".to_string()],
@@ -385,6 +394,54 @@ fn px8tr_call_selected_recursive_argument() -> bool {
 #[cfg(not(test))]
 fn px8tr_call_selected_recursive_argument() -> bool {
     false
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D9b`** — give the SELECTED WORKER two
+/// distinguishable lexical captures, under test only.
+///
+/// The `Vis` case declares `recursive_positions = [1]`, so the `LexicalClosure`
+/// at position 1 of each `Vis` producer **is** the continuation's selected
+/// worker. With `captures: []` its planned envelope is the nonrecursive prefix
+/// alone, and every envelope perturbation that needs a capture role has nothing
+/// to move — which is the witness limit `b08c1b21` recorded.
+///
+/// ⭐ **Two, and distinguishable.** One capture cannot exhibit a swapped
+/// ordinal, and two captures carrying the *same* value would make the swap an
+/// observational identity — the equal-value no-op that has twice been mistaken
+/// here for a missing guard. The distinctness is asserted by the row that arms
+/// this, not assumed.
+///
+/// ⛔ Off by default: this fixture is shared with the `D6c` and `D8g` rows, and
+/// changing every witness's worker arity to serve one row would move facts those
+/// rows measure.
+#[cfg(test)]
+thread_local! {
+    static PX8TR_WORKER_CAPTURES: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+pub(crate) fn set_px8tr_worker_captures(armed: bool) {
+    PX8TR_WORKER_CAPTURES.with(|cell| cell.set(armed));
+}
+
+#[cfg(test)]
+fn px8tr_worker_captures() -> Vec<RuntimeExpr> {
+    if PX8TR_WORKER_CAPTURES.with(std::cell::Cell::get) {
+        // ⛔ Two DISTINCT literals, so the two capture operands differ in their
+        // own identity and a swap of their ordinals is observable. Equal values
+        // would satisfy every keyed comparison under the swap.
+        vec![
+            RuntimeExpr::Value(RuntimeValue::Int(7.into())),
+            RuntimeExpr::Value(RuntimeValue::Int(9.into())),
+        ]
+    } else {
+        Vec::new()
+    }
+}
+
+#[cfg(not(test))]
+fn px8tr_worker_captures() -> Vec<RuntimeExpr> {
+    Vec::new()
 }
 
 pub(crate) fn emit_px8tr_nested_post_effect_object(

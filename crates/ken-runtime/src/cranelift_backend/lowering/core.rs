@@ -7522,20 +7522,6 @@ impl<'a> Lowering<'a> {
         // than against the envelope's length: the two are separate planner
         // facts, and comparing the assembled run with the sequence it was
         // assembled from would be an identity.
-        #[cfg(test)]
-        crate::cranelift_backend::lowering::record_d9_assembly(
-            crate::cranelift_backend::lowering::D9Assembly {
-                unit: unit.id(),
-                roles: recorded_envelope
-                    .iter()
-                    .map(crate::cranelift_backend::lowering::d9_describe_role)
-                    .collect(),
-                operands: ordinary
-                    .iter()
-                    .map(crate::cranelift_backend::lowering::d9_describe_operand)
-                    .collect(),
-            },
-        );
         if ordinary.len() != unit.ordinary_parameters() as usize {
             return Err(unsupported(
                 "ContinuationSpecialization",
@@ -7547,6 +7533,43 @@ impl<'a> Lowering<'a> {
                 ),
             ));
         }
+        // `D9b` — the assembled run, recorded per role position AFTER assembly
+        // and AFTER the declared-header cardinality validation above.
+        //
+        // ⛔ **The order is the point, and it was wrong.** This recorder used to
+        // stand immediately BEFORE that check, so a run the assembler was about
+        // to REJECT still entered the positive relation. The row that reads this
+        // log asserts a property of runs the compiler accepted; admitting a
+        // rejected one would let a refusal contribute the very evidence that it
+        // did not happen.
+        //
+        // ⛔ Recorded as a keyed sequence, never a multiset: a bag of capture
+        // values proves only that the right values exist somewhere, and is
+        // satisfied by any permutation of them. The assembler's INPUTS are
+        // recorded beside it so the expectation can be derived without reading
+        // the assembled run.
+        #[cfg(test)]
+        crate::cranelift_backend::lowering::record_d9_assembly(
+            crate::cranelift_backend::lowering::D9Assembly {
+                unit: unit.id(),
+                roles: recorded_envelope
+                    .iter()
+                    .map(crate::cranelift_backend::lowering::d9_role_key)
+                    .collect(),
+                operands: ordinary
+                    .iter()
+                    .map(crate::cranelift_backend::lowering::d9_operand_identity)
+                    .collect(),
+                fields: fields
+                    .iter()
+                    .map(crate::cranelift_backend::lowering::d9_operand_identity)
+                    .collect(),
+                captures: selected_captures
+                    .iter()
+                    .map(crate::cranelift_backend::lowering::d9_operand_identity)
+                    .collect(),
+            },
+        );
         let mut inputs = ordinary;
         #[cfg(test)]
         d5a_trace(format!(
@@ -8201,17 +8224,47 @@ impl<'a> Lowering<'a> {
         };
         #[cfg(not(test))]
         let ordinary_declared = unit.ordinary_parameters() as usize;
-        // The field run: every field but the ruled recursive one becomes an
-        // ordinary operand, so the declared ordinary-parameter count is a
-        // relation to the planned constructor's arity rather than a literal.
-        if args.len() != ordinary_declared + 1 {
+        // The field run, against the PLANNER'S OWN stated relation:
+        // `nonrecursive_field_count = ordinary_parameters - worker_capture_count`
+        // (`ContinuationUnit::ordinary_envelope`). Every field but the ruled
+        // recursive one becomes an ordinary operand, and the selected worker's
+        // capture run is the rest of the declared parameter tail.
+        //
+        // ⛔ **This used to read `args.len() != ordinary_declared + 1`, and that
+        // is the pre-`D9` premise surviving as a precondition.** It is the same
+        // defect `D9` removed one level down — *"the ordinary run is the
+        // nonrecursive fields alone"* — left behind at the guard ABOVE the
+        // assembly when the assembly itself was corrected. It is exact whenever
+        // the selected worker has zero captures, which is every witness this
+        // crate had, so nothing measured it. On a worker with captures it
+        // refuses a LAWFUL producer: a 2-field constructor whose continuation
+        // declares 3 ordinary parameters (1 nonrecursive + 2 captures) is
+        // exactly the ruled shape, and the old form rejected it as a
+        // disagreement.
+        let nonrecursive_declared = ordinary_declared
+            .checked_sub(unit.worker_capture_count())
+            .ok_or_else(|| {
+                unsupported(
+                    "ContinuationSpecialization",
+                    format!(
+                        "this continuation declares {ordinary_declared} ordinary parameters but its \
+                         selected worker declares {} captures, so the ruled envelope has no \
+                         nonrecursive prefix",
+                        unit.worker_capture_count()
+                    ),
+                )
+            })?;
+        if args.len() != nonrecursive_declared + 1 {
             return Err(unsupported(
                 "ContinuationSpecialization",
                 format!(
                     "the planned producer constructor has {} fields but its continuation declares \
-                     {ordinary_declared} ordinary parameters; with exactly the ruled recursive \
-                     field omitted these must differ by one",
-                    args.len()
+                     {ordinary_declared} ordinary parameters over a selected worker with {} \
+                     captures, leaving a {nonrecursive_declared}-field nonrecursive prefix; with \
+                     exactly the ruled recursive field omitted the field run must exceed that \
+                     prefix by one",
+                    args.len(),
+                    unit.worker_capture_count()
                 ),
             ));
         }

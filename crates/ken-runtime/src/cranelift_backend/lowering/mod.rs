@@ -3889,50 +3889,218 @@ thread_local! {
 }
 
 /// One assembled ordinary run, keyed by role position.
+///
+/// ⭐ **Both sides are TYPED.** The roles are the planner's own sum, and the
+/// operands are exact identities — not descriptions. The string forms this
+/// replaced were a *collapsed shape tag*, and the collapse was measured rather
+/// than argued: on the two-capture witness both distinct `Int` captures encoded
+/// to the single string `"specialized:other"`, so a swap of their ordinals was
+/// an observational identity and the discriminator could not have failed.
 #[cfg(test)]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(in crate::cranelift_backend) struct D9Assembly {
     pub(in crate::cranelift_backend) unit: ContinuationSpecializationId,
     /// The role sequence the assembler consumed, in order.
-    pub(in crate::cranelift_backend) roles: Vec<String>,
+    pub(in crate::cranelift_backend) roles: Vec<D9RoleKey>,
     /// What it put at each of those positions, in the same order.
-    pub(in crate::cranelift_backend) operands: Vec<String>,
+    pub(in crate::cranelift_backend) operands: Vec<D9OperandIdentity>,
+    /// The assembler's INPUT authorities, recorded so the expectation can be
+    /// derived without consulting the assembled run.
+    ///
+    /// ⛔ These are inputs, never the output: `fields` is the producer
+    /// constructor's whole lowered field run and `captures` is the selected
+    /// closure's own ordered capture vector. The independent side maps a role
+    /// onto one of these; comparing the result with `operands` is then a real
+    /// relation rather than an identity.
+    pub(in crate::cranelift_backend) fields: Vec<D9OperandIdentity>,
+    pub(in crate::cranelift_backend) captures: Vec<D9OperandIdentity>,
+}
+
+/// One role of the planner's ordinary envelope, typed and exact.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) enum D9RoleKey {
+    NonrecursiveField {
+        source_position: u32,
+    },
+    WorkerCapture {
+        ordinal: u32,
+        closure_origin: StaticOriginId,
+    },
 }
 
 #[cfg(test)]
-pub(in crate::cranelift_backend) fn d9_describe_role(
+pub(in crate::cranelift_backend) fn d9_role_key(
     role: &ContinuationOrdinaryEnvelopeRole,
-) -> String {
+) -> D9RoleKey {
     match role {
         ContinuationOrdinaryEnvelopeRole::NonrecursiveConstructorField { source_position } => {
-            format!("field@{source_position}")
+            D9RoleKey::NonrecursiveField {
+                source_position: *source_position,
+            }
         }
         ContinuationOrdinaryEnvelopeRole::WorkerCapture {
             ordinal,
             closure_origin,
             ..
-        } => format!("capture#{ordinal}@{closure_origin:?}"),
+        } => D9RoleKey::WorkerCapture {
+            ordinal: *ordinal,
+            closure_origin: *closure_origin,
+        },
     }
 }
 
-/// A phase-preserving description. ⛔ Names the PHASE and the shape, never a
-/// value: the relation this serves is about which role got which operand, and a
-/// description that collapsed two distinct captures to one string would make a
-/// swap invisible.
+/// The PHASE of an operand — the closed sum, never inferred from its content.
 #[cfg(test)]
-pub(in crate::cranelift_backend) fn d9_describe_operand(operand: &LoweringOperand) -> String {
-    match operand {
-        LoweringOperand::Carried(word) => format!("carried:{:?}", word.word),
-        LoweringOperand::Specialized(lowered) => format!("specialized:{}", d9_lowered_tag(lowered)),
-    }
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) enum D9OperandPhase {
+    Specialized,
+    Carried,
+}
+
+/// **The exact, comparison-only identity of one lowering operand.**
+///
+/// ⛔ **This is NOT a `Debug` for `LoweringOperand` and not an inverse.** It
+/// recovers no compile-time template: it names the operand's phase, the
+/// already-public [`LoweredVariant`] classification, and the SSA words and
+/// planner-issued origins the operand holds. An SSA `Value` is an opaque index
+/// — it is precisely what [`CarriedBoundaryWord`] itself holds — and a
+/// [`StaticOriginId`] is a planner name. No constructor spelling, field name,
+/// byte string, or literal is read, so nothing here reconstitutes a template
+/// from a word. The `§2g` wall is about *becoming a `Lowered` inhabitant*, and
+/// an equality token is not that.
+///
+/// ⭐ **Exact where it must be, and honest where it cannot be.** Two operands
+/// with different SSA words compare unequal. Two that hold no word at all (a
+/// `Bytes`, a `String`, a nullary `Constructor`) compare equal on content, so
+/// this type does **not** claim global injectivity. The row that depends on
+/// telling two operands apart asserts their identities differ **as its own
+/// premise** rather than assuming it — that assertion is what makes the
+/// swapped-ordinal discriminator a real red instead of a no-op.
+#[cfg(test)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) struct D9OperandIdentity {
+    pub(in crate::cranelift_backend) phase: D9OperandPhase,
+    /// `None` for a carried word. ⛔ Not a gap: `§2g` is explicit that a carried
+    /// word gains **no** [`LoweredVariant`], so asking for one would be the
+    /// inverse conversion the phase sum exists to forbid.
+    pub(in crate::cranelift_backend) variant: Option<LoweredVariant>,
+    /// Every SSA word the operand holds, in structural order.
+    pub(in crate::cranelift_backend) words: Vec<cranelift_codegen::ir::Value>,
+    /// Every planner-issued static origin it names, in structural order.
+    pub(in crate::cranelift_backend) origins: Vec<StaticOriginId>,
 }
 
 #[cfg(test)]
-fn d9_lowered_tag(lowered: &Lowered) -> String {
+pub(in crate::cranelift_backend) fn d9_operand_identity(
+    operand: &LoweringOperand,
+) -> D9OperandIdentity {
+    let mut words = Vec::new();
+    let mut origins = Vec::new();
+    let (phase, variant) = match operand {
+        LoweringOperand::Carried(word) => {
+            words.push(word.word);
+            (D9OperandPhase::Carried, None)
+        }
+        LoweringOperand::Specialized(lowered) => {
+            d9_collect(lowered, &mut words, &mut origins);
+            (D9OperandPhase::Specialized, Some(lowered.variant()))
+        }
+    };
+    D9OperandIdentity {
+        phase,
+        variant,
+        words,
+        origins,
+    }
+}
+
+/// ⛔ **Exhaustive, with NO wildcard arm.** A `_ =>` is how the encoder this
+/// replaced collapsed `Int` — and every other unnamed arm — to one tag. Adding a
+/// [`Lowered`] variant must be a compile error here, not a silently coarser
+/// identity.
+#[cfg(test)]
+fn d9_collect(
+    lowered: &Lowered,
+    words: &mut Vec<cranelift_codegen::ir::Value>,
+    origins: &mut Vec<StaticOriginId>,
+) {
     match lowered {
-        Lowered::Closure { body, params, .. } => format!("closure@{body:?}/{}", params.len()),
-        Lowered::Constructor { .. } => "constructor".to_string(),
-        _ => "other".to_string(),
+        Lowered::Int { value, .. }
+        | Lowered::Bool { value, .. }
+        | Lowered::ProcessExitStatus { value }
+        | Lowered::CapabilityToken { value }
+        | Lowered::ResourceToken { value }
+        | Lowered::BorrowedNativeValue { pointer: value } => words.push(*value),
+        Lowered::BoundedNat(nat) => words.push(nat.value),
+        Lowered::StructuralNat(nat) => words.push(nat.value),
+        Lowered::ResponseBytes { pointer, len } => {
+            words.push(*pointer);
+            words.push(*len);
+        }
+        Lowered::HostResult {
+            success, error, ok, ..
+        } => {
+            words.push(*success);
+            d9_collect(error, words, origins);
+            d9_collect(ok, words, origins);
+        }
+        Lowered::DynamicConstructor(dynamic) => {
+            words.push(dynamic.discriminator);
+            for alternative in &dynamic.alternatives {
+                for field in &alternative.fields {
+                    d9_collect(field, words, origins);
+                }
+            }
+        }
+        Lowered::BorrowedOption { present, value, .. } => {
+            words.push(*present);
+            words.push(*value);
+        }
+        Lowered::Constructor { args, .. } => {
+            for arg in args {
+                d9_collect(arg, words, origins);
+            }
+        }
+        Lowered::Record { fields, .. } => {
+            for field in fields {
+                d9_collect(&field.value, words, origins);
+            }
+        }
+        Lowered::Closure { captures, body, .. } => {
+            origins.push(*body);
+            for capture in captures {
+                let nested = d9_operand_identity(capture);
+                words.extend(nested.words);
+                origins.extend(nested.origins);
+            }
+        }
+        Lowered::DeclarationClosure {
+            reference,
+            captures,
+            body,
+            ..
+        } => {
+            origins.push(*reference);
+            origins.push(*body);
+            for capture in captures {
+                let nested = d9_operand_identity(capture);
+                words.extend(nested.words);
+                origins.extend(nested.origins);
+            }
+        }
+        Lowered::ComputationalRecursorClosure { residual, .. } => {
+            let nested = d9_operand_identity(residual);
+            words.extend(nested.words);
+            origins.extend(nested.origins);
+        }
+        // ⛔ Named explicitly, not swept into a wildcard. Each holds no SSA word
+        // and no origin, so its identity is its variant alone — which the doc
+        // comment above states as a boundary rather than hiding.
+        Lowered::Bytes(_)
+        | Lowered::String(_)
+        | Lowered::RecursiveBackedge
+        | Lowered::Trap(_) => {}
     }
 }
 

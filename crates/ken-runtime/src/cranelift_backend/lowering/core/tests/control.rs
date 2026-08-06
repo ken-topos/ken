@@ -13520,7 +13520,14 @@ fn d5a_the_detached_result_seats_five_guards_are_each_reached_by_a_real_mutation
         (
             "field run against the declared ordinary run",
             D5aRouteMutation::PerturbOrdinaryParameterCount,
-            "must differ by one",
+            // ⚠ Was `"must differ by one"`. `D9b` corrected this guard's
+            // relation from `args.len() == ordinary_parameters + 1` — the
+            // pre-`D9` premise that the ordinary run is the nonrecursive fields
+            // alone — to the planner's own
+            // `nonrecursive_field_count = ordinary_parameters - captures`, so
+            // the sentence it refuses with now names the prefix. The guard, the
+            // mutation and the refusal are unchanged; only the wording moved.
+            "must exceed that prefix by one",
         ),
     ];
     for (label, mutation, expected) in rows {
@@ -24362,77 +24369,84 @@ fn d6c_the_sealed_binder_run_refuses_a_miscounted_or_permuted_run_at_its_produce
 
 
 /// **`RT-CONTSRC-PRODUCER-LOCAL` `D9b` — the assembled ordinary run corresponds
-/// to the planner's role sequence BY EXACT ROLE POSITION.**
+/// to the planner's role sequence BY EXACT ROLE POSITION, and every capture role
+/// the planner can misstate is refused before emission.**
 ///
 /// ## The independent side
 ///
 /// The planner-issued `ContinuationOrdinaryEnvelopeRole` sequence, read from a
-/// plan built separately from the emission run. ⛔ It is not derived from the
-/// assembled run, and the assembler is not consulted to produce it — deriving
-/// the expectation from the assembly is the defect the GOVERNING section is
-/// about.
+/// plan built separately from the emission run, and the assembler's own INPUT
+/// authorities — the producer constructor's whole lowered field run and the
+/// selected closure's ordered capture vector.
 ///
-/// ## Keyed, never a multiset
-///
-/// The relation is `role position -> operand`, compared position by position and
-/// with the two lengths required equal. ⛔ A multiset of the assembled operands
-/// would prove only that the right values exist *somewhere*, and every
-/// permutation of them would satisfy it.
-///
-/// ## ⛔ THE WITNESS LIMIT — the capture-dependent refusals cannot be built here
-///
-/// **Measured, not assumed:** every continuation unit reachable from this
-/// crate's fixtures declares **zero** worker captures.
+/// The expectation is then derived by the ruled law and nothing else:
 ///
 /// ```text
-/// px8tr  ContinuationSpecializationId(0)  captures=0  ordinary_params=1
-/// px8tr  ContinuationSpecializationId(1)  captures=0  ordinary_params=1
-/// governed                                envelope=[] on every unit
+/// role position i  ->  NonrecursiveField { source_position: p }  =>  fields[p]
+///                      WorkerCapture     { ordinal: k }          =>  captures[k]
 /// ```
 ///
-/// So the four envelope perturbations that need a capture role — **the required
-/// swapped-ordinal red**, the role-order violation, the foreign closure
-/// occurrence and the short capture run — have nothing to move. They **decline
-/// and count no application**, and this row asserts exactly that rather than
-/// asserting a refusal that does not happen.
+/// ⛔ **The assembled run is never consulted to build it.** `fields` and
+/// `captures` are what the assembler READ; `operands` is what it PRODUCED.
+/// Deriving the expectation from `operands` would be an identity, which is the
+/// defect the governing correction is about.
 ///
-/// ⭐ **What would make them bite:** a witness whose selected worker has at
-/// least two captures. The one that exists is `AC-1`'s buffer-allocate row,
-/// whose five-capture envelope is what the Architect measured
-/// (`evt_1y7h08xd7ermp`) — and it lives in `ken-cli`, not here, and does not
-/// currently reach this seat. ⇒ This row goes red the moment an in-crate witness
-/// gains a capture-bearing worker, which is the honest form of the check: the
-/// alternative, omitting the clause, would never notice.
+/// ## Typed and exact, never a shape tag
 ///
-/// The guards themselves are landed and fail closed in `D9a`; what is absent is
-/// a witness that can exercise them, not the guards.
+/// Both sides are typed: roles are `D9RoleKey`, operands are
+/// `D9OperandIdentity` (phase + `LoweredVariant` + the SSA words and planner
+/// origins the operand holds). ⛔ The string encoder this replaced collapsed
+/// **every** unnamed `Lowered` arm to `"other"`, which was measured on this very
+/// witness: both distinct `Int` captures encoded to `"specialized:other"`, so a
+/// swap of their ordinals compared EQUAL and the discriminator could not have
+/// failed for the reason it names.
 ///
-/// **Promise class: durable invariant** for the keyed correspondence; the
-/// decline clauses are a measured statement about this crate's witnesses and are
-/// written to red when that changes.
+/// ⭐ **The distinctness is asserted, not assumed.** `D9OperandIdentity` does not
+/// claim global injectivity — two operands holding no SSA word at all compare
+/// equal on content — so this row proves its own premise by requiring the two
+/// capture identities to differ before it relies on a swap being observable.
+/// Twice on this node an equal-value perturbation has been mistaken for a
+/// missing guard; that is what this assertion exists to stop.
+///
+/// ## The refusal set
+///
+/// Each of the four capture-dependent perturbations moves ONE fact of the
+/// planner's sequence, must APPLY on this witness, must be refused by the guard
+/// that owns it, and must leave the perturbed unit with no assembled run at all
+/// — the recorder is the last step before the call, so an absent record is an
+/// assembly that never completed.
+///
+/// **Promise class: durable invariant.** The relation is keyed and derived from
+/// the planner's own law, so it survives any extension that keeps the envelope
+/// meaning what it says.
 #[test]
 fn d9b_the_assembled_ordinary_run_matches_the_planner_role_sequence_by_position() {
     use crate::cranelift_backend::lowering::{
-        d9_assemblies, d9_describe_role, reset_d9_assemblies, with_d9_envelope_mutation,
-        D9EnvelopeMutation,
+        d9_assemblies, d9_role_key, d9_set_foreign_origin, reset_d9_assemblies,
+        with_d9_envelope_mutation, D9EnvelopeMutation, D9OperandIdentity, D9RoleKey,
     };
 
-    reset_d9_assemblies();
-    crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
-        "ken_d9b_exact",
-        false,
-    )
-    .map(|_| ())
-    .map_err(|error| format!("{error:?}"))
-    .expect("the witness compiles");
-    let assembled = d9_assemblies();
-    assert!(
-        !assembled.is_empty(),
-        "no continuation ordinary run was assembled, so every clause below would be vacuous"
-    );
+    // The two-capture witness, armed for this row only and restored however
+    // this test leaves. ⛔ Under `--test-threads=1` every row shares this
+    // thread, so a switch left armed by a panic would silently re-shape the
+    // fixture for whichever row ran next.
+    struct ArmedWitness;
+    impl Drop for ArmedWitness {
+        fn drop(&mut self) {
+            crate::cranelift_backend::test_objects::set_px8tr_worker_captures(false);
+            crate::cranelift_backend::lowering::d9_set_foreign_origin(None);
+        }
+    }
+    crate::cranelift_backend::test_objects::set_px8tr_worker_captures(true);
+    let _armed = ArmedWitness;
 
-    // The independent side: the planner's own role sequence per unit, from a
-    // plan built separately from the emission run above.
+    let emit = |name: &str| {
+        crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(name, false)
+            .map(|_| ())
+            .map_err(|error| format!("{error:?}"))
+    };
+
+    // ── The independent side: the planner's own facts, per unit ────────────
     let planned = with_d5a_witness_plan(|plan| {
         plan.continuation_units()
             .expect("continuation units")
@@ -24444,19 +24458,61 @@ fn d9b_the_assembled_ordinary_run_matches_the_planner_role_sequence_by_position(
                         unit.ordinary_envelope()
                             .expect("the planner's own envelope")
                             .iter()
-                            .map(d9_describe_role)
+                            .map(d9_role_key)
                             .collect::<Vec<_>>(),
                         unit.ordinary_parameters() as usize,
+                        unit.worker_capture_count(),
+                        unit.worker_closure_origin(),
                     ),
                 )
             })
             .collect::<BTreeMap<_, _>>()
     });
 
+    // ── THE WITNESS PREMISE ────────────────────────────────────────────────
+    //
+    // ⛔ Stated first and asserted, because every refusal below is about a
+    // capture role. A witness with no capture-bearing unit would make the whole
+    // refusal set decline, and a row that then asserted "zero applications"
+    // would be recording its own vacuity as a result.
+    let capture_bearing = planned
+        .iter()
+        .filter(|(_, (_, _, captures, _))| *captures >= 2)
+        .map(|(id, _)| *id)
+        .collect::<Vec<_>>();
+    assert!(
+        !capture_bearing.is_empty(),
+        "⛔ THE PREMISE FAILED: no continuation unit declares two or more worker captures, so the \
+         swapped-ordinal discriminator has nothing to exchange. The armed fixture is supposed to \
+         give the selected worker two captures; planned units are {planned:?}"
+    );
+    let perturbed_unit = capture_bearing[0];
+    let capture_origin = planned[&perturbed_unit].3;
+    // A REAL origin naming another closure, drawn from the plan's own worker
+    // population. ⛔ Not a fabricated id, which could be refused merely for
+    // being unknown rather than for naming the wrong closure.
+    let foreign_origin = planned
+        .values()
+        .map(|entry| entry.3)
+        .find(|origin| *origin != capture_origin)
+        .expect(
+            "the foreign-closure perturbation needs a second, different worker closure occurrence \
+             in the plan; with only one it would silently become the identity",
+        );
+    d9_set_foreign_origin(Some(foreign_origin));
+
+    // ── THE EXACT POSITIVE ─────────────────────────────────────────────────
+    reset_d9_assemblies();
+    emit("ken_d9b_exact").expect("THE EXACT POSITIVE: the two-capture witness compiles");
+    let assembled = d9_assemblies();
+    assert!(
+        !assembled.is_empty(),
+        "no continuation ordinary run was assembled, so every clause below would be vacuous"
+    );
+
     for run in &assembled {
-        let (expected_roles, declared) = planned
+        let (expected_roles, declared, _, _) = planned
             .get(&run.unit)
-            .map(|(roles, declared)| (roles, *declared))
             .unwrap_or_else(|| panic!("{:?} assembled a run the planner defines no unit for", run.unit));
         assert_eq!(
             &run.roles, expected_roles,
@@ -24471,58 +24527,100 @@ fn d9b_the_assembled_ordinary_run_matches_the_planner_role_sequence_by_position(
         );
         assert_eq!(
             run.operands.len(),
-            declared,
+            *declared,
             "and the run's length is the continuation's independently declared ordinary-parameter \
              count: {run:?}"
         );
+
+        // ⭐ THE KEYED RELATION. Derived from the roles and the assembler's
+        // INPUTS by the ruled law, position by position.
+        let expected = run
+            .roles
+            .iter()
+            .map(|role| match role {
+                D9RoleKey::NonrecursiveField { source_position } => run
+                    .fields
+                    .get(*source_position as usize)
+                    .unwrap_or_else(|| {
+                        panic!("role names source position {source_position}, outside {run:?}")
+                    })
+                    .clone(),
+                D9RoleKey::WorkerCapture { ordinal, .. } => run
+                    .captures
+                    .get(*ordinal as usize)
+                    .unwrap_or_else(|| {
+                        panic!("role names capture ordinal {ordinal}, outside {run:?}")
+                    })
+                    .clone(),
+            })
+            .collect::<Vec<D9OperandIdentity>>();
+        assert_eq!(
+            run.operands, expected,
+            "the assembled run must hold, at each role position, exactly the operand that \
+             position's own authority names -- a nonrecursive field from its exact lowered source \
+             position, a worker capture from the selected closure's run at that exact ordinal: \
+             {run:?}"
+        );
     }
 
-    // ── THE WITNESS LIMIT, measured ────────────────────────────────────────
+    // ⭐ The premise the swap depends on: the two capture operands are
+    // genuinely distinguishable, so exchanging their ordinals is a different
+    // run rather than an observational identity.
+    let capture_run = assembled
+        .iter()
+        .find(|run| run.unit == perturbed_unit)
+        .unwrap_or_else(|| panic!("{perturbed_unit:?} declares captures but assembled no run"));
+    assert!(
+        capture_run.captures.len() >= 2,
+        "the perturbed unit's selected closure must carry two captures: {capture_run:?}"
+    );
+    assert_ne!(
+        capture_run.captures[0], capture_run.captures[1],
+        "⛔ THE TWO CAPTURES ARE INDISTINGUISHABLE, so a swap of their ordinals would assemble an \
+         identical run and the discriminator below would pass for the wrong reason: {capture_run:?}"
+    );
+
+    // ── THE REFUSAL SET ────────────────────────────────────────────────────
     //
-    // ⛔ Each of these needs a capture role to move. Asserting zero applications
-    // is what keeps the absence a MEASUREMENT: a control that merely ran them
-    // and saw a green compile would read as a defence of guards that were never
-    // reached.
-    for mutation in [
-        D9EnvelopeMutation::SwapCaptureOrdinals,
-        D9EnvelopeMutation::NonrecursiveAfterCaptures,
-        D9EnvelopeMutation::ForeignCaptureClosure,
-        D9EnvelopeMutation::DropLastCaptureRole,
+    // Each perturbation must APPLY, be refused by the guard that owns it, and
+    // leave the perturbed unit with no assembled run.
+    for (mutation, owning_guard) in [
+        (D9EnvelopeMutation::SwapCaptureOrdinals, "names ordinal"),
+        (
+            D9EnvelopeMutation::NonrecursiveAfterCaptures,
+            "after a worker capture",
+        ),
+        (
+            D9EnvelopeMutation::ForeignCaptureClosure,
+            "names closure occurrence",
+        ),
+        (
+            D9EnvelopeMutation::DropLastCaptureRole,
+            "of the selected closure",
+        ),
     ] {
         reset_d9_assemblies();
-        let (outcome, applications) = with_d9_envelope_mutation(mutation, || {
-            crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
-                "ken_d9b_limit",
-                false,
-            )
-            .map(|_| ())
-            .map_err(|error| format!("{error:?}"))
-        });
+        let (outcome, applications) = with_d9_envelope_mutation(mutation, || emit("ken_d9b_refuse"));
         assert_eq!(
-            applications, 0,
-            "⛔ {mutation:?} APPLIED on this witness. This row records that it cannot -- every \
-             in-crate unit declares zero worker captures -- so a nonzero count means a \
-             capture-bearing witness now exists and the real refusal clause must be written \
-             instead of this limit"
+            applications, 1,
+            "⛔ {mutation:?} did not apply on this witness. A perturbation that moved nothing \
+             cannot be evidence about the guard that would have refused it"
         );
-        outcome.expect(
-            "and with nothing moved the compile is unchanged, which is what makes the zero above \
-             a decline rather than a suppressed refusal",
+        let reason = outcome.expect_err(&format!(
+            "{mutation:?} moved one fact of the planner's own role sequence and the compile still \
+             succeeded, so the guard that owns that fact does not fail closed"
+        ));
+        assert!(
+            reason.contains(owning_guard),
+            "{mutation:?} must be refused by the guard that OWNS the fact it moved (naming \
+             {owning_guard:?}); got {reason}"
+        );
+        assert!(
+            !d9_assemblies().iter().any(|run| run.unit == perturbed_unit),
+            "{mutation:?} was refused, but {perturbed_unit:?} still recorded a completed assembly. \
+             The recorder is the last step before the call, so a record here means the refusal did \
+             not stand between the perturbed envelope and emission: {:?}",
+            d9_assemblies()
         );
     }
-
-    let captures = with_d5a_witness_plan(|plan| {
-        plan.continuation_units()
-            .expect("continuation units")
-            .into_iter()
-            .map(|unit| unit.worker_capture_count())
-            .max()
-            .unwrap_or(0)
-    });
-    assert_eq!(
-        captures, 0,
-        "⛔ THE LIMIT'S OWN PREMISE. A unit here now declares {captures} worker captures, so the \
-         swapped-ordinal discriminator IS constructible and must be built. This assertion is the \
-         trigger, and it is deliberately the thing that reds first"
-    );
 }
