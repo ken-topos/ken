@@ -33,54 +33,53 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-06 ~01:0xZ · `D8l` CLOSED and QA-approved; `D8f` witness in flight
+## LIVE — 2026-08-06 ~01:1xZ · `D8f` hard-stopped; `D8m` preserves the bridge frame
 
 **Verify `origin/main` before trusting anything below.**
 `RT-CONTSRC-PRODUCER-LOCAL` is `active` in thread **`thr_6m43v75yndhtj`**.
 
 ### The one thing to do next
 
-**Wait for the `D8f` witness continuation**, in flight on exact `df8bd057`.
-Thread **`thr_6m43v75yndhtj`**.
+**Release `D8m` to Runtime on exact `e80fd42f`** — preserve the source frame
+through the immediate-binder bridge. Thread **`thr_6m43v75yndhtj`**. Architect
+ruling `evt_7vghm2dzh0k4w`; frame section *"`D8m` — PRESERVE the source frame
+through the bridge."*
 
-**`D8l` is CLOSED and QA-approved.** Repair `1f9a2020`, evidence `abe46dda`,
-QA verdict `evt_7kx4dtax3gqrv` — QA ran its own compile-preserving mutation
-(payload worker returns `0`, saw `Returned(Int(Small(0)))` against expected
-`41`, restored byte-clean), so that is an independent check. The composed
-witness compiles and **executes** end to end; the causal ledger closes with a
-non-empty composed half.
+**`D8f` hard-stopped and BOTH ways out were refused.** The gate may not ship
+without a witness — the always-admit mutation leaving the suite green **proves
+zero trust delta**, so the production population does not distinguish the new
+law from its predecessor. And a lowering-synthesized bridge may **not** be
+minted a `CheckedSubcontinuationFrame` identity: the oriented plan proves a
+**bijection** between checked frame entries and source Runtime frame markers,
+which an unmarked synthetic frame weakens and which borrowing by
+fingerprint/shape/coincidence would restore the banned inference to.
 
-⛔ **`D8f` is NOT discharged at `df8bd057` — the mechanism is UNWITNESSED, not
-proved.** The occurrence gate was restored unchanged from the preserved patch
-and re-measured at `751/2/1`, identical to `abe46dda`. But mutating it to
-**always admit — exactly the pre-`D8f` behaviour — leaves the whole suite
-GREEN.** ⇒ **No landed fixture separates gated from ungated.** Same state
-`D8d` was in before `D8e`'s witness, and the omission/duplicate/transplant/
-wrong-occurrence refusals cannot be demonstrated until the witness exists.
+⇒ **The bridge is not a new semantic frame** — it is an optimization of the
+exact source `ComputationalMatch` that `immediate_binder_eliminator` consumes,
+so `D8m` **preserves** that frame across the optimization rather than creating
+one. The new work only stops the fusion from dropping an identity the source
+already issued.
 
-**Two witness attempts already measured and recorded at the gate:** an ordinary
-call on the selected recursive argument inside the `px8tr` checked wrapper
-refuses in the declaration's own lowering (*"a source-machine call's callee is
-a specialized-only surface"*), because that case body is lowered both there and
-in the specialization while the binder run's static workers exist only in the
-second. The same shape with the IH as inner callee refuses in plan validation
-on checked/inferred frame mixing. **Do not re-derive these.**
+⛔ **`D8m` sizing is in-node with ONE real escape hatch:** *unless the
+implementation census shows the identity must cross another producer/consumer
+family.* If `D8m`'s census finds that, **it hard-stops back to me** — that fact
+converts this into a node and must not be absorbed quietly.
 
-### The sequencing lesson from this stretch, since it will recur
+**The two routes fail for OPPOSITE reasons, and both are recorded at the gate
+so nobody repeats the search:** the non-composed (`px8tr`) route has a source
+frame but no static worker in declaration lowering; the composed bridge has the
+static worker but `checked_frame_id: None`, because the bridge is synthesized
+by `immediate_binder_eliminator` and has no source expression.
 
-⛔ **An Architect hold condition can have several parts, and a fast ring will
-satisfy the first and move.** `evt_2ffwkpgnmr8xd` held `D8f`/`D8g` until the
-evidence was *"committed, QA-checked, and reviewed"*; `D8f` was released 40
-seconds after the commit post, with QA never having posted in the entire `D8`
-chain. **I held ACCEPTANCE rather than reversing the release** — the work was
-test-side on a preserved branch and merged nothing, so killing a live turn to
-re-issue the same instruction would waste it. QA was engaged in parallel and
-approved in four minutes. **Hold the gate the condition names, not the turn.**
+⭐ **Fourth occurrence of this node's standing pattern** — "correct and
+unreachable" is the DEFAULT and the WITNESS is the deliverable. Keep the
+implementer's distinction: the gate is **unwitnessABLE** at this checkpoint,
+which is not the same claim as unwitnessed.
 
-**Completed this stretch:** `D8h` `a435d180`, `D8i` `abfd67ff`, `D8j`
-`8d0d6fca`, `D8k` `372097de`+`aaef1772`, `D8e` DISCHARGED, `D8l1` answered,
-`D8l2` `1f9a2020`+`abe46dda`. **`D8g`, `D6b` closeout, `D6c`, candidate, `D6`
-closure and downstream remain held.**
+**Completed:** `D8h` `a435d180`, `D8i` `abfd67ff`, `D8j` `8d0d6fca`, `D8k`
+`372097de`+`aaef1772`, `D8e` DISCHARGED, `D8l1` answered, `D8l2`
+`1f9a2020`+`abe46dda` **QA-approved** (`evt_7kx4dtax3gqrv`). **`D8g`, `D6b`
+closeout, `D6c`, candidate, `D6` closure and downstream remain held.**
 
 ⛔ **`D5a-1` and `D5a-2` are SPENT LABELS — their text is refuted.** So is my
 published *"new member at ordinal 2, not 3"*. So is the whole

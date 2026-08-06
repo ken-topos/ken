@@ -1379,9 +1379,10 @@ all six failing `D0` rows.
   | 8 | `D8k` — partitioned global closeout | proof | held |
   | 9 | `D8e` DISCHARGES — causal obligation dischargeable and discharged | — | **DISCHARGED, Steward ruling below** |
   | 10 | `D8l1` — MEASURE the envelope frontier | planner | ANSWERED at `aaef1772`: **not structural** |
-  | 11 | `D8l2` — repair `ordinary_envelope`'s nonrecursive population | planner | repair DONE `1f9a2020`; **evidence completion NEXT** |
-  | 12 | `D8f` — checked-marker occupancy | integration | held; WIP written and green, **restore not rewrite** |
-  | 13 | `D8g` — non-vacuous closeout, both paths | proof | held, needs a composed witness at emission |
+  | 11 | `D8l2` — repair `ordinary_envelope`'s nonrecursive population | planner | DISCHARGED `1f9a2020`+`abe46dda`, **QA-approved** |
+  | 12 | `D8m` — preserve the source frame through the bridge | lowering preservation | **NEXT** |
+  | 13 | `D8f` — checked-marker occupancy | integration | gate landed, **UNWITNESSABLE until `D8m`**; evidence `e80fd42f` |
+  | 14 | `D8g` — non-vacuous closeout, both paths | proof | held |
   | 12 | `D6b` closeout, then `D6c` refusal set | — | held |
 
   ⛔ **`D8h`-`D8k` execute BEFORE `D8f`/`D8g`, despite sorting after them.**
@@ -2098,6 +2099,98 @@ all six failing `D0` rows.
   `D8f`, not a new node, not a planner/ABI redesign. ⛔ **Apart from correcting
   stale comments and records and adding the two fixtures and controls above, no
   production edit beyond `1f9a2020` is authorized.**
+
+  ###### `D8m` — PRESERVE the source frame through the bridge. `evt_7vghm2dzh0k4w`.
+
+  **`D8m` executes immediately BEFORE `D8f`.** Exact `e80fd42f` is accepted as
+  `D8f` **hard-stop evidence only** — not a candidate, and `D8f` is **not
+  discharged**.
+
+  **Both ways out were refused, and both refusals are load-bearing.**
+
+  ⛔ **The gate may NOT be accepted without a non-vacuous witness.** The
+  always-admit mutation leaving the full suite green **proves zero trust
+  delta**: the production population does not distinguish the new law from its
+  predecessor. That cannot establish omission, duplicate, transplant or
+  wrong-occurrence refusal. ⭐ **This is the fourth occurrence on this node of
+  the standing pattern above — "correct and unreachable" is the DEFAULT and the
+  WITNESS is the deliverable.** The implementer's distinction is worth keeping:
+  the gate is **unwitnessABLE at this checkpoint**, which is a different claim
+  from unwitnessed.
+
+  ⛔ **A lowering-synthesized bridge must NOT receive a newly minted
+  `CheckedSubcontinuationFrame` identity.** The oriented plan currently proves a
+  **bijection** between checked frame entries and source Runtime frame markers.
+  An unmarked synthetic frame **weakens that bijection**; borrowing a frame by
+  fingerprint, body shape, origin coincidence or uniqueness **restores the
+  already-banned inference**.
+
+  ⇒ **The bridge is not a new semantic frame.** It is an optimization of the
+  exact source `ComputationalMatch` that `immediate_binder_eliminator` consumes.
+  **So preserve that source frame through the optimization** — the new work only
+  stops the fusion from dropping an identity the source already issued.
+
+  **The mechanism, in five parts:**
+
+  1. Extend the immediate-binder recognition result into a **closed bridge
+     descriptor** recognizing exactly: the existing direct
+     `ComputationalMatch`; the existing direct ordinary `Match`; or exactly
+     `CheckedSubcontinuationFrame { frame_id, body: ComputationalMatch }`.
+     ⛔ **It must not generically peel wrappers.**
+  2. For the checked form retain **two** facts in the same descriptor: the
+     marker's exact `frame_id`, and the wrapped match's exact source
+     occurrence, which is **child 0 of the marker occurrence**. ⛔ **The
+     wrapper origin is NOT the match origin.**
+  3. **Only after** the existing immediate-binder and heterogeneous-
+     deforestation gates have selected the bridge, run the **existing**
+     checked-frame entry and consumption path on that exact marker and exact
+     `cases`/`default`. Preserve the current plan lookup, runtime-frame
+     fingerprint check and affine `(invocation, frame)` consumption. ⛔ **No
+     second validator.**
+  4. Construct the bridge `ComputationalEliminatorFrame` with the **same tuple
+     a normally lowered checked computational match receives** —
+     `checked_frame_id`, `checked_invocation_id`, `checked_invocation_source`,
+     `checked_invocation_depth` — plus the wrapped match's exact source origin.
+     An **unwrapped** bridge retains the current all-`None` tuple. ⛔ **Presence
+     of a checked frame does not change `answer_route`.**
+  5. ⛔ **No plan-frame kind, marker kind, runtime/ABI field, synthetic frame
+     id, body/fingerprint lookup, or fallback.** The source marker remains the
+     **sole identity authority**.
+
+  **Required proof before `D8f` resumes:**
+
+  - a checked immediate-binder bridge **consumes its exact source marker once**
+    and reaches `computational_ih_slots_for_case` with the exact frame named by
+    its slot templates;
+  - **suppressing the transported tuple reproduces the detached-frame
+    refusal**;
+  - marker omission, stale/wrong frame, fingerprint change, transplant and
+    duplicate consumption **still refuse through the existing plan/marker
+    laws**;
+  - ⭐ **substituting the wrapper origin for the wrapped match origin is caught
+    on a same-shaped, DISTINCT-OCCURRENCE control** — a same-shaped control is
+    what makes this non-vacuous, since the two origins coincide in shape;
+  - an **unchecked** computational bridge remains unchecked, and the ordinary
+    bridge population is **unchanged**;
+  - **plan frame count and Runtime marker count remain identical** — the
+    bijection above is what this protects.
+
+  **Then `D8f` resumes on the preserved gate**, and its specialization-only
+  witness must show the ordinary selected-argument call **leaves the marker
+  pending** while only the exact planner-issued checked-call occurrence consumes
+  it. ⛔ **Both always-admit AND never-admit must be red**, and omission,
+  duplicate, transplant and wrong-occurrence must **each have its own live
+  refusal**.
+
+  ###### `D8m` sizing — in-node, with ONE named condition that would change it
+
+  **A bounded lowering-preservation checkpoint in this node, immediately before
+  `D8f` — not a new substrate node.** The Architect attached one condition, and
+  it is a real escape hatch rather than a formality: **unless the
+  implementation census shows the identity must cross another producer/consumer
+  family.** If `D8m`'s own census finds that, **hard-stop and return it to me**
+  — that is the fact that would convert this into a node, and it is not a
+  decision to absorb quietly.
 
   ###### `D8k`'s ledger row is proved ON THE LAW, not on reach — and that is owed
 
