@@ -1392,7 +1392,7 @@ all six failing `D0` rows.
   | 14 | `D8m` — preserve the source frame through the bridge | lowering preservation | **DISCHARGED** `01263e44` (`760/2/1`), after a matrix block and two fidelity children |
   | 15 | `D8p` — cross-body checked-application binding contract | planner + unit definition + lowering | **IN REVIEW** at exact `198b7c14` (`763/2/1`) — `evt_68ry7r5bz86n5` |
   | 16 | `D8f` — checked-marker occupancy | integration | **HARD STOP accepted** at `0eb04397` (evidence only). **RECUT — see the `D8f` RECUT section.** Release gated on the Architect's classification of the double-discharge closure, NOT on the `D8p` accept alone |
-  | 17 | `D8g` — non-vacuous closeout, both paths | proof | held |
+  | 17 | `D8g` — non-vacuous closeout, both paths | proof | held. **FIRST deliverable is a MEASUREMENT** — re-measure the `D8a` owner-separation prohibition before obeying it |
   | 18 | `D6b` closeout, then `D6c` refusal set | — | held |
 
   ⛔ **`D8h`-`D8k` execute BEFORE `D8f`/`D8g`, despite sorting after them.**
@@ -1540,6 +1540,13 @@ all six failing `D0` rows.
   > assumption is false as measured.** In particular, `D8g` must not attempt a
   > positive that demonstrates owner-based separation; there is no population to
   > demonstrate it on, and manufacturing one is the fabrication this node bans.
+  >
+  > ⛔ **"AS MEASURED" MEANS AT `D8a`, AND THE POPULATION HAS CHANGED SINCE.**
+  > `D8h`-`D8p` added ten checkpoints of new planner facts. **`D8g` re-measures
+  > this claim before obeying it** — see *"`D8g` — RE-MEASURE the
+  > owner-separation prohibition before obeying it."* The ban on **fabricating**
+  > a population is not in question; only the factual claim that **none exists**
+  > is.
 
   **`D8b` — the composed-call target, planner side.** Mint the target as a
   planner fact under the `D8a` selector, carrying the **full
@@ -1877,6 +1884,50 @@ all six failing `D0` rows.
   **refuses in production by design** at `9f21ff0e`. Anything that starts
   calling it before the route is settled will read that refusal as a
   **regression** rather than as the checkpoint's own finding.
+
+  ###### `D8g` — RE-MEASURE the owner-separation prohibition before obeying it
+
+  **`D8g`'s FIRST deliverable is a measurement, for the same reason `D8l1`'s
+  was.** Not a fixture, not a positive — an answer to a question about its own
+  premise.
+
+  **The premise.** The `D8a` WATCH above forbids `D8g` from attempting a
+  positive that demonstrates owner-based separation, on the stated ground that
+  *"the owner buys NO discrimination on any current population"* and *"there is
+  no population to demonstrate it on, and manufacturing one is the fabrication
+  this node bans."*
+
+  **Why it cannot simply be inherited.** That claim is **undated and says "as
+  measured"** — it was measured at `D8a`, and **the population is exactly what
+  `D8h`-`D8p` have been changing** ever since: planner pairing to opaque causal
+  identity, the ambient body authority and its supplied body kind, the
+  per-`Function` consumption lifecycle, the transported source frame, and now a
+  keyed cross-body binding at two emission seats. **Ten checkpoints of new
+  planner facts is precisely the event that would falsify a "no population
+  exists" claim**, and nothing has re-run it.
+
+  **So the prohibition is load-bearing in BOTH directions and that is why it
+  must be measured, not assumed.**
+
+  | if the re-measurement says | then |
+  |---|---|
+  | the owner still separates nothing | the prohibition **stands unchanged**, and `D8g` is now standing on a checked premise instead of an inherited one |
+  | the owner now separates a real population | the prohibition is **forbidding a positive that is both available and worth having**, and it is retired against the measurement — never against an argument |
+
+  ⛔ **Neither outcome licenses manufacturing a population.** The ban on
+  fabrication is not what is being questioned; **only the factual claim that no
+  population exists** is. If the measurement finds none, that is the answer and
+  `D8g` proceeds without an owner positive.
+
+  ⛔ **Do not size any `D8g` owner work before that answer exists.** Sizing a
+  repair ahead of its own premise measurement is the error this node has
+  already paid for three times — `RT-UNIT-CLOSURE-CONVERT`, the `D7` cut, and
+  `D8l`.
+
+  **Held, not released.** `D8g` sits behind `D8f`, which is itself gated on the
+  Architect's classification of the double-discharge closure. This section
+  exists so that `D8g` is shovel-ready the moment it becomes the frontier — not
+  so that anyone starts it now.
 
   ###### STEWARD RULING — `D8e` CLOSES. The envelope frontier is `D8l`.
 

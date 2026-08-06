@@ -46,8 +46,20 @@ mechanism boundary**? ⛔ **`D8f` must NOT be released until that is classified*
 — not on the `D8p` accept alone. The leader is holding on my `evt_39ykmh3ehqg8b`.
 
 **`D8p` is IN REVIEW at exact `198b7c14`** (`763/2/1`) — implementer
-`evt_14tv58v4k5wxr`, leader's review request `evt_68ry7r5bz86n5`. **The ring
-owes nothing to me.**
+`evt_14tv58v4k5wxr`, leader's review request `evt_68ry7r5bz86n5`, Architect
+picked it up at `evt_3238g2jbhky95`. **The ring owes nothing to me.**
+
+⚠ **That review was STRANDED for ~10 minutes and I nearly missed it.** The
+leader's request sat **unsubmitted in the Architect's composer** under a
+finished turn, while the Architect's own status read *"awaiting Architect
+review request."* ⛔ **Both convo instruments agreed the ring was healthy** —
+the event log showed the request posted, and the recipient said it was waiting
+for one. **The status was true when set, and the strand is what stops it being
+updated**, so a stalled seat emits a status that AGREES with the stall.
+⛔ **`steward-pane-sweep.sh` reported `ok` for every seat**; this was found by
+reading the pane. Repaired by probe (`zz` **appended** ⇒ real input, not a
+placeholder), BSpace, Enter. Lesson filed at
+`agent/memory/roles/steward/a-stranded-delivery-is-corroborated-by-the-recipients-own-status.md`.
 
 ⭐ **`D8p` found the missing relation was SMALLER than the frame's shape
 suggested: a second call edge that never consulted the seam.** Two call edges
@@ -72,7 +84,15 @@ section of the frame. `D8f`'s remaining scope is now **only the four refusals �
 omission, duplicate, transplant, wrong occurrence — each on its own live path.**
 ⛔ **Do not let `D8f` re-ask the occupancy ordering; `D8p` measured it.**
 
-Then `D8g`, `D6b` closeout, `D6c`, candidate.
+⭐ **`D8g` is now framed too, and its FIRST deliverable is a MEASUREMENT** — see
+the frame's *"`D8g` — RE-MEASURE the owner-separation prohibition before obeying
+it."* The `D8a` WATCH forbids an owner-based positive because *"the owner buys
+NO discrimination on any current population"* — ⛔ **that is undated, says "as
+measured", and was measured at `D8a`, before `D8h`-`D8p` added ten checkpoints
+of new planner facts.** Neither outcome licenses manufacturing a population; the
+fabrication ban is not in question, **only the factual claim that none exists.**
+
+Then `D6b` closeout, `D6c`, candidate.
 
 ⛔ **`D8f`'s HARD STOP IS ACCEPTED and `D8f` is NOT discharged** (Architect
 `evt_6jay1wesbfhbw`, preserved exact `0eb04397`). ⛔ **Do not re-release `D8f`
