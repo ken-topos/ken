@@ -83,6 +83,34 @@ and the sizing of `D0`, not the design. If it turns out the rows do not all
 discharge from one mechanism, that is a finding and a recut, and the recut is
 the Steward's.
 
+> ### THAT CLAUSE FIRED. MEASURED 2026-08-07 at `D5`, candidate `4244d082`.
+>
+> **The one-mechanism premise above is FALSE for 29 of the 30 rows, and the
+> paragraph is left standing because the prediction it records is the thing
+> that was disproved.** `D5` removed **one** `#[ignore]` and restated the other
+> **29** with their measured cause.
+>
+> **The blocker is a SECOND, INDEPENDENT READER of the same seat.** Each `Fs*`
+> path seat is consumed twice: once as a wire span — which `D5`'s observer now
+> satisfies at every measured seat — and once as `SiteOperand(0)` of the
+> synthesized `FileError`'s `Option::Some(<site path>)`, which demands a
+> **compile-time `Lowered` template**. Supplying that from a boundary word is
+> the `Carried -> Lowered` inverse §5 bans.
+>
+> **Confirmed by the Steward structurally, on a different route than the
+> implementer's runtime measurement.** `site_operand_argument`
+> (`lowering/mod.rs:11354-11362`) calls
+> `seats.specialized(EffectSeatSlot::Argument(index))?`, so it *requires* the
+> specialized template; `mod.rs:11650-11654` states the consequence outright —
+> a declared `SiteOperand` whose claimed operand is carried *"refuses at that
+> exact seat... reconciliation needs a compile-time witness, and there is
+> none."* **Activating a seat to `EITHER_PHASE` and reading it as `SiteOperand`
+> are in direct structural conflict.** No byte-span observer can reach this.
+>
+> ⇒ **The residue is owned by [[RT-SITEOP-CARRIED-WITNESS]]**, which gates the
+> 29 rows and the four `SPECIALIZED_ONLY` seats. It is not this node's, and
+> this node does not wait for it.
+
 **The former "fifth row stays ignored, it belongs to `RT-ENTRY-TRAP-254`"
 clause is DELETED because it is now false.** `RT-SRCBODY-BIND-ORDER` `D4`
 **un-ignored** that row in the commit that greened it: the entry trap's root
@@ -395,6 +423,34 @@ become `EITHER_PHASE`. **Per seat, each with its own evidence** (`AC-4`).
 **Every seat left `SPECIALIZED_ONLY` needs an explicit proof of why**, recorded
 in the disposition table, not an omission.
 
+> ### `D5` IS RE-SCOPED TO WHAT THE OBSERVER ALONE CAN PROVE (Steward,
+> ### 2026-08-07, on the §1a hard stop)
+>
+> **`D5` no longer owes the 30-row un-skip.** It owes the observer, the seats
+> the observer alone proves, a disposition for every seat, and an
+> **attributed** residue. The 29 rows and the four blocked seats moved to
+> [[RT-SITEOP-CARRIED-WITNESS]].
+>
+> **What `D5` must still deliver, and this is the whole bar:**
+>
+> 1. The emitted byte-span observer wired and proved **at every measured seat**
+>    — including the seats it cannot activate. Observation and activation are
+>    separate claims and the first is not weakened by the second.
+> 2. **Every seat that the observer alone proves is activated.** Leaving one
+>    `SPECIALIZED_ONLY` for convenience is not a disposition.
+> 3. `AC-4`'s table over **all six** seats, each `SPECIALIZED_ONLY` naming the
+>    site-bound reader as its explicit proof.
+> 4. **The residue is ATTRIBUTED, not merely survived.** Every remaining
+>    `#[ignore]` carries its *measured* cause, not the superseded byte-span
+>    reason. A row still blaming the byte-span gap after `D5` is false, and
+>    that is a defect whether or not the suite is green.
+> 5. `AC-2`, `AC-10`, `AC-11`, and the four `D4` residuals below, unchanged.
+>
+> **The bar that is GONE is "all 30 removed"; the bar that REPLACES it is
+> "every remaining row states why."** Do not read the re-scope as a reduction
+> in rigour — an unattributed residue is exactly how a quarantine outlives the
+> defect that justified it.
+
 **`D5` INHERITS FOUR ITEMS FROM `D4`. Three are one-line; the first is not.**
 Verified by the Steward against `origin/main` `076337e1`, from Adversary
 `evt_7bkx9xqp0rewa`.
@@ -429,6 +485,33 @@ Verified by the Steward against `origin/main` `076337e1`, from Adversary
 
 **This node inherits an activation gate it did not create (section 6). `D5` is
 the activation.** So, after `D5` and before any merge:
+
+> ### `D6` MOVES TO [[RT-SITEOP-CARRIED-WITNESS]] (Steward, 2026-08-07)
+>
+> **This deliverable's premise is the sentence above it — "`D5` is the
+> activation" — and that premise is now false.** `D5` as landed is two of six
+> seats and one of thirty rows, so per-family verdicts derived from it would be
+> manufactured. The Runtime leader declined to produce them, and **that was the
+> correct call**: BLOCKED-with-a-named-producer is exactly what this deliverable
+> asks for when the producer is absent.
+>
+> **`D6` therefore moves to the node that completes the activation, and this
+> node closes on `D5`.** Leaving it here would hold
+> `RT-CARRIER-BYTESPAN-OBSERVE` open indefinitely behind work that is no longer
+> its own — the long-branch pathology the operator's 2026-08-06 partial-merge
+> policy exists to retire. **The discharge pass belongs with the activation, and
+> the activation is now split.**
+>
+> **What IS measured, carried forward so it is not re-derived:** the family-2a
+> sentinel still asserts zero applications and the whole `ken-runtime` lib suite
+> is green, so the partial activation did **not** make the carried source-Match
+> route executable — **the dormancy premise is intact.** That is a real
+> measurement, not a deferral, and the receiving node starts from it rather than
+> re-establishing it.
+>
+> **The text below is retained as the deliverable's specification** — it moves
+> verbatim, it is not rewritten, and the split-phase rig remains named as the
+> outcome-1 propagation witness's producer.
 
 **Re-run the per-family register** (`evt_5tzqtkgw02gxg`) and report, per family,
 exactly one of:
@@ -489,6 +572,22 @@ Every AC names its owning deliverable. **If one cannot, that is the finding.**
   **Apply the same discipline to the other nine files in 1a-i.** `px4b` is one
   of ten, and a per-file ignored count is the only thing that distinguishes 30
   un-skips from 4.
+
+  > **RE-SCOPED 2026-08-07 on the `D5` hard stop. The `D5` half of this AC is
+  > no longer "all 30 removed."** Per §1a, 29 rows are blocked by an
+  > independent site-bound reader that no byte-span mechanism reaches. `D5`
+  > discharges this AC by:
+  >
+  > - removing every row whose quarantine cause **is** the byte-span gap;
+  > - **restating every remaining row with its measured cause**, so no row
+  >   still names a reason that `D5` proved false; and
+  > - **pinning the resulting count**, so a later un-skip is a deliberate act
+  >   rather than a drift.
+  >
+  > **The per-file ignored-count discipline above is UNCHANGED and is now
+  > carrying more weight, not less** — with the total no longer going to zero,
+  > the count is the only instrument that separates an attributed residue from
+  > an abandoned one. `D0`'s half of this AC is untouched.
 
 - **`AC-4` (`D5`) — the per-seat disposition table, over all SIX seats.**
   For each of the six seats in section 2d, exactly one of:
