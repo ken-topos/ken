@@ -1,9 +1,9 @@
 ---
 id: RT-WORKER-FIXTURE-DECODE
-title: "the worker fixture cannot run (Backend NativeResultDecode token 9), so AC-5's target-redirect detector dies before reaching any of its three capture-order comparisons"
-status: draft
+title: "AC-5's target-redirect detector is dark — its expression dies at the run step with Backend NativeResultDecode token 9, before any of its three comparisons, while the fixture helper's other caller passes"
+status: ready
 owner: runtime
-size: TBD
+size: M
 gate: none
 depends_on: [RT-SRCBODY-BIND-ORDER]
 blocks: []
@@ -11,10 +11,28 @@ github: null
 origin: Measured by the RT-SRCBODY-BIND-ORDER all-eight-package two-ended census (evt_ksrhrv82t5ae), after CI failed this row at candidate fb99d0fc. Fails identically at frozen base 21fd46dc, so it is pre-existing base debt and not a regression from D1. Fits no released owner; the ring stopped and reported rather than assigning a nearest fit. Steward-filed (agents cannot create tracked work per COORDINATION §2).
 ---
 
-> ## THE FRAME IS OWED. `draft`, NOT startable.
+> ## FRAMED — `ready`, size M
 >
-> It exists so a skipped CI row has an owner. **A skipped row measures
-> nothing; this node owns un-skipping it.** Size is `TBD` deliberately.
+> Frame: [`wp/RT-WORKER-FIXTURE-DECODE.md`](../wp/RT-WORKER-FIXTURE-DECODE.md)
+>
+> **The frame governs; this file is the origin record.** Where the two differ,
+> the frame is later and was ground against `origin/main` `89916fc1`.
+>
+> **Two claims below are corrected by the frame §1c/§1d and must not be built
+> on as written here:**
+>
+> 1. **"The worker fixture cannot run" is false as a general statement.**
+>    `run_worker_fixture` (`constructors.rs:5772`) has exactly two callers, and
+>    the other one — `nested_worker_depends_on_both_levels` (`:5895`) — is
+>    un-ignored and passing. The discriminator is the expression, not the
+>    helper, and that live sibling is a working differential already in the
+>    tree.
+> 2. **`token` is the native return value, not an error code** —
+>    `compiled.rs:132`. Eight sites across five decoder kinds raise this one
+>    variant, so `token: 9` names no arm. Naming it is `D1`.
+>
+> `ready` does not mean released. The fleet is single-threaded and this node is
+> sequenced behind `RT-CARRIER-BYTESPAN-OBSERVE`, which owns the same crate.
 
 ## Exact signature
 
