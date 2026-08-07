@@ -33,18 +33,76 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-06 ~20:3xZ · PR #1528 open, CI QUEUED, publisher must be re-run
+## LIVE — 2026-08-07 ~00:5xZ · CI is BACK and RED; the failing set is being enumerated
 
-**Verify `origin/main` before trusting anything below.** At writing it is
-`3015aafd`; the merge below will move it.
+**The outage no longer blocks us.** PR **#1529** at `aa032cc2` RAN and returned
+**RED**. `main` is still `3015aafd`.
 
-### The operator ruled. Gate readiness is CLOSED.
+### THE CANDIDATE IS EXONERATED — all measured failures are BASE DEBT
 
-Operator, 2026-08-06, verbatim: *"mark the tests to skip (add comment why), land
-the PR, and continue work, restoring the tests as work allows."*
+**`D10` differential (`evt_2jc88hbzfskpm`): all 16 CI rows fail at frozen base
+`21fd46dc` too. ZERO bind-order flips.** `aa032cc2` introduced nothing. The
+planted falsifier (`buffer_allocate_malformed_capacity_narrows_to_invalid_bounds`
+must fail at base) held, so the instrument is confirmed rather than merely
+agreeing.
 
-The campaign-sizing question — whether the 212-commit branch should have been
-restructured — **is still parked with the operator** and blocks nothing.
+**Four classes, and Class A splits by NEED not by shape.** Owner nodes all filed:
+
+| rows | signature | owner |
+|---|---|---|
+| 10 | `FsReadFile` needs `BytesPointerLength`, cannot observe in `CarriedWord` | `RT-CARRIER-BYTESPAN-OBSERVE` |
+| 3 | `FsHandleMetadata`/`FsWriteAt` need **`ResourceScalar`** | `RT-CARRIED-RESOURCE-SCALAR` |
+| 1 | frame marker consumed more than once | `RT-FRAME-MARKER-ONCE` |
+| 1 | closure has no durable lane | `RT-CLOSURE-BOUNDARY-LANE` |
+| 1 | `px7o` behavioural: native `RuntimeTrap(4)` exit 1 vs interpreter exit 7 | `RT-ENTRY-TRAP-PX7O` |
+
+**15 of 16 refuse at object emission and never execute**, so they cannot be
+showing a binding symptom. `px7o` is the only row that runs — and it is the
+`-4` sentinel the binding repair **did** clear for `px4b` and did **not** clear
+here. Unmeasured whether same cause; the node bans concluding from the string.
+
+### THE SET IS LARGER THAN CI REPORTED, AND HERE IS WHY
+
+**`cargo test` is fail-fast PER BINARY — and so is CI.** One failure in a binary
+and its remaining tests never run and never report. ⇒ **Annotating a row
+un-hides the next row in the same binary.**
+
+CI said 14. `D11` annotated 16 at `2283cbd5` and found **8 more** at the
+unchanged parent (they fail serialized and isolated, so not concurrency).
+**At least 22.** Annotating those would reveal more. **This is not new
+breakage — it is one debt becoming visible in layers.**
+
+**STEWARD ERROR, recorded because it repeats:** the implementer caught this exact
+hazard during `D10` and reported it, and I then scoped `D11` off CI's truncated
+list and called it complete. **Same lesson, one level up, not carried.**
+
+### `D12` IN FLIGHT — enumerate once, annotate once
+
+`evt_6w2svnv0z3k3f`. `scripts/ken-cargo test -p ken-cli --no-fail-fast` and
+`-p ken-verify --no-fail-fast` at `aa032cc2` for the **complete** set (never
+`--workspace`; split by `--test` if too heavy, and say so). Then differential
+**only the new rows** at `21fd46dc`. Then **ONE** annotation commit, one QA, one
+Architect vote, one publish. **`2283cbd5` is superseded — do not route it.**
+
+⇒ **Iterating annotate-then-rerun is unbounded and costs a full review cycle per
+round. That is why this is one enumeration.**
+
+### OPERATOR DECISION PENDING — is the real number still "light debt"?
+
+The operator authorized skipping tests as *"light technical debt that enables a
+more sane git history."* **At 16 that was defensible; we are at 22+ and the real
+number is unknown.** I asked for the number **before** the annotation. **Do not
+spend that judgment on their behalf by discovering it one round at a time.**
+
+**Steward recommendation stands: LAND IT.** No users, base accepted and
+reviewed, every measured failure predates the candidate, and the alternative is
+`main` half a day behind while the branch grows again.
+
+### Unowned signature awaiting a node
+
+**`ProcessExitStatus` refusal** in `r2_cross_buffer_freeze_fails_closed_with_-
+invalid_bounds` fits none of the five owners. File its owner when `D12` returns
+the exact signature. **Do not force it into an existing class.**
 
 ### BLOCKED ON A GITHUB ACTIONS OUTAGE — not on the candidate, not on a seat
 
