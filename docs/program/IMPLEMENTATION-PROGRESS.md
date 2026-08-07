@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-08-06 22:08:33Z — from 166 issue file(s) in `docs/program/issues/`.
+2026-08-07 00:24:50Z — from 170 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -130,7 +130,9 @@ the committed file matches the generator's output.
 | `Q-RESIDUE` | the Track Q rework residue — 10 tests, folded from Q3-Q7 | closed | runtime | S | none | 818 |
 | `RT-AGG-COMPOSE` | escaping two Resources into one aggregate (Prod (Resource _) (Resource _)) fails at erasure — checked endpoints do not compose | draft | runtime | TBD | none | — |
 | `RT-BACKEND-MODULE-SPLIT` | Split the oversized ken-runtime backend files into modules — the follow-on to the recursive-descent retirement, not an interlude in it | draft | runtime | M | none | — |
+| `RT-CARRIED-RESOURCE-SCALAR` | A carried word cannot satisfy a ResourceScalar effect seat -- same Need-not-in-Avail shape as the byte-span gap, different need, different seats | draft | runtime | TBD | none | — |
 | `RT-CARRIER-BYTESPAN-OBSERVE` | Carrier byte-span observation capability — every BytesPointerLength seat is SPECIALIZED_ONLY and the carrier has no total emitted byte-span observer, so a carried host result cannot satisfy a byte-span effect seat | ready | runtime | L | none | — |
+| `RT-CLOSURE-BOUNDARY-LANE` | A closure cannot cross the durable boundary -- runtime-local and live-domain only, with no durable lane | draft | runtime | TBD | none | — |
 | `RT-CONTSPEC-ABI` | ContinuationSpecialization slice 2 — land the explicit unit/descriptor projection and the ABI, owner/lifetime/affinity and zero-allocation negative gates, still DORMANT | merged | runtime | M | none | — |
 | `RT-CONTSPEC-ACTIVATE` | ContinuationSpecialization seam 2 — lowering activation and exact-use consumption: direct call before the identity-erasing join, active emitted owner, affine call occurrence, JoinArm consumption, gating the 37-row lower-owned population | merged | runtime | L | none | — |
 | `RT-CONTSPEC-ASSEMBLY` | ContinuationSpecialization seam 1 — the lawful assembly: extract the accepted branch-scope helper and its feature-gated harness onto the landed slice 0-2 blobs, unactivated, and prove the prior-slice surfaces are untouched | merged | runtime | M | none | — |
@@ -145,6 +147,7 @@ the committed file matches the generator's output.
 | `RT-DESCENT-RETIRE` | Retire RecursiveDescent — delete the migration selector, the residual enum, the authority variant, and the recursive-descent emission lane | ready | runtime | M | none | — |
 | `RT-EFFECT-DIFF` | One reusable rich differential boundary over EffectObservation — interpreter vs native, first-divergence reporting, so backend-local tests can observe what only the CLI suites currently can | ready | runtime | L | none | — |
 | `RT-ENTRY-TRAP-254` | public_source_observes_raw_argv_environment_cwd_bytes_in_field_order exits 1 with an explicit entry trap where it expects 254 — branch-introduced, and the only tip failure that is not the byte-span gap | closed | runtime | M | none | — |
+| `RT-ENTRY-TRAP-PX7O` | px7o heterogeneous eliminator frames: native traps at the explicit entry (RuntimeTrap(4), exit 1) where the interpreter returns exit 7 -- the entry-trap family the de Bruijn repair did NOT clear | draft | runtime | TBD | none | — |
 | `RT-ESCAPE` | escaping a second Resource through a bracket fails native lowering | merged | runtime | M | none | PR #911 @ 238a5c5d (origin/main 4ac9141e, CI green) |
 | `RT-FNSPLIT-B1R` | RT-NATIVE-FNSPLIT Boundary B1R — encode the occurrence-local semantic material B1 counted but never stored (repair of landed B1) | merged | runtime | L | none | 937 |
 | `RT-FNSPLIT-B2A-C` | plan↔lowering occurrence correspondence — transport the preallocated StaticOriginId to the site where it is out of scope | merged | runtime | L | none | 940 |
@@ -161,6 +164,7 @@ the committed file matches the generator's output.
 | `RT-FNSPLIT-C2-SYNTH-ID` | closed synthesized-constructor-role identity capability, with the DynamicConstructor producer that consumes it — the identity source compiler-synthesized effect payloads have no occurrence to ask for | merged | runtime | M | none | 1186 |
 | `RT-FNSPLIT-C3-ACTIVATION` | the opaque activation owner — one Rust representation authority in ken-runtime that constructs, publishes and tears down per-invocation boundary storage, with the deployment-supplied capacity profile and the one-argument public adapter seam | merged | runtime | L | none | 1181 |
 | `RT-FNSPLIT-RECUR-PORT` | emission-port completion — the governed nested-bracket family (recursive ComputationalMatch + trap arms) must select FunctionizedUnits, so RT-SCALE-B can measure the completed population | merged | runtime | XL | none | — |
+| `RT-FRAME-MARKER-ONCE` | Checked Runtime frame marker is consumed more than once under a nested computational eliminator | draft | runtime | TBD | none | — |
 | `RT-JOIN-DISPOSITION` | Join-disposition phase repair — the landed RECUR-PORT `consumed XOR statically-unselected` invariant conflates structural materialization with semantic reachability and false-rejects a join materialized before its enclosing match selects | merged | runtime | M | none | — |
 | `RT-MATCH-FRAME-FP` | match-frame fingerprints must hash a dedicated closure-free header carrier, not a Debug rendering of closure-capable cases | merged | runtime | M | none | https://github.com/swe-toolkit/ken/pull/1108 |
 | `RT-NATIVE-FNSPLIT` | Native backend: bound per-function lowering growth to O(n) — helper identity is a variable-width whole-configuration key (orig. single-Function VReg::MAX, since fixed) | merged | runtime | TBD | none | — |
@@ -253,7 +257,9 @@ is itself not yet `merged`/`closed`:
 - `PX9` blocked by `PX8` (status: draft)
 - `PX9` blocked by `ABI-REVOKE` (status: draft)
 - `RT-BACKEND-MODULE-SPLIT` blocked by `RT-DESCENT-RETIRE` (status: ready)
+- `RT-CARRIED-RESOURCE-SCALAR` blocked by `RT-SRCBODY-BIND-ORDER` (status: ready)
 - `RT-CARRIER-BYTESPAN-OBSERVE` blocked by `RT-CONTSRC-PRODUCER-LOCAL` (status: active)
+- `RT-CLOSURE-BOUNDARY-LANE` blocked by `RT-SRCBODY-BIND-ORDER` (status: ready)
 - `RT-CONTSPEC-LEDGER` blocked by `RT-DECL-CLOSURE-PORT` (status: active)
 - `RT-CONTSPEC-WITNESS` blocked by `RT-CONTSPEC-LEDGER` (status: ready)
 - `RT-CONTSRC-CALLABLE-CONTRACT` blocked by `RT-CONTSRC-PRODUCER-LOCAL` (status: active)
@@ -262,6 +268,8 @@ is itself not yet `merged`/`closed`:
 - `RT-DESCENT-RETIRE` blocked by `RT-SEED-CALL-PORT` (status: ready)
 - `RT-DESCENT-RETIRE` blocked by `RT-PRODUCER-MATCH-PORT` (status: ready)
 - `RT-DESCENT-RETIRE` blocked by `RT-RECURSOR-TRANSPORT` (status: ready)
+- `RT-ENTRY-TRAP-PX7O` blocked by `RT-SRCBODY-BIND-ORDER` (status: ready)
+- `RT-FRAME-MARKER-ONCE` blocked by `RT-SRCBODY-BIND-ORDER` (status: ready)
 - `RT-PRODUCER-MATCH-PORT` blocked by `RT-SEED-CALL-PORT` (status: ready)
 - `RT-RECURSOR-TRANSPORT` blocked by `RT-CONTSPEC-WITNESS` (status: ready)
 - `RT-SEED-CALL-PORT` blocked by `RT-DECL-CLOSURE-PORT` (status: active)
