@@ -2837,8 +2837,17 @@ fn c2_ac6_host_result_covers_resource_token_and_response_bytes_payloads() {
     let origin = plan.root_static_origin().expect("root occurrence exists");
     let seed_env = NativeSeedEnvironment::empty();
     let resource = 0x1020_3040_5060_7080_i64;
-    let response_pointer = 0x1122_3344_5566_7788_i64;
-    let response_len = 23_i64;
+    // ⛔ `RT-CARRIER-BYTESPAN-OBSERVE` `D2` — REAL BACKING STORAGE, and the
+    // fabricated `0x1122_3344_5566_7788` it replaces is now UNLAWFUL.
+    //
+    // Since `D2`, `Lowered::ResponseBytes` means *a span that will be
+    // dereferenced and copied*, so every instance must be a valid span. This
+    // fixture hand-builds one, so nothing upstream masks it — the buffer has to
+    // be real. The old pointer was never dereferenced under the previous
+    // representation, which is exactly why it survived.
+    let response_backing: Vec<u8> = vec![0x00, 0x7f, 0x80, 0xff, 0x01];
+    let response_pointer = response_backing.as_ptr() as i64;
+    let response_len = response_backing.len() as i64;
 
     let producer_plan = plan.clone();
     let (_producer_module, producer) = c2_compile_edge_with_arg(
@@ -2884,15 +2893,17 @@ fn c2_ac6_host_result_covers_resource_token_and_response_bytes_payloads() {
         "c2_response_bytes_consumer",
         &seed_env,
         plan,
+        // ⛔ `D2` — returns the SELECTED CHILD WORD, not a pointer-xor. The
+        // retired representation exposed the host pointer as the node scalar
+        // and the length as child word 0; there is no such pointer to read now,
+        // and asserting on the copied CONTENT is a strictly stronger claim than
+        // a xor of two scalars ever was.
         |compiler, builder, word| {
             let payload = compiler.emit_carrier_host_payload(
                 builder,
                 CarriedBoundaryWord { word },
             )?;
-            let pointer = compiler.emit_carrier_scalar(builder, payload)?;
-            let len = compiler.emit_carrier_field(builder, payload, 0)?;
-            let len = compiler.emit_carrier_scalar(builder, len)?;
-            Ok(builder.ins().bxor(pointer, len))
+            Ok(payload.word)
         },
     );
 
@@ -2906,10 +2917,33 @@ fn c2_ac6_host_result_covers_resource_token_and_response_bytes_payloads() {
     );
 
     let err_word = c2_run_edge_with_arg(producer, base, 0);
+    let response_word = crate::boundary_value::BoundaryWord(
+        c2_run_edge_with_arg(read_response, base, err_word) as u64,
+    );
     assert_eq!(
-        c2_run_edge_with_arg(read_response, base, err_word),
-        response_pointer ^ response_len,
-        "the error arm must preserve and expose ResponseBytes pointer and length"
+        response_word.tag(),
+        Some(BoundaryTag::PersistentGround),
+        "`D2`: the error arm's `ResponseBytes` is normalized into the \
+         persistent byte-span lane"
+    );
+    assert_eq!(
+        store
+            .image()
+            .0
+            .node_field(response_word.payload(), crate::boundary_value::NODE_CLASS),
+        Some(BoundaryClass::Bytes as u64),
+        "`D2`: and it carries the `Bytes` class its disposition declares"
+    );
+    assert_eq!(
+        store
+            .image()
+            .0
+            .node_data(response_word.payload())
+            .map(<[u8]>::to_vec)
+            .unwrap_or_default(),
+        response_backing,
+        "`D2`: ⛔ the error arm must preserve the ResponseBytes CONTENT — the \
+         copied bytes, in order, not a pointer it no longer publishes"
     );
 }
 
@@ -8683,5 +8717,304 @@ fn ac1_the_current_carried_route_fixture_does_not_reach_the_inherited_join_arm()
         ),
         "with the mutation never applied THIS FIXTURE must refuse exactly as \
          an unmutated run of it does"
+    );
+}
+
+// ─── `RT-CARRIER-BYTESPAN-OBSERVE` `D2` — NORMALIZATION BY COPY ────────────
+
+/// Transfer a **runtime** `{pointer, len}` byte span through the real emitted
+/// carrier graph and report `(raw result, node class, node content, data count)`.
+///
+/// ⚠ `declared_len` is deliberately a separate parameter from `source.len()`.
+/// The guards under test are about the length the producer is HANDED, and a
+/// harness that always passed the true length could not reach any of them.
+///
+/// A negative raw result is the emitted function's failure return, so the node
+/// fields are not read in that case — reading them would be reading a word the
+/// producer refused to publish.
+fn d2_runtime_span_edge(source: &[u8], declared_len: i64) -> (i64, Option<u64>, Vec<u8>, usize) {
+    let fixture = ac_c7_ctor("Alpha");
+    let (plan, root) = planned_root_occurrence(&fixture);
+    let seed_env = NativeSeedEnvironment::empty();
+    let address = source.as_ptr() as i64;
+    let (_module, code) = ac_c7_compile_edge(&seed_env, plan, move |compiler, builder| {
+        let pointer = builder
+            .ins()
+            .iconst(cranelift_codegen::ir::types::I64, address);
+        let len = builder
+            .ins()
+            .iconst(cranelift_codegen::ir::types::I64, declared_len);
+        Ok(compiler
+            .transfer_into_carrier(builder, root, &Lowered::ResponseBytes { pointer, len })?
+            .word)
+    });
+    let mut store = crate::boundary_value::BoundaryValueStore::new();
+    let (_arena, base) = ac_c7_bind_arena(&mut store);
+    let raw = ac_c7_run(code, base);
+    let data_count = store.image().0.data_count();
+    if raw < 0 {
+        return (raw, None, Vec::new(), data_count);
+    }
+    let word = crate::boundary_value::BoundaryWord(raw as u64);
+    let class = store
+        .image()
+        .0
+        .node_field(word.payload(), crate::boundary_value::NODE_CLASS);
+    let content = store
+        .image()
+        .0
+        .node_data(word.payload())
+        .map(<[u8]>::to_vec)
+        .unwrap_or_default();
+    (raw, class, content, data_count)
+}
+
+/// ⭐⭐ **`D2` — a RUNTIME byte span crosses by COPY into the existing lawful
+/// row**, per Architect `dec_6qmstfn6tjqdt`.
+///
+/// **MEASURED:** JIT-compiled emitted code, handed a runtime `{pointer, len}`
+/// over a host buffer, claims a span in the region and reads back the exact
+/// content from the persistent image, on a node whose tag is `PersistentGround`
+/// and whose class is `Bytes`.
+/// **CLAIMED:** `ResponseBytes` is normalized at the producer into
+/// `PersistentGround / Bytes / PersistentStore / ByteSpan`.
+/// **THE GAP:** ⚠ this says the content was copied and says **nothing** about
+/// any seat's `Avail`. No `BytesPointerLength` seat admits a carried word yet;
+/// that is `D5`, and this row must not be read as activation.
+///
+/// ⛔ **The content equality is the discriminator, not decoration.** Before
+/// `D2` this variant produced an `InvocationBorrowed` / `BorrowedOpaque` node
+/// whose scalar was the host pointer and whose storage shape is `InlineWord` —
+/// such a node has **no region data at all**, so `node_data` is empty and this
+/// assertion fails. A retag that kept the borrowed word would also fail it.
+///
+/// ⚠ Promise class: **durable invariant** — a round trip over a fixture it
+/// owns, not a frozen node index, length or address.
+#[test]
+fn d2_a_runtime_byte_span_crosses_by_copy_into_a_persistent_bytes_node() {
+    // ⚠ Not ASCII-only and not a palindrome: a producer that wrote the length
+    // as content, copied in reverse, or stopped early must be visible here.
+    let source: Vec<u8> = vec![0x00, 0x7f, 0x80, 0xff, 0x01];
+    let (raw, class, content, data_count) = d2_runtime_span_edge(&source, source.len() as i64);
+    assert!(raw >= 0, "`D2`: the copy must succeed, got {raw}");
+    let word = crate::boundary_value::BoundaryWord(raw as u64);
+    assert_eq!(
+        word.tag(),
+        Some(BoundaryTag::PersistentGround),
+        "`D2`: the normalized word takes the existing persistent byte-span lane"
+    );
+    assert_eq!(
+        class,
+        Some(BoundaryClass::Bytes as u64),
+        "`D2`: the class comes from the sole disposition authority"
+    );
+    assert_eq!(
+        content, source,
+        "`D2`: ⛔ the whole content, in order, copied from the runtime pointer"
+    );
+    assert_eq!(
+        data_count,
+        source.len(),
+        "`D2`: the claim reserved exactly the declared length"
+    );
+}
+
+/// ⭐ **`D2` — zero length is a LEGAL span, not a refusal.**
+///
+/// **MEASURED:** a `len` of `0` publishes a `Bytes` node with empty content and
+/// claims no region data.
+/// **CLAIMED:** the boundary case the leader named is closed in the admitting
+/// direction rather than by accident of a guard.
+/// **THE GAP:** ⚠ it says nothing about a length that is zero at runtime but
+/// non-zero at compile time; the producer never sees the distinction.
+///
+/// ⛔ **Not redundant with the row above.** The copy loop's bound is
+/// `index < len`, so zero is the one length whose body never executes — a
+/// producer that wrote a byte before testing the bound passes the row above and
+/// fails this one.
+#[test]
+fn d2_a_zero_length_runtime_span_is_a_legal_empty_span() {
+    let source: Vec<u8> = vec![0xaa, 0xbb];
+    let (raw, class, content, data_count) = d2_runtime_span_edge(&source, 0);
+    assert!(raw >= 0, "`D2`: a zero-length span is legal, got {raw}");
+    assert_eq!(
+        class,
+        Some(BoundaryClass::Bytes as u64),
+        "`D2`: an empty span is still a `Bytes` node"
+    );
+    assert!(
+        content.is_empty(),
+        "`D2`: ⛔ zero length must copy NOTHING — got {content:?}"
+    );
+    assert_eq!(
+        data_count, 0,
+        "`D2`: a zero-length claim reserves no region data"
+    );
+}
+
+/// ⭐⭐ **`D2` — a length the region cannot satisfy fails BEFORE publication.**
+///
+/// **MEASURED:** a declared length far beyond the data capacity returns the
+/// emitted failure value and leaves the region's data count at zero.
+/// **CLAIMED:** no partial persistent value escapes on failure — the span is
+/// claimed whole before any byte is written, so there is no half-filled node to
+/// adopt.
+/// **THE GAP:** ⚠ it measures the CAPACITY guard. It does not prove the copy
+/// loop is interruptible, and it must not be read as covering a failure that
+/// arises part-way through a successful claim.
+///
+/// ⛔ **The data-count assertion is the load-bearing half.** A producer that
+/// claimed the span and then failed would leave the count bumped, so a bare
+/// "it returned failure" would pass while a partial reservation survived.
+#[test]
+fn d2_a_capacity_exceeding_runtime_span_fails_before_publication() {
+    let source: Vec<u8> = vec![0x01, 0x02, 0x03];
+    let (raw, _class, content, data_count) = d2_runtime_span_edge(&source, i64::MAX / 4);
+    assert!(
+        raw < 0,
+        "`D2`: a span beyond the region's capacity must fail closed, got {raw}"
+    );
+    assert!(
+        content.is_empty(),
+        "`D2`: a refused claim publishes no content"
+    );
+    assert_eq!(
+        data_count, 0,
+        "`D2`: ⛔ a refused claim must reserve NOTHING — a bumped count is a \
+         partial persistent value that survived a failure"
+    );
+}
+
+/// ⭐ **`D2` — a NEGATIVE declared length fails closed rather than looping.**
+///
+/// **MEASURED:** `len = -1` returns the emitted failure value and reserves no
+/// data.
+/// **CLAIMED:** the unsigned comparison in the capacity guard is what makes a
+/// negative length safe, so the copy loop is never entered with a bound it
+/// would read as enormous.
+/// **THE GAP:** ⚠ it does not prove the loop itself is unsigned-bounded; it
+/// proves the guard upstream of the loop refuses first.
+///
+/// ⛔ **Not the same case as the capacity row.** That one is a large POSITIVE
+/// length; this is a bit pattern that a signed comparison would read as smaller
+/// than every capacity and admit. A guard switched to signed passes the
+/// capacity row and fails this one, which is the whole reason both exist.
+#[test]
+fn d2_a_negative_runtime_length_fails_closed_rather_than_looping() {
+    let source: Vec<u8> = vec![0x01, 0x02, 0x03];
+    let (raw, _class, content, data_count) = d2_runtime_span_edge(&source, -1);
+    assert!(
+        raw < 0,
+        "`D2`: a negative declared length must fail closed, got {raw}"
+    );
+    assert!(
+        content.is_empty(),
+        "`D2`: a refused claim publishes no content"
+    );
+    assert_eq!(data_count, 0, "`D2`: a refused claim reserves nothing");
+}
+
+/// Drive the REAL production masking helper over a reply slot holding a
+/// nonempty span, at a caller-chosen `success`, and report the carried node.
+///
+/// ⚠ This calls [`super::masked_reply_response_bytes`] itself rather than
+/// restating what it does. A control that rebuilt the mask in the test would
+/// pass against a producer that had none.
+fn d2_masked_reply_edge(source: &[u8], success_value: i64) -> (Option<u64>, Vec<u8>) {
+    let fixture = ac_c7_ctor("Alpha");
+    let (plan, root) = planned_root_occurrence(&fixture);
+    let seed_env = NativeSeedEnvironment::empty();
+    let address = source.as_ptr() as i64;
+    let length = source.len() as i64;
+    let (_module, code) = c2_compile_edge_with_arg(
+        "d2_masked_reply_edge",
+        &seed_env,
+        plan,
+        move |compiler, builder, success| {
+            let slot = builder.create_sized_stack_slot(StackSlotData::new(
+                StackSlotKind::ExplicitSlot,
+                16,
+                3,
+            ));
+            let pointer = builder.ins().iconst(types::I64, address);
+            let len = builder.ins().iconst(types::I64, length);
+            builder.ins().stack_store(pointer, slot, 0);
+            builder.ins().stack_store(len, slot, 8);
+            let value =
+                super::masked_reply_response_bytes(builder, types::I64, slot, 0, 8, success);
+            Ok(compiler.transfer_into_carrier(builder, root, &value)?.word)
+        },
+    );
+    let mut store = crate::boundary_value::BoundaryValueStore::new();
+    let (_arena, base) = ac_c7_bind_arena(&mut store);
+    let word =
+        crate::boundary_value::BoundaryWord(c2_run_edge_with_arg(code, base, success_value) as u64);
+    let class = store
+        .image()
+        .0
+        .node_field(word.payload(), crate::boundary_value::NODE_CLASS);
+    let content = store
+        .image()
+        .0
+        .node_data(word.payload())
+        .map(<[u8]>::to_vec)
+        .unwrap_or_default();
+    (class, content)
+}
+
+/// ⭐⭐ **`D2` — the PRODUCTION-PATH negative control (Architect
+/// `dec_12s3j2gj67c66`): an unselected arm must not copy the reply's bytes.**
+///
+/// **MEASURED:** with `success = 0` and a reply slot whose byte fields hold a
+/// real, nonempty, irrelevant span, the production masking helper yields a
+/// `Bytes` node with **empty** content; with `success = 1`, the identical
+/// fixture yields the whole span.
+/// **CLAIMED:** the unselected arm is the canonical empty span, so eager
+/// `HostResult` materialization cannot copy a payload the discriminant did not
+/// select.
+/// **THE GAP:** ⚠ it drives the masking helper directly, not a full host
+/// dispatch. It says the mask is applied and says **nothing** about whether a
+/// real reply buffer is populated — which is the point: `D2` deliberately does
+/// not rest on that.
+///
+/// ⛔ **The PAIR is the control, not the empty row alone.** A helper that
+/// returned `{null, 0}` unconditionally would pass the negative row and fail
+/// the positive one; a helper with no mask at all passes the positive row and
+/// fails the negative. Only both together pin the selection.
+///
+/// ⚠ **This is why it does not rely on a SIGSEGV.** The bytes here are safe and
+/// readable, so a producer that wrongly copied them would go GREEN under a
+/// crash-based check and is caught only by asserting the content is empty.
+///
+/// ⚠ Promise class: **durable invariant** — a relation between the discriminant
+/// and the copied content, over a fixture it owns.
+#[test]
+fn d2_an_unselected_reply_arm_copies_no_bytes() {
+    // ⚠ Safe, mapped, nonempty and distinctive: the whole point is that these
+    // bytes are perfectly readable, so only the mask keeps them out.
+    let irrelevant: Vec<u8> = vec![0xde, 0xad, 0xbe, 0xef, 0x11, 0x22];
+
+    let (unselected_class, unselected) = d2_masked_reply_edge(&irrelevant, 0);
+    assert_eq!(
+        unselected_class,
+        Some(BoundaryClass::Bytes as u64),
+        "`D2`: the unselected arm is still a lawful `Bytes` value"
+    );
+    assert!(
+        unselected.is_empty(),
+        "`D2`: ⛔ an unselected arm must copy NOTHING — got {unselected:?}, \
+         which means the producer read a span the discriminant did not select"
+    );
+
+    let (selected_class, selected) = d2_masked_reply_edge(&irrelevant, 1);
+    assert_eq!(
+        selected_class,
+        Some(BoundaryClass::Bytes as u64),
+        "`D2`: the selected arm is the same lawful `Bytes` value"
+    );
+    assert_eq!(
+        selected, irrelevant,
+        "`D2`: ⛔ the SELECTED arm must copy the whole span — without this row \
+         an unconditionally-empty mask would pass the negative row"
     );
 }

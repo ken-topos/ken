@@ -7073,18 +7073,23 @@ impl<'a> Lowering<'a> {
                 self.emit_carrier_store_scalar(builder, word, *pointer)?;
                 Ok(word)
             }
+            // ⭐ `RT-CARRIER-BYTESPAN-OBSERVE` `D2` — NORMALIZED AT THE
+            // PRODUCER, by copy, per Architect `dec_6qmstfn6tjqdt`.
+            //
+            // ⛔ This arm used to publish the HOST POINTER as a
+            // `BorrowedOpaque` scalar with the length beside it as a child
+            // word. That word died with the invocation and no consumer could
+            // lawfully dereference it, which is why every `BytesPointerLength`
+            // seat refused a carried byte source. The content is now copied
+            // into the one existing lawful byte-span row while the host span is
+            // still valid, so what crosses the boundary is region storage
+            // rather than a borrowed address.
+            //
+            // The `(tag, class)` still comes from the sole disposition
+            // authority; only the disposition's ANSWER for this variant moved.
             Lowered::ResponseBytes { pointer, len } => {
                 let (tag, class) = Self::carrier_handle_disposition(value)?;
-                let word = self.emit_carrier_alloc(
-                    builder,
-                    CarrierAllocationRequest::NonAggregate { tag },
-                    class,
-                    1,
-                )?;
-                self.emit_carrier_store_scalar(builder, word, *pointer)?;
-                let len = self.emit_carrier_immediate(builder, BoundaryTag::ImmediateInt, *len)?;
-                self.emit_carrier_store_field(builder, word, 0, len)?;
-                Ok(word)
+                self.emit_carrier_bytes_runtime_span(builder, tag, class, *pointer, *len)
             }
             Lowered::BorrowedOption { .. } => Err(unsupported(
                 lowered_value_kind(value),
@@ -8100,9 +8105,16 @@ impl<'a> Lowering<'a> {
     /// claims a span of the literal's length, and writes every byte of it.
     /// **CLAIMED:** a byte-bodied literal crosses the boundary with its content.
     /// **THE GAP:** ⚠ the content is a **compile-time literal**, so this arm says
-    /// nothing about a runtime-computed string — there is no `Lowered` variant
-    /// that carries one, and when one exists it needs its own control. ⛔ Do not
-    /// read this as coverage of the byte-bodied class in general.
+    /// nothing about a runtime source. ⛔ Do not read it as coverage of the
+    /// byte-bodied class in general.
+    ///
+    /// ⚠ **The former wording of that gap — *"there is no `Lowered` variant
+    /// that carries one"* — is FALSE since `RT-CARRIER-BYTESPAN-OBSERVE` `D2`,
+    /// and it was the sentence a reader would have built on.**
+    /// [`Lowered::ResponseBytes`] carries a runtime `{pointer, len}` and is
+    /// copied by [`Self::emit_carrier_bytes_runtime_span`], which is the
+    /// separate control the old wording asked for. The gap this arm still has
+    /// is real and narrower: **it is the LITERAL arm, and it covers literals.**
     fn emit_carrier_bytes(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -8141,6 +8153,99 @@ impl<'a> Lowering<'a> {
                 .call(refs.store_byte, &[arena, word.word, position, byte]);
             Self::require_i64(builder, builder.inst_results(write)[0], BOUNDARY_OK);
         }
+        Ok(word)
+    }
+
+    /// **`RT-CARRIER-BYTESPAN-OBSERVE` `D2` — the RUNTIME-SPAN analogue of
+    /// [`Self::emit_carrier_bytes`]**, under Architect `dec_6qmstfn6tjqdt`.
+    ///
+    /// Same claim-then-fill shape and the same two guarded helpers; the only
+    /// difference is where the content comes from. The literal arm unrolls over
+    /// a `&[u8]` the compiler holds; this one emits a loop that copies `len`
+    /// bytes from a runtime `pointer` **while the host span is still valid**,
+    /// which is what makes the result outlive the invocation.
+    ///
+    /// ⭐ **Normalization by COPY, never a retag.** The word this returns names
+    /// region storage the copy filled, not the caller's buffer. That is the
+    /// whole reason the referent owner may be `PersistentStore`: nothing here
+    /// republishes the host pointer, so `AC-7`'s escape rule is untouched.
+    ///
+    /// ⛔ **Only an EXPLICITLY bytes-typed source may reach here.** The extent
+    /// is the caller's typed `len`, never a length this ABI inferred from an
+    /// opaque word — dereferencing a `BorrowedOpaque` scalar is the
+    /// confused-deputy hole the node's Banned section names, and it is refused
+    /// one layer up by the disposition rather than here.
+    ///
+    /// **Every failure is closed BEFORE publication.** `store_bytes_len`
+    /// reserves the whole span first, so a length the region cannot satisfy
+    /// fails before any address is formed; and each `store_byte` is bounds-
+    /// checked against the length just recorded. Every status goes through
+    /// [`Self::require_i64`], which returns failure from the emitted function,
+    /// so a partially-filled node is never adopted and therefore never
+    /// published — store adoption is the identity boundary, and it is
+    /// downstream of every check here.
+    ///
+    /// ⚠ **A negative or absurd `len` fails CLOSED rather than looping.**
+    /// `store_bytes_len` compares UNSIGNED against the data capacity, so a
+    /// negative length reads as an enormous unsigned one and is refused by the
+    /// capacity guard before the loop is reached; the loop's own bound is the
+    /// same unsigned comparison. **Zero length is a legal span**: the capacity
+    /// check admits it and the loop body simply never runs.
+    fn emit_carrier_bytes_runtime_span(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        tag: BoundaryTag,
+        class: BoundaryClass,
+        pointer: cranelift_codegen::ir::Value,
+        len: cranelift_codegen::ir::Value,
+    ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
+        let refs = self.carrier_refs()?;
+        let arena = self.carrier_arena()?;
+        let pointer_type = builder.func.dfg.value_type(arena);
+        let word = self.emit_carrier_alloc(
+            builder,
+            CarrierAllocationRequest::NonAggregate { tag },
+            class,
+            0,
+        )?;
+        let (_span_slot, span) = Self::carrier_out_slot(builder, pointer_type);
+        let claim = builder
+            .ins()
+            .call(refs.store_bytes_len, &[arena, word.word, len, span]);
+        Self::require_i64(builder, builder.inst_results(claim)[0], BOUNDARY_OK);
+
+        let head = builder.create_block();
+        builder.append_block_param(head, types::I64);
+        let body = builder.create_block();
+        let done = builder.create_block();
+        let zero = builder.ins().iconst(types::I64, 0);
+        builder.ins().jump(head, &[zero.into()]);
+
+        builder.switch_to_block(head);
+        let index = builder.block_params(head)[0];
+        let more = builder.ins().icmp(
+            cranelift_codegen::ir::condcodes::IntCC::UnsignedLessThan,
+            index,
+            len,
+        );
+        builder.ins().brif(more, body, &[], done, &[]);
+
+        builder.switch_to_block(body);
+        let address = builder.ins().iadd(pointer, index);
+        let byte = builder
+            .ins()
+            .load(types::I8, MemFlags::trusted(), address, 0);
+        let widened = builder.ins().uextend(types::I64, byte);
+        let write = builder
+            .ins()
+            .call(refs.store_byte, &[arena, word.word, index, widened]);
+        Self::require_i64(builder, builder.inst_results(write)[0], BOUNDARY_OK);
+        // ⚠ `require_i64` split the block, so the back edge is emitted from the
+        // block the builder is in NOW, not from `body`.
+        let next = builder.ins().iadd_imm(index, 1);
+        builder.ins().jump(head, &[next.into()]);
+
+        builder.switch_to_block(done);
         Ok(word)
     }
 
@@ -9752,12 +9857,36 @@ impl LoweredVariant {
                 tag: BoundaryTag::InvocationHostResult,
                 class: BoundaryClass::HostResult,
             },
-            LoweredVariant::ResponseBytes
-            | LoweredVariant::BorrowedNativeValue
-            | LoweredVariant::BorrowedOption => RepresentedHandle {
-                tag: BoundaryTag::InvocationBorrowed,
-                class: BoundaryClass::BorrowedOpaque,
+            // `RT-CARRIER-BYTESPAN-OBSERVE` `D2`, Architect `dec_6qmstfn6tjqdt`
+            // — normalization by COPY into the one existing lawful byte-span
+            // row. `ResponseBytes` is an EXPLICITLY bytes-typed runtime
+            // `{pointer, len}`, so its content can be copied into a
+            // persistent-region `Bytes` node while the host span is still
+            // valid, at the one-way producer.
+            //
+            // ⛔ This is NOT a retag of the borrowed word and NOT a new lane:
+            // `(PersistentGround, Bytes)` is already in
+            // `BOUNDARY_TAG_CLASS_RELATION`, and the producer copies the bytes
+            // rather than publishing the host pointer. The referent after the
+            // copy is region storage the store adopts, which is why the owner
+            // may be `PersistentStore` without the escape rule weakening.
+            //
+            // ⚠ Its two former companions stay put, and the split is the
+            // point. `BorrowedNativeValue` and `BorrowedOption` are opaque by
+            // CLASS, not merely un-copied: neither carries a typed extent, so
+            // there is nothing to copy without dereferencing a pointer whose
+            // length this ABI does not know. Moving them here would be exactly
+            // the confused-deputy hole the node's Banned section names.
+            LoweredVariant::ResponseBytes => RepresentedHandle {
+                tag: BoundaryTag::PersistentGround,
+                class: BoundaryClass::Bytes,
             },
+            LoweredVariant::BorrowedNativeValue | LoweredVariant::BorrowedOption => {
+                RepresentedHandle {
+                    tag: BoundaryTag::InvocationBorrowed,
+                    class: BoundaryClass::BorrowedOpaque,
+                }
+            }
 
             // ─── closures: FAIL CLOSED for `C1` ──────────────────────────
             //
