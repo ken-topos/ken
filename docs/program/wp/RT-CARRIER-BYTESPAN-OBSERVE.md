@@ -512,6 +512,76 @@ Every AC names its owning deliverable. **If one cannot, that is the finding.**
   reason. **An AC with nowhere to record the honest answer gets recorded as
   guarded.**
 
+- **`AC-11` (`D4`) — the byte view's VALIDITY WINDOW is written down, because
+  store-ownership is not address-stability.**
+
+  **STEWARD AMENDMENT, 2026-08-07, after `D3` merged at `7c2587e6`.** Added from
+  Adversary `evt_2pfr5k60epyta`. **Every claim below I re-derived in source
+  before folding.** This is preventive: **there is no reachable violation
+  today** and no repro.
+
+  > **MEASURED:** `define_bytes_view`'s doc states the returned pointer's
+  > validity window, and `D4`'s observer is written against that stated window
+  > rather than against the owner guard's framing.
+  > **CLAIMED (by the owner guard's doc, `boundary_value_clif.rs:2203`):** *"a
+  > class says what a payload IS, an owner says how long it LIVES. Handing a
+  > caller a pointer into storage that dies with the invocation is the failure
+  > this refuses."*
+  > **THE GAP:** that reads as a lifetime guarantee on the **returned address**,
+  > and the guard only establishes it on the **referent**. `region_data_base`
+  > forms `ARENA_DATA + at` and `define_bytes_view` stores that raw interior
+  > pointer to `*out` — a live address into the persistent image's data table.
+  > **The referent outlives the invocation; the address does not necessarily
+  > outlive the next reservation.**
+
+  **The codebase already says so, in the one place a reader of `bytes_view` will
+  not look.** `BoundaryValueStore::publish_persistent` (`boundary_value.rs:2122`)
+  carries: *"Invalidated by any later materialization or reservation — those can
+  move the tables. Materialize, reserve, then publish."* That is exact.
+  `reserve_persistent` reaches `BoundaryRegion::reserve` (`:1532`), whose body
+  includes `self.data.resize(self.live_data + data, 0)` on a `data: Vec<u8>`.
+  **A resize reallocates and moves the table.**
+
+  **The ordering invariant is enforced only by `debug_assert!`** (`:1533`,
+  *"reserve before publish: growing a table moves it under the pointer"*). It is
+  the right invariant and it is stated well, and it is **compiled out under
+  `--release`.**
+
+  **What I measured that the report explicitly did not, and it bounds the
+  severity.** Every `reserve_persistent` call site in the crate is immediately
+  followed by `publish_persistent` — one reserve, then publish, never a reserve
+  after: the production activation path (`boundary_activation.rs:130-131`), the
+  clif harness (`boundary_value_clif.rs:3202-3208`), and two test fixtures.
+  **So the discipline holds by construction at every site today.** The exposure
+  is a future site, and `D5` is what creates consumers who could hold a view
+  across one.
+
+  **Why this is filed at `D4` rather than left for the consumer to settle.**
+  `D3` activates nothing, so nobody holds a view across anything and there is no
+  dangling read to demonstrate. That is exactly why the window is now: **`D4`
+  and `D5` will be written against the guard's current framing, and once a
+  consumer exists the two properties get reconciled to whatever that consumer
+  happened to need** — at which point the over-claim survives as the part nobody
+  re-derived.
+
+  **Note the direction of travel.** `D2` went to real trouble to avoid
+  publishing a borrowed address — it copies rather than retagging the host
+  pointer. **`D3` reintroduces a published raw pointer**, into region storage
+  instead of host storage. The lifetime is genuinely longer. It is **not
+  unbounded**, and only the first half of that is currently written down.
+
+  **The `D4` deliverable is the CONTRACT SENTENCE, not a mechanism.** Say in
+  `define_bytes_view`'s doc what the view's validity window is — valid until the
+  next materialization or reservation of the persistent image — and ground
+  `D4`'s observer on it. That is cheap and it is in `D4`'s path.
+
+  **The MECHANISM question is explicitly NOT `D4`'s and must not be improvised
+  here.** Whether this additionally wants a debug-only generation counter
+  checked at the view, a rule that views are consumed before any further
+  reservation, or nothing at all is **a design question for the Architect.**
+  Raise it; do not decide it inside the turn. If `D4` cannot land without an
+  answer, that is a hard stop, not a licence.
+
 ## 5. Banned scope
 
 - **This is not `Carried -> Lowered`.** That inverse is withheld by design;
