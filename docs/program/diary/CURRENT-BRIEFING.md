@@ -33,12 +33,29 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-07 ~17:3xZ · Runtime EXECUTING RT-CARRIER-BYTESPAN-OBSERVE `D0`
+## LIVE — 2026-08-07 ~18:0xZ · Runtime on RT-CARRIER-BYTESPAN-OBSERVE, `D2` HELD
 
 > ### NEXT ACTION ON RESUME — read this line first
 >
-> **The Runtime ring is WORKING and nothing is with me or with the operator.**
-> `main` is `08deb691` (PR #1535, doc-only, four paths verified blob-identical).
+> **Nothing is with me or with the operator. Do not start anything new.**
+> `main` is **`d18da5c6`**. `D0` and `D1` are done and `D1` is MERGED; **`D2`
+> is held at `bf48dfea` on a reproducible SIGSEGV, with the Architect** — see
+> the `D2` block below before touching anything.
+>
+> **Three publishes landed this window, all doc-only, all blob-verified:**
+> **#1535** (RT-WORKER-FIXTURE-DECODE framed), **#1536** (the `D1` census, a
+> ring candidate I resolved myself under §14a), **#1537** (the currency banner
+> on `D1` plus a briefing restore).
+>
+> **`dec_18y4zh9ex4xf3` taught the reusable thing:** a ring candidate whose
+> diff is confined to `docs/program/` merges on **QA + the Steward**, no
+> Architect. **I am the reviewer on that domain**, so I read the diff rather
+> than counting votes. The leader routed it as "publisher validation and merge"
+> while the Decision was still `proposed` — **the owed act was my vote.**
+>
+> **UNPUBLISHED, on `steward/work`, deliberately batched (§10⁻ rule 2):** the
+> briefing blocks below. They are on disk here and survive compaction; publish
+> them at the next real seam, not on their own.
 >
 > 1. **THE FLEET RESTARTED at ~16:44-16:57Z** — all 28 seats reconnected. The
 >    Runtime ring re-oriented itself correctly and resumed: implementer on
@@ -67,11 +84,11 @@
 >    with substantial written inputs — frame-authoring jobs, not
 >    investigations.
 >
-> **State at the last checkpoint, 2026-08-07 ~17:35Z:** `D0` handed back and
-> routed; **`D1` is with Runtime QA**; **`D2` is a bounded fork with the
-> Architect** — normalize invocation-owned sources into the measured persistent
-> lane, or authorize a new invocation-owned byte-span representation — and the
-> ring is **held on that ruling**. Thread `thr_2w9jmt85jrphw`.
+> **State at the last checkpoint, 2026-08-07 ~18:0xZ:** `D0` and `D1` done,
+> `D1` merged at `087f2343`. **`D2` released on
+> `wp/RT-CARRIER-BYTESPAN-OBSERVE-d2-producer-normalize` (base `087f2343`) and
+> HELD at `bf48dfea` on a reproducible SIGSEGV**, bounded host-contract ruling
+> with the Architect. Thread `thr_2w9jmt85jrphw`. Implementer ctx ~64%.
 >
 > **STALENESS WARNING, AND READ THE DIRECTION.** The marker on this block used
 > to be *"if `origin/main` has moved past `08deb691`."* **That marker cannot
@@ -81,6 +98,52 @@
 > from `get_recent_context` on `thr_2w9jmt85jrphw` plus the three panes, never
 > from this paragraph.** A moved `main` proves staleness; an unmoved `main`
 > proves nothing.
+
+### D2 IS HELD ON A REPRODUCIBLE SIGSEGV. Not a stall — do not nudge it.
+
+**2026-08-07 ~17:57Z.** `D2` is held at **`bf48dfea`**, declared not mergeable
+by the leader. A reproducible **SIGSEGV** exposes an **arm-conditional
+host-span validity** issue, and the bounded materialization / host-contract
+ruling is **with the Architect** (active in `thr_2w9jmt85jrphw`).
+
+**This is the frame working, not failing.** `D2` was released under
+`dec_6qmstfn6tjqdt` to normalize an invocation-owned byte source into the
+persistent lane *while that source is valid* — and validity-while-copying is
+exactly the axis that just faulted. The ring hit it, **held instead of
+shipping**, and routed it to the soundness lane rather than absorbing it.
+
+**Owed by me: nothing.** The blocker has a name and an owner. Do not nudge, do
+not escalate to the operator yet — the Architect is answering the question
+right now, and escalating a live ruling is how a fork becomes a committee.
+
+**What WOULD be mine:** if the ruling grows the TCB, or turns out to need a
+host-contract change outside `crates/ken-runtime`, that is a scope fork and it
+goes to the operator. **Watch for that specific shape**, not for the SIGSEGV
+itself.
+
+**Also watch the implementer's ctx** — 64% and climbing on a hard deliverable.
+Compaction is mine (§15) but happens at a **node** boundary, never mid-WP, so
+there is nothing to do about it now beyond knowing it is true.
+
+### AT D2 PUBLISH TIME: run the intersection on the node file. Do NOT rebase.
+
+`wp/RT-CARRIER-BYTESPAN-OBSERVE-d2-producer-normalize` is based at `087f2343`,
+**one commit behind `main`** — and the commit it lacks (`d18da5c6`) is my
+currency banner on `docs/program/issues/RT-CARRIER-BYTESPAN-OBSERVE.md`. If
+`D2` also writes to that node file, the intersection is **non-empty** and git
+will take the union of two disjoint hunks **silently and cleanly**. That is not
+a conflict and nothing will report it.
+
+**The residual is semantic, not textual:** the implementer's checkout has the
+census **without** the banner, so the closing section reads as an open
+Architect fork there. **I did not raise this to the ring**, because the leader
+released `D2` carrying `dec_6qmstfn6tjqdt`'s guardrails explicitly, so the
+ruling reaches the work through the release rather than through the file — and
+a message here would be pre-confirming a gate that already holds (§9).
+
+⇒ **At publish: `comm -12` the candidate's paths against `main`'s.** Non-empty
+on that node file means read the merged result for a banner-plus-`D2`-section
+union, not just diff the branch. **Empty means immaterial — do not rebase.**
 
 ### OPEN, MINE: M8's doc-only discriminator contradicts the Adversary's scope
 
