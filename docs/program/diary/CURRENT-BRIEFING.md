@@ -33,117 +33,59 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-07 ~18:0xZ · Runtime on RT-CARRIER-BYTESPAN-OBSERVE, `D2` HELD
+## LIVE — 2026-08-07 ~18:4xZ · `D2` MERGED, Runtime owes `D3`
 
 > ### NEXT ACTION ON RESUME — read this line first
 >
-> **Nothing is with me or with the operator. Do not start anything new.**
-> `main` is **`d18da5c6`**. `D0` and `D1` are done and `D1` is MERGED; **`D2`
-> is held at `bf48dfea` on a reproducible SIGSEGV, with the Architect** — see
-> the `D2` block below before touching anything.
+> **Nothing is owed by me. Do not start anything new and do not nudge.**
+> `main` is **`4f9f0987`**. **`D0`, `D1`, `D2` are all merged.** `D2` landed as
+> **PR #1540** from exact `04e71a6e`; all three `ken-runtime` lowering paths
+> blob-verified on `main`. **The SIGSEGV that held `D2` is fixed and gone.**
 >
-> **Three publishes landed this window, all doc-only, all blob-verified:**
-> **#1535** (RT-WORKER-FIXTURE-DECODE framed), **#1536** (the `D1` census, a
-> ring candidate I resolved myself under §14a), **#1537** (the currency banner
-> on `D1` plus a briefing restore).
+> **`RT-CARRIER-BYTESPAN-OBSERVE` remains `active` — `D3` through `D6` are
+> unbuilt.** `D2` was a partial-WP merge of accepted work; the node is not
+> closed and must not be flipped `merged`. **The next move is the ring's:**
+> `runtime-leader` was told to release `D3` cut from `4f9f0987`
+> (`evt_491qrgc0mf7qn`, thread `thr_2w9jmt85jrphw`). Wait for it.
 >
-> **`dec_18y4zh9ex4xf3` taught the reusable thing:** a ring candidate whose
-> diff is confined to `docs/program/` merges on **QA + the Steward**, no
-> Architect. **I am the reviewer on that domain**, so I read the diff rather
-> than counting votes. The leader routed it as "publisher validation and merge"
-> while the Decision was still `proposed` — **the owed act was my vote.**
+> **Six publishes landed this window, all blob-verified:** **#1535**
+> (RT-WORKER-FIXTURE-DECODE framed), **#1536** (the `D1` census, a ring
+> candidate I resolved under §14a), **#1537** (`D1` currency banner), **#1538**
+> (RT-CARRIER-PRODUCER-OCCURRENCE framed), **#1539** (CI-IGNORED-SWEEP framed),
+> **#1540** (`D2`, the one code merge — M8 notice sent, `evt_602ay3mrrt9r2`).
 >
-> **UNPUBLISHED, on `steward/work`, deliberately batched (§10⁻ rule 2):** the
-> briefing blocks below. They are on disk here and survive compaction; publish
-> them at the next real seam, not on their own.
+> **FRAMING DEBT IS CLEARED.** Twelve nodes are `ready` with a written frame, so
+> stay-one-ahead is satisfied with room. There is no framing job queued.
 >
-> 1. **THE FLEET RESTARTED at ~16:44-16:57Z** — all 28 seats reconnected. The
->    Runtime ring re-oriented itself correctly and resumed: implementer on
->    `wp/RT-CARRIER-BYTESPAN-OBSERVE-d0-census` at `9c41cb56`, measuring `D0`
->    baselines; leader event-driven on the handoff it can name. **The restart
->    cost the implementer its context, not its place.**
-> 2. **RE-ARM THE WATCHDOG — and note the restart is exactly what drops it.**
->    `set_interval` is process-local and does not survive a compaction or an
->    MCP reconnect. Armed at 900s this window. A backstop that silently fell
->    over catches nothing and the failure is invisible.
-> 3. **RT-CARRIER-BYTESPAN-OBSERVE is RELEASED and `active`.** Kick
->    `evt_7wg9j79tdkdep` is the thread anchor; base `9c41cb56`.
->    **Do not re-release it and do not release a second ring.**
-> 4. **Fleet is still SINGLE-THREADED** (operator, 2026-08-07).
->    `KERNEL-NESTED-IND` stays stood down despite a written frame and an idle
->    kernel ring. **A posture, not an oversight — do not "fix" it.**
-> 5. **The next thing owed to me is the ring's own move.** Expect a `D0`
->    baseline or a hard stop. Nothing declares a `depends_on` edge to the
->    in-flight node, so stay-one-ahead is satisfied by construction.
-> 6. **[[RT-WORKER-FIXTURE-DECODE]] IS FRAMED — `ready`, size M**, frame at
->    `docs/program/wp/RT-WORKER-FIXTURE-DECODE.md`, on `main`. Sequenced behind
->    the in-flight node (same crate). **Framing it falsified two claims in its
->    own node text** — see the block below; do not rebuild from the old text.
-> 7. **Framing debt remaining, neither blocking:**
->    [[RT-CARRIER-PRODUCER-OCCURRENCE]] and [[CI-IGNORED-SWEEP]], both `draft`
->    with substantial written inputs — frame-authoring jobs, not
->    investigations.
+> **THE LEADER HAS NOW MIS-ROUTED THE MERGE GATE TWICE, in opposite
+> directions.** On `dec_18y4zh9ex4xf3` it called a `proposed` Decision "ready
+> for publisher validation and merge" when **my vote** was the owed act
+> (§14a: a `docs/program/`-confined ring candidate merges on QA + Steward, no
+> Architect — **I am the reviewer on that domain**, so read the diff, do not
+> count votes). On `dec_3m6g9w1y3xkgy` the Architect explicitly asked the
+> **leader** to open *and resolve*, and the leader opened it and routed the
+> resolve to me. **Both times the Decision object said `proposed` while the
+> request prose said merge.** ⇒ **Always read the Decision from the object and
+> read the cited approval events themselves** — never infer a vote from a
+> reviewer named in prose. Corrected to the leader in `evt_491qrgc0mf7qn`.
 >
-> **State at the last checkpoint, 2026-08-07 ~18:0xZ:** `D0` and `D1` done,
-> `D1` merged at `087f2343`. **`D2` released on
-> `wp/RT-CARRIER-BYTESPAN-OBSERVE-d2-producer-normalize` (base `087f2343`) and
-> HELD at `bf48dfea` on a reproducible SIGSEGV**, bounded host-contract ruling
-> with the Architect. Thread `thr_2w9jmt85jrphw`. Implementer ctx ~64%.
+> **`integrator` "PR #365 awaiting Steward routing" is NOT work.** That seat was
+> **retired by the operator 2026-07-26**; no `moot.toml` entry, no pane, and
+> Ken's PRs are in the 1500s. The status is frozen at 15:08 and was already
+> dispositioned on 2026-07-21. **It has fooled a Steward twice — do not route
+> it a third time.**
 >
-> **STALENESS WARNING, AND READ THE DIRECTION.** The marker on this block used
-> to be *"if `origin/main` has moved past `08deb691`."* **That marker cannot
-> fire on ring progress**, because a ring advancing `D0`→`D1`→`D2` moves no
-> ref I can see — it merges nothing until the candidate lands. So the block
-> ages silently in exactly the window it is most read. ⇒ **Re-derive ring state
-> from `get_recent_context` on `thr_2w9jmt85jrphw` plus the three panes, never
-> from this paragraph.** A moved `main` proves staleness; an unmoved `main`
-> proves nothing.
-
-### D2 IS HELD ON A REPRODUCIBLE SIGSEGV. Not a stall — do not nudge it.
-
-**2026-08-07 ~17:57Z.** `D2` is held at **`bf48dfea`**, declared not mergeable
-by the leader. A reproducible **SIGSEGV** exposes an **arm-conditional
-host-span validity** issue, and the bounded materialization / host-contract
-ruling is **with the Architect** (active in `thr_2w9jmt85jrphw`).
-
-**This is the frame working, not failing.** `D2` was released under
-`dec_6qmstfn6tjqdt` to normalize an invocation-owned byte source into the
-persistent lane *while that source is valid* — and validity-while-copying is
-exactly the axis that just faulted. The ring hit it, **held instead of
-shipping**, and routed it to the soundness lane rather than absorbing it.
-
-**Owed by me: nothing.** The blocker has a name and an owner. Do not nudge, do
-not escalate to the operator yet — the Architect is answering the question
-right now, and escalating a live ruling is how a fork becomes a committee.
-
-**What WOULD be mine:** if the ruling grows the TCB, or turns out to need a
-host-contract change outside `crates/ken-runtime`, that is a scope fork and it
-goes to the operator. **Watch for that specific shape**, not for the SIGSEGV
-itself.
-
-**Also watch the implementer's ctx** — 64% and climbing on a hard deliverable.
-Compaction is mine (§15) but happens at a **node** boundary, never mid-WP, so
-there is nothing to do about it now beyond knowing it is true.
-
-### AT D2 PUBLISH TIME: run the intersection on the node file. Do NOT rebase.
-
-`wp/RT-CARRIER-BYTESPAN-OBSERVE-d2-producer-normalize` is based at `087f2343`,
-**one commit behind `main`** — and the commit it lacks (`d18da5c6`) is my
-currency banner on `docs/program/issues/RT-CARRIER-BYTESPAN-OBSERVE.md`. If
-`D2` also writes to that node file, the intersection is **non-empty** and git
-will take the union of two disjoint hunks **silently and cleanly**. That is not
-a conflict and nothing will report it.
-
-**The residual is semantic, not textual:** the implementer's checkout has the
-census **without** the banner, so the closing section reads as an open
-Architect fork there. **I did not raise this to the ring**, because the leader
-released `D2` carrying `dec_6qmstfn6tjqdt`'s guardrails explicitly, so the
-ruling reaches the work through the release rather than through the file — and
-a message here would be pre-confirming a gate that already holds (§9).
-
-⇒ **At publish: `comm -12` the candidate's paths against `main`'s.** Non-empty
-on that node file means read the merged result for a banner-plus-`D2`-section
-union, not just diff the branch. **Empty means immaterial — do not rebase.**
+> **Fleet is still SINGLE-THREADED** (operator, 2026-08-07).
+> `KERNEL-NESTED-IND` stays stood down despite a written frame and an idle
+> kernel ring. **A posture, not an oversight — do not "fix" it.**
+>
+> **UNPUBLISHED, on `steward/work`, deliberately batched (§10⁻ rule 2):** this
+> block only. Publish it with the next ring candidate's tracker sync.
+>
+> **STALENESS — READ THE DIRECTION.** A moved `main` proves this block is
+> stale; **an unmoved `main` proves nothing**, because a ring advancing
+> `D3`→`D4` merges no ref until its candidate lands. ⇒ **Re-derive ring state
+> from `thr_2w9jmt85jrphw` and `list_participants`, never from this paragraph.**
 
 ### OPEN, MINE: M8's doc-only discriminator contradicts the Adversary's scope
 
