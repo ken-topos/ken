@@ -539,6 +539,50 @@ Every AC names its owning deliverable. **If one cannot, that is the finding.**
 - **`AC-10` (`D4b`) — the `ResponseBytes`-validity invariant is enforced
   structurally, not by convention.**
 
+  > **DISCHARGE NARROWED 2026-08-07, AFTER `D4b` MERGED at `8d9366b9`.** From
+  > Adversary `evt_6fkpg1wyh6mzr`, verified by the Steward in source. **`AC-10`
+  > is discharged as closure of the CONSTRUCTION SURFACE — reachability-rooted —
+  > NOT as provenance.** The stronger reading is what I published, and it is
+  > wrong.
+  >
+  > **What is genuinely closed, and it is real:** `mod safe_byte_span` sits
+  > inside `lowering`, so the private `pointer`/`len` fields are unreachable by
+  > braced literal at all four sites; `masked_at_producer` emits the `select`
+  > pair **inside the constructor**, so no argument ordering and no later
+  > call-site edit can yield an unmasked value from it; `for_control` is
+  > `#[cfg(test)]` and every caller is test-side. **A newly added production
+  > construction has no raw mint to reach for.**
+  >
+  > **What is NOT closed:** `rebuild_from_collected(self, pointer, len) -> Self`
+  > is `Self { pointer, len }` — **the receiver is never read**
+  > (`lowering/mod.rs:10094`). It proves the caller *holds* a span; it does not
+  > derive the new span's values from it. **A holder of any masked span can
+  > therefore wrap arbitrary unmasked SSA values.**
+  >
+  > Two sentences in the code overclaim this and are `D5`'s to correct:
+  > `:10089` *"The new span inherits the old span's provenance rather than
+  > asserting its own"*, and `:10031` *"It carries an existing span's provenance
+  > forward through a collect/rebuild round trip."* **Nothing is carried
+  > forward.** The census's closing `⇒` — *"it must either mask, or already hold
+  > a span that did"* — is accurate and should be the model for the repair.
+  >
+  > **This is the SAME distinction the Architect used to reject candidate
+  > `450fff8b`, applied one level in.** That rejection said closing the braced
+  > literal *"closes a spelling; it does not close provenance."* Candidate 2
+  > closes the mint **surface** — which is a real strengthening and is not what
+  > the doc says it is.
+  >
+  > **No live defect and no repro.** The single production caller
+  > (`mod.rs:19046`) is the order-preserving collect/rebuild round trip where the
+  > values genuinely are that span's. This is preventive, about what a future
+  > production site may reach for — which is exactly what `AC-10` exists to
+  > bound. Nothing warns: an unused value receiver produces no Rust lint.
+  >
+  > **Open, with the Architect (routed, not decided):** correct the claim, or
+  > make the rebuild derive its values from `self`. **Until that is ruled,
+  > `AC-10` stands as reachability-rooted** and no artifact may restate it as
+  > provenance.
+
   **REASSIGNED 2026-08-07 from `D3`/`D4` to `D4b`** on the ring's return
   (`evt_54ykqzecehwa0`), under the recut this frame authorizes at §3. Nothing
   below changes; only its owner does.
