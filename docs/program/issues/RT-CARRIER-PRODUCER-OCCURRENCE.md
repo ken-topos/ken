@@ -1,9 +1,9 @@
 ---
 id: RT-CARRIER-PRODUCER-OCCURRENCE
 title: "a source aggregate reaches the carrier with no planner-issued producer occurrence, so the C2 edge refuses to emit and the nested-payload selection row never exercises its property"
-status: draft
+status: ready
 owner: runtime
-size: TBD
+size: M
 gate: none
 depends_on: [RT-SRCBODY-BIND-ORDER]
 blocks: []
@@ -11,10 +11,37 @@ github: null
 origin: Measured by the RT-SRCBODY-BIND-ORDER all-eight-package two-ended census (evt_ksrhrv82t5ae), after CI failed this row at candidate fb99d0fc. Fails identically at frozen base 21fd46dc, so it is pre-existing base debt and not a regression from D1. Fits no released owner; the ring stopped and reported rather than assigning a nearest fit. Steward-filed (agents cannot create tracked work per COORDINATION §2).
 ---
 
-> ## THE FRAME IS OWED. `draft`, NOT startable.
+> ## FRAMED — `ready`, size M
 >
-> It exists so a skipped CI row has an owner. **A skipped row measures
-> nothing; this node owns un-skipping it.** Size is `TBD` deliberately.
+> Frame:
+> [`RT-CARRIER-PRODUCER-OCCURRENCE`](../wp/RT-CARRIER-PRODUCER-OCCURRENCE.md)
+>
+> **The frame governs; this file is the origin record.** Where the two differ,
+> the frame is later and was ground against `origin/main` `d18da5c6`.
+>
+> **Two things below are sharpened by the frame and should not be built on as
+> written here:**
+>
+> 1. **"This is one observed occurrence" understates it — the row has at least
+>    TWO independent refusals.** It compiles three edges; the panic reports only
+>    the first, because the preflight walker refuses whole-graph before any
+>    allocation (`lowering/mod.rs:4895-4980`). Edge 1's aggregate comes from
+>    `synthesized_constructor`, edge 2 hand-writes `occurrence: None` at
+>    `constructors.rs:2730` and `:2734`. **Repairing the first only moves the
+>    panic**, so a repair sized on the observed signature is sized on a sample of
+>    one. Frame `D1` and `AC-2`.
+> 2. **The rig-versus-real question now has a derived answer, and the frame
+>    front-loads it rather than leaving it open.** `synthesized_constructor`
+>    (`mod.rs:11064`) returns `occurrence: None` on a deliberate branch taken
+>    when `defining_emission_owner` is `None`, and the c2 rig's compiler
+>    (`bare_carrier_test_lowering`, `constructors.rs:1884`) sets exactly that at
+>    `:1926`. The chain reproduces the observed signature including its
+>    `construct` field. **It was derived by reading and not executed** — frame
+>    `D0` exists to kill it cheaply.
+>
+> `ready` does not mean released. The fleet is single-threaded and this node
+> shares `constructors.rs` with [[RT-WORKER-FIXTURE-DECODE]] and its crate with
+> the active `RT-CARRIER-BYTESPAN-OBSERVE`.
 
 ## Exact signature
 
