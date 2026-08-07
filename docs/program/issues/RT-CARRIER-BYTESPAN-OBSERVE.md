@@ -330,3 +330,138 @@ The carried source-match **class dispatch** correction
 stays in `RT-CONTSRC-PRODUCER-LOCAL`. The two are technically distinct units,
 and the predecessor is approvable as semantic partial progress without this
 node existing (`evt_3pr04vk7zrd7c`).
+
+## D1 — the representation census (measured, nothing frozen)
+
+Measured at `08deb691` by `runtime-implementer`. **Nothing here is frozen and
+no `Avail` row was touched**; step 1 of the ruled shape is a measurement and
+this is its record.
+
+### The four axes are closed sets, and the extent axis is derived
+
+`BoundaryTag` (10), `BoundaryClass` (9), `BoundaryReferentOwner` (3, a total
+function of the tag) and `BoundaryStorageShape` (4, a total function of the
+class), all in `crates/ken-runtime/src/boundary_value.rs`. Byte-span storage is
+`BoundaryStorageShape::ByteSpan`, and exactly two classes have it: **`Bytes`
+and `String`**.
+
+### The legal representation set is EIGHT cells, and they are one shape
+
+Derived from the authority rather than read off it: the `BoundaryInput ->
+BoundaryOutcome` partition is a closed product of
+`LoweredVariant x magnitude x reachability x adoption`, and `BoundaryInput::
+all()` enumerates it. Sweeping all **252** cells and keeping those whose
+variant disposition names a byte-span class gives 24 cells, of which:
+
+| outcome | cells |
+|---|---|
+| `HandleWord` admitted | **8** |
+| `FailClosedForbidden` | 16 |
+
+Every one of the eight admitted cells has the **same** shape:
+
+```text
+tag=PersistentGround  class=Bytes|String  owner=PersistentStore  storage=ByteSpan
+```
+
+Admission requires `reachability` in `{Leaf, ChildrenOutliveParent}` **and**
+`adoption = StoreAdopted`; `magnitude` is irrelevant (both values appear
+admitted). `ChildDiesBeforeParent` and `PendingStoreAdoption` each fail closed.
+
+⇒ **There is exactly one byte-span lane, and it is persistent-owned.**
+`BOUNDARY_TAG_CLASS_RELATION` admits `Bytes`/`String` under
+`PersistentGround` only; `InvocationAggregate` names `Constructor`/`Record`
+and nothing else, by an explicit written decision.
+
+### There is NO invocation-owned byte-span representation today
+
+`LoweredVariant::ResponseBytes`, `BorrowedNativeValue` and `BorrowedOption` all
+dispose to `RepresentedHandle { InvocationBorrowed, BorrowedOpaque }`, and
+`BorrowedOpaque`'s storage shape is `InlineWord` — it names storage this ABI
+does not own. **A borrowed host buffer is not a byte span in this ABI.** That
+is the measured reason the Banned section forbids dereferencing a
+`BorrowedOpaque` scalar, and `ResponseBytes` is a further instance of the
+name rule: it carries "Bytes" in its name and is not a byte span.
+
+### The extent is observable; it is the helper inventory that lacks a reader
+
+The node's own banner says the carrier "cannot read its extent at all". That
+is accurate about `BOUNDARY_LOCAL_HELPERS` and **not** about the
+representation. For a `Bytes`/`String` node, `NODE_PAYLOAD` holds the byte
+length and `NODE_EXTENT` holds the start index into the region's data table,
+and the already-emitted per-index reader `ken_boundary_byte_local` computes,
+under a `byte_span_classes()` class guard:
+
+```text
+len     = load NODE_PAYLOAD(node)
+at      = load NODE_EXTENT(node)
+data    = load ARENA_DATA(region)
+address = data + at + index
+```
+
+⇒ **The content is contiguous and a `{pointer, length}` pair is derivable from
+exactly the words emitted code already loads.** The frame's section 8 hard stop
+— "no legal representation reaching a `BytesPointerLength` seat can produce a
+contiguous address" — **does not fire**. What is missing is a helper that
+returns the pair, which is step 3, not a representation boundary.
+
+### All six seats, and what each requires
+
+The six `BytesPointerLength` seats, with the ABI field each names
+(`ken-host` request structs) and its Ken surface type:
+
+| seat | ABI field | surface type | rows observed at D0 |
+|---|---|---|---|
+| `ConsoleWrite.Argument(1)` | console `bytes` | `Bytes` | 1 |
+| `FsReadFile.Argument(0)` | `path` | `Bytes` | 20 |
+| `FsWriteFile.Argument(0)` | `path` | `Bytes` | 6 |
+| `FsWriteFile.Argument(2)` | `bytes` (contents) | `Bytes` | **0** |
+| `FsChangeMode.Argument(0)` | `path` | `Bytes` | 3 |
+| `FsOpen.Argument(0)` | `path` | `Bytes` | **0** |
+
+**What each seat requires is identical**: a `BytesPointerLength` over one of
+the eight admitted cells. The representation census is **seat-uniform** — it
+does not vary by operation or ordinal, because the seat contract fixes only the
+need and the admitted representations are a property of the carrier.
+
+`String` is admitted by the carrier's class guard at every byte-span seat and
+is produced at **none** of them by today's surface, which declares `Bytes` at
+all six (`prelude.rs`: `write`, `readFile`, `writeFile`, `change_mode`,
+`private_resource_acquire`). Legal at the ABI, unreached from the surface.
+
+### Observed reachability is NOT legal possibility, and here is the mechanism
+
+`FsWriteFile.Argument(2)` has zero quarantined witness **by construction, not
+by absence of demand.** Seats are claimed in ascending ordinal order in
+`lowering/core.rs`, and the first refusal aborts object emission. Every
+`FsWriteFile` program therefore refuses at `Argument(0)` (the path) before
+`Argument(2)` (the contents) is ever claimed. A first-failure census cannot
+observe ordinal 2 while ordinal 0 refuses.
+
+`FsOpen.Argument(0)` has zero witness for a different reason: no quarantined
+row names the operation at all.
+
+⇒ **Neither zero licenses a disposition**, and this census does not supply
+one. It supplies the representation set; per-seat reach evidence is step 5's.
+
+### A bounded question for the Architect, not resolved here
+
+Step 2 says *"convert invocation-owned byte sources into a self-evidencing
+bytes representation at their producer"*, and `AC-6` requires that persistent
+**and** invocation-owned `Bytes` are both exercised. The census says the only
+byte-span lane is `PersistentGround` / `PersistentStore`, and that
+`InvocationAggregate` excludes `Bytes`/`String` by an explicit decision.
+
+So step 2 has two readings and they differ in what they cost:
+
+1. **Normalize into the persistent store** — an invocation-owned byte source
+   becomes a `PersistentGround` `Bytes`. No new lane; it changes the
+   referent's owner and lifetime, and `AC-6`'s "invocation-owned `Bytes`"
+   then names a source, not a representation.
+2. **Add an invocation-owned byte-span lane** — a new `(tag, class)` pair. That
+   is a representation change and touches the tag/class relation, which the
+   Banned section puts outside this node ahead of step 5.
+
+**This is a design choice, so it is not the implementer's to make**, and the
+census cannot decide it: both readings are consistent with every measurement
+above. It is recorded here so step 2 does not begin by inventing a row.
