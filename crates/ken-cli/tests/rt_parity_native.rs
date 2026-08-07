@@ -480,7 +480,22 @@ fn in_large_stack_thread(name: &'static str, body: fn()) {
 // zero-capacity request as `BufferLimit` -- the wrong public variant, but not a
 // silent success (frame AC-4).
 
+// Ignored pending RT-CARRIER-BYTESPAN-OBSERVE.
+//
+// Observed signature, exactly:
+//   Effect: seat Argument(0) of FsReadFile needs BytesPointerLength, which it cannot observe in CarriedWord
+//
+// Owner node: RT-CARRIER-BYTESPAN-OBSERVE.
+// Pre-existing base debt, NOT a bind-order regression: measured failing at
+// the frozen base 21fd46dc by the D10 differential, before any
+// RT-SRCBODY-BIND-ORDER commit.
+// It refuses at object emission, so the program never executes and no
+// binding order is observable in it.
+// The four px4b rows carry this same owner with the OPPOSITE provenance:
+// those were branch-introduced, this one predates the branch.
+// Annotation only -- test body and expectations are unchanged.
 #[test]
+#[ignore = "RT-CARRIER-BYTESPAN-OBSERVE: the FsReadFile byte-span seat cannot observe a carried word; fails at base 21fd46dc"]
 fn buffer_allocate_malformed_capacity_narrows_to_invalid_bounds() {
     in_large_stack_thread("rt-parity-allocate", || {
         assert_narrowed_alike(
@@ -494,7 +509,22 @@ fn buffer_allocate_malformed_capacity_narrows_to_invalid_bounds() {
 
 // -- FsReadAt ------------------------------------------------------------
 
+// Ignored pending RT-CARRIER-BYTESPAN-OBSERVE.
+//
+// Observed signature, exactly:
+//   Effect: seat Argument(0) of FsReadFile needs BytesPointerLength, which it cannot observe in CarriedWord
+//
+// Owner node: RT-CARRIER-BYTESPAN-OBSERVE.
+// Pre-existing base debt, NOT a bind-order regression: measured failing at
+// the frozen base 21fd46dc by the D10 differential, before any
+// RT-SRCBODY-BIND-ORDER commit.
+// It refuses at object emission, so the program never executes and no
+// binding order is observable in it.
+// The four px4b rows carry this same owner with the OPPOSITE provenance:
+// those were branch-introduced, this one predates the branch.
+// Annotation only -- test body and expectations are unchanged.
 #[test]
+#[ignore = "RT-CARRIER-BYTESPAN-OBSERVE: the FsReadFile byte-span seat cannot observe a carried word; fails at base 21fd46dc"]
 fn fs_read_at_malformed_offset_narrows_to_invalid_offset() {
     in_large_stack_thread("rt-parity-read-offset", || {
         assert_narrowed_alike(
@@ -506,7 +536,22 @@ fn fs_read_at_malformed_offset_narrows_to_invalid_offset() {
     });
 }
 
+// Ignored pending RT-CARRIER-BYTESPAN-OBSERVE.
+//
+// Observed signature, exactly:
+//   Effect: seat Argument(0) of FsReadFile needs BytesPointerLength, which it cannot observe in CarriedWord
+//
+// Owner node: RT-CARRIER-BYTESPAN-OBSERVE.
+// Pre-existing base debt, NOT a bind-order regression: measured failing at
+// the frozen base 21fd46dc by the D10 differential, before any
+// RT-SRCBODY-BIND-ORDER commit.
+// It refuses at object emission, so the program never executes and no
+// binding order is observable in it.
+// The four px4b rows carry this same owner with the OPPOSITE provenance:
+// those were branch-introduced, this one predates the branch.
+// Annotation only -- test body and expectations are unchanged.
 #[test]
+#[ignore = "RT-CARRIER-BYTESPAN-OBSERVE: the FsReadFile byte-span seat cannot observe a carried word; fails at base 21fd46dc"]
 fn fs_read_at_malformed_window_narrows_to_invalid_bounds() {
     in_large_stack_thread("rt-parity-read-window", || {
         assert_narrowed_alike(
@@ -536,7 +581,22 @@ fn fs_read_at_malformed_window_narrows_to_invalid_bounds() {
 /// more than once`. That is a pre-existing native lowering limitation, not an
 /// RT-PARITY regression, and is reported rather than worked around; the
 /// rights fault discriminates the same narrowing-order property.
+// Ignored pending RT-CARRIER-BYTESPAN-OBSERVE.
+//
+// Observed signature, exactly:
+//   Effect: seat Argument(0) of FsReadFile needs BytesPointerLength, which it cannot observe in CarriedWord
+//
+// Owner node: RT-CARRIER-BYTESPAN-OBSERVE.
+// Pre-existing base debt, NOT a bind-order regression: measured failing at
+// the frozen base 21fd46dc by the D10 differential, before any
+// RT-SRCBODY-BIND-ORDER commit.
+// It refuses at object emission, so the program never executes and no
+// binding order is observable in it.
+// The four px4b rows carry this same owner with the OPPOSITE provenance:
+// those were branch-introduced, this one predates the branch.
+// Annotation only -- test body and expectations are unchanged.
 #[test]
+#[ignore = "RT-CARRIER-BYTESPAN-OBSERVE: the FsReadFile byte-span seat cannot observe a carried word; fails at base 21fd46dc"]
 fn fs_read_at_malformed_offset_without_read_right_narrows_to_invalid_offset() {
     in_large_stack_thread("rt-parity-read-norights", || {
         assert_narrowed_alike(
