@@ -17,6 +17,11 @@ description = "Runtime crate — production content-addressed value store (K3)"
 [lib]
 crate-type = ["rlib", "staticlib"]
 
+# `AC-10`'s evasion probe is gated on a cfg rather than a feature so that no
+# `--all-features` build can ever turn a deliberately-uncompilable block on.
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(ken_ac10_evasion_probe)'] }
+
 [features]
 px8-ds-test-support = []
 
