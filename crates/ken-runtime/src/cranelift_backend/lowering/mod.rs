@@ -362,6 +362,17 @@ enum EffectSeatDispatchMutation {
     /// real message. A mutation that stubbed the observer instead would
     /// manufacture a message that merely resembled the original.
     RemoveCarriedByteSpanAvailability,
+    /// Force the byte-span observer's outcome to `1` — a well-formed span that
+    /// failed a bounds rule — at the point the lowering reads it.
+    ///
+    /// It injects AFTER the observer boundary on purpose. It is not a claim
+    /// that any rig witnesses `D3` producing this status; it isolates the
+    /// propagation layer between the observer and the program, which is the
+    /// only layer these controls are about.
+    ForceByteSpanOutcomeBounds,
+    /// The same injection for outcome `2` — a word that never denoted a
+    /// viewable byte span.
+    ForceByteSpanOutcomeNotASpan,
 }
 
 #[cfg(test)]
@@ -11196,6 +11207,15 @@ impl EffectSeatLedger {
     }
 }
 
+/// The `IoErrorIdentityV1::Other` discriminator, as `io_error_tag`
+/// (`ken-host/src/abi_v1.rs`) encodes it: `(payload as u32 as u64) << 32 | 11`.
+///
+/// It is the only `IOError` variant carrying an integer whose meaning is its
+/// payload rather than its discriminator, which is what lets a synthesized
+/// pre-dispatch refusal be represented on an `IOError` surface without minting
+/// a constructor the host would never produce.
+const IO_ERROR_OTHER_DISCRIMINATOR: i64 = 11;
+
 /// `ResourceErrorV1::MalformedResource`, as the wire reply's `detail` field
 /// spells it (`ken-host/src/abi_v1.rs`).
 ///
@@ -11227,10 +11247,19 @@ const RESOURCE_ERROR_INVALID_BOUNDS: i64 = 7;
 /// `refusal` is the one asymmetry, and it is not an accident of the encoding: a
 /// SPECIALIZED template was decided at compile time, so it has no run-time way
 /// to fail. A CARRIED word is decided at run time by the helper's guards, so it
-/// carries `Some((invalid, detail))` — the predicate and the exact
-/// `ResourceErrorV1` code to synthesize. Folding it into the existing
-/// narrow-failure lane is what makes a refusal a typed pre-dispatch reply with
-/// **zero host dispatch**, rather than a lowering error or a null read.
+/// carries `Some((invalid, resource_code))` — the predicate, and which of the
+/// two refusals it is. Folding that into the existing narrow-failure lane is
+/// what makes a refusal a typed pre-dispatch reply with **zero host dispatch**,
+/// rather than a lowering error or a null read.
+///
+/// **The second element is a `ResourceErrorV1` CODE, not a finished `detail`,
+/// and the distinction is load-bearing.** It names *which* refusal occurred;
+/// how that becomes a value depends on the surface the operation declares, and
+/// only the caller knows that. An earlier revision returned a finished detail
+/// and wrote it straight to the reply, which put a raw resource code on an
+/// `IOError` surface — where `1` and `7` decode as `PermissionDenied` and
+/// `IsDirectory`. The refusal never reached Ken at all: the reply tag was
+/// rejected first and the whole compiled function failed generically.
 struct ObservedBytesSeat {
     pointer: cranelift_codegen::ir::Value,
     len: cranelift_codegen::ir::Value,
@@ -17157,12 +17186,26 @@ impl<'a> Lowering<'a> {
                 let word = *word;
                 let (pointer, len, outcome) =
                     self.observe_carried_bytes_span(builder, record, word)?;
+                #[cfg(test)]
+                let outcome = match effect_seat_dispatch_mutation() {
+                    EffectSeatDispatchMutation::ForceByteSpanOutcomeBounds => {
+                        builder.ins().iconst(types::I64, 1)
+                    }
+                    EffectSeatDispatchMutation::ForceByteSpanOutcomeNotASpan => {
+                        builder.ins().iconst(types::I64, 2)
+                    }
+                    _ => outcome,
+                };
                 // The three-valued outcome is preserved ACROSS this boundary
                 // rather than collapsed into one failure: outcome 1 and outcome
                 // 2 select different `ResourceErrorV1` codes, so a program can
                 // still tell "a real span whose extent is inadmissible" from
                 // "this word was never a viewable span". See the observer's doc
                 // for what outcome 2 itself already merges.
+                //
+                // The code is handed UP rather than encoded here, so the arm
+                // that knows the operation's declared error surface is the one
+                // that decides how it is represented on it.
                 let invalid = builder.ins().icmp_imm(IntCC::NotEqual, outcome, 0);
                 let bounds = builder.ins().icmp_imm(IntCC::Equal, outcome, 1);
                 let out_of_bounds = builder
@@ -17171,11 +17214,11 @@ impl<'a> Lowering<'a> {
                 let malformed = builder
                     .ins()
                     .iconst(types::I64, RESOURCE_ERROR_MALFORMED_RESOURCE);
-                let detail = builder.ins().select(bounds, out_of_bounds, malformed);
+                let resource_code = builder.ins().select(bounds, out_of_bounds, malformed);
                 Ok(ObservedBytesSeat {
                     pointer,
                     len,
-                    refusal: Some((invalid, detail)),
+                    refusal: Some((invalid, resource_code)),
                 })
             }
         }
@@ -17374,10 +17417,17 @@ impl<'a> Lowering<'a> {
     /// ⇒ **What `D5` does NOT collapse is outcome `1` against outcome `2`.**
     /// Those two select *different* reply codes
     /// ([`RESOURCE_ERROR_INVALID_BOUNDS`] and
-    /// [`RESOURCE_ERROR_MALFORMED_RESOURCE`]), so the separation `D3` built the
-    /// bounds status for survives into the program. **If a later node needs an
-    /// escape refusal diagnosed distinctly, the information is gone by this
-    /// point and the change belongs in `D3`'s status set, not here.**
+    /// [`RESOURCE_ERROR_MALFORMED_RESOURCE`]), each reaching the program as the
+    /// payload of an `IOError::Other` on the operation's own declared error
+    /// surface, so the separation `D3` built the bounds status for survives all
+    /// the way into a value a Ken program can match on. That last clause is
+    /// witnessed, not asserted:
+    /// `d5_the_two_byte_span_refusals_are_distinct_typed_values_without_dispatch`
+    /// observes the two codes and reddens if either collapses.
+    ///
+    /// **If a later node needs an escape refusal diagnosed distinctly, the
+    /// information is gone by this point and the change belongs in `D3`'s status
+    /// set, not here.**
     ///
     /// ⚠ **ADDRESS-STABILITY CONTRACT (`AC-11`, Architect `dec_5zjh9675253pj`).**
     ///

@@ -13342,7 +13342,44 @@ impl<'a> Lowering<'a> {
             wire.request_size,
             wire.request_align_shift,
         ));
+        // The two reply surfaces a synthesized pre-dispatch failure can land on,
+        // materialized once so no arm re-derives one.
+        let resource_error_reply_tag = builder
+            .ins()
+            .iconst(types::I64, wire.reply_resource_error_tag as i64);
+        let error_reply_tag = builder
+            .ins()
+            .iconst(types::I64, wire.reply_error_tag as i64);
+        // Wrap a `ResourceErrorV1` code as `IOError::Other <code>`, in the exact
+        // encoding `ken_host::abi_v1::io_error_tag` uses: the payload in the
+        // high 32 bits, discriminator `11` in the low byte, which the decoder
+        // below recovers with `sshr_imm(detail, 32)`.
+        //
+        // `ConsoleWrite` and `FsWriteFile` declare `IOError` surfaces, so their
+        // `detail` is read as an `IOError` discriminator. Handing them a RAW
+        // resource code would silently reinterpret `1` and `7` as
+        // `PermissionDenied` and `IsDirectory` — two real, wrong errors. `Other`
+        // is the one variant that carries an integer whose meaning is the
+        // payload rather than the discriminator, which is why the observer's
+        // refusal can be represented on this surface at all without inventing a
+        // constructor.
+        let io_error_other_detail =
+            |builder: &mut FunctionBuilder<'_>, code: cranelift_codegen::ir::Value| {
+                let payload = builder.ins().ishl_imm(code, 32);
+                builder
+                    .ins()
+                    .bor_imm(payload, IO_ERROR_OTHER_DISCRIMINATOR)
+            };
+        // `(invalid, reply tag, detail)`. The TAG is carried rather than assumed
+        // because a synthesized pre-dispatch failure must land on the surface
+        // the operation actually declares: the resource operations accept
+        // `reply_resource_error_tag`, and `ConsoleWrite` / `FsWriteFile` accept
+        // only `success` or `reply_error_tag`. Writing the wrong one is not a
+        // mis-labelled error — `require_one_of_i64` refuses the reply outright
+        // and the whole compiled function fails generically, which is the defect
+        // this triple exists to make unspellable.
         let mut narrow_failure: Option<(
+            cranelift_codegen::ir::Value,
             cranelift_codegen::ir::Value,
             cranelift_codegen::ir::Value,
         )> = None;
@@ -13354,16 +13391,19 @@ impl<'a> Lowering<'a> {
         // constant, because a byte-span refusal chooses its `ResourceErrorV1`
         // code at run time from the observer's outcome. Every pre-existing
         // caller still passes a constant and is unchanged in meaning.
-        let mut record_narrow_failure =
-            |builder: &mut FunctionBuilder<'_>, invalid, detail: cranelift_codegen::ir::Value| {
-                narrow_failure = Some(match narrow_failure.take() {
-                    Some((prior_invalid, prior_detail)) => (
-                        builder.ins().bor(prior_invalid, invalid),
-                        builder.ins().select(prior_invalid, prior_detail, detail),
-                    ),
-                    None => (invalid, detail),
-                });
-            };
+        let mut record_narrow_failure = |builder: &mut FunctionBuilder<'_>,
+                                         invalid,
+                                         tag: cranelift_codegen::ir::Value,
+                                         detail: cranelift_codegen::ir::Value| {
+            narrow_failure = Some(match narrow_failure.take() {
+                Some((prior_invalid, prior_tag, prior_detail)) => (
+                    builder.ins().bor(prior_invalid, invalid),
+                    builder.ins().select(prior_invalid, prior_tag, tag),
+                    builder.ins().select(prior_invalid, prior_detail, detail),
+                ),
+                None => (invalid, tag, detail),
+            });
+        };
         match operation {
             ken_host::HostOpV1::ConsoleWrite
             | ken_host::HostOpV1::ConsoleFlush
@@ -13384,8 +13424,9 @@ impl<'a> Lowering<'a> {
                     .stack_store(stream, request, request_offset(0));
                 if operation == ken_host::HostOpV1::ConsoleWrite {
                     let span = self.wire_bytes_seat(builder, &seats, SEAT_1)?;
-                    if let Some((invalid, detail)) = span.refusal {
-                        record_narrow_failure(builder, invalid, detail);
+                    if let Some((invalid, resource_code)) = span.refusal {
+                        let detail = io_error_other_detail(builder, resource_code);
+                        record_narrow_failure(builder, invalid, error_reply_tag, detail);
                     }
                     builder
                         .ins()
@@ -13428,8 +13469,9 @@ impl<'a> Lowering<'a> {
                 };
                 builder.ins().stack_store(token, request, request_offset(0));
                 let path = self.wire_bytes_seat(builder, &seats, SEAT_0)?;
-                if let Some((invalid, detail)) = path.refusal {
-                    record_narrow_failure(builder, invalid, detail);
+                if let Some((invalid, resource_code)) = path.refusal {
+                    let detail = io_error_other_detail(builder, resource_code);
+                    record_narrow_failure(builder, invalid, error_reply_tag, detail);
                 }
                 builder
                     .ins()
@@ -13442,8 +13484,9 @@ impl<'a> Lowering<'a> {
                         unsupported("Effect", "FS.WriteFile has a malformed CreatePolicy")
                     })?;
                     let contents = self.wire_bytes_seat(builder, &seats, SEAT_2)?;
-                    if let Some((invalid, detail)) = contents.refusal {
-                        record_narrow_failure(builder, invalid, detail);
+                    if let Some((invalid, resource_code)) = contents.refusal {
+                        let detail = io_error_other_detail(builder, resource_code);
+                        record_narrow_failure(builder, invalid, error_reply_tag, detail);
                     }
                     let policy = builder.ins().iconst(types::I64, policy);
                     builder
@@ -13547,7 +13590,7 @@ impl<'a> Lowering<'a> {
                     0,
                 );
                 let detail = builder.ins().iconst(types::I64, RESOURCE_ERROR_INVALID_BOUNDS);
-                record_narrow_failure(builder, invalid, detail);
+                record_narrow_failure(builder, invalid, resource_error_reply_tag, detail);
                 builder
                     .ins()
                     .stack_store(capacity, request, request_offset(0));
@@ -13572,7 +13615,7 @@ impl<'a> Lowering<'a> {
                     0,
                 );
                 let detail = builder.ins().iconst(types::I64, RESOURCE_ERROR_INVALID_BOUNDS);
-                record_narrow_failure(builder, invalid, detail);
+                record_narrow_failure(builder, invalid, resource_error_reply_tag, detail);
                 // PX8-SPAN-PROV: trailing `span_origin` acquisition token.
                 let span_origin = self.lower_buffer_freeze_resource_seat(
                     builder,
@@ -13629,7 +13672,7 @@ impl<'a> Lowering<'a> {
                     0,
                 );
                 let detail = builder.ins().iconst(types::I64, RESOURCE_ERROR_INVALID_OFFSET);
-                record_narrow_failure(builder, file_offset_invalid, detail);
+                record_narrow_failure(builder, file_offset_invalid, resource_error_reply_tag, detail);
                 let bounds_valid = builder.ins().band(buffer_start_valid, length_valid);
                 let bounds_invalid = builder.ins().icmp_imm(
                     cranelift_codegen::ir::condcodes::IntCC::Equal,
@@ -13637,7 +13680,7 @@ impl<'a> Lowering<'a> {
                     0,
                 );
                 let detail = builder.ins().iconst(types::I64, RESOURCE_ERROR_INVALID_BOUNDS);
-                record_narrow_failure(builder, bounds_invalid, detail);
+                record_narrow_failure(builder, bounds_invalid, resource_error_reply_tag, detail);
                 if operation == ken_host::HostOpV1::FsWriteAt {
                     // PX8-SPAN-PROV: `FsWriteAt` carries the trailing
                     // `span_origin` acquisition token; `FsReadAt` mints the span
@@ -13680,7 +13723,7 @@ impl<'a> Lowering<'a> {
             .ins()
             .iconst(types::I64, i64::from(wire.request_size));
         let reply_pointer = builder.ins().stack_addr(pointer_type, reply, 0);
-        if let Some((invalid, detail)) = narrow_failure {
+        if let Some((invalid, failure_tag, detail)) = narrow_failure {
             let dispatch = builder.create_block();
             let synthesize = builder.create_block();
             let decoded = builder.create_block();
@@ -13724,11 +13767,14 @@ impl<'a> Lowering<'a> {
                     i32::try_from(offset).expect("reply field offset is u32"),
                 );
             }
-            let resource_error_tag = builder
-                .ins()
-                .iconst(types::I64, wire.reply_resource_error_tag as i64);
+            // The tag comes from whoever recorded the failure, because only they
+            // know which surface this operation declares. Hardcoding the
+            // resource-error tag here is what made a byte-span refusal on
+            // `ConsoleWrite` / `FsWriteFile` fail `require_one_of_i64` below and
+            // collapse into the generic compiled-function failure instead of
+            // reaching Ken as a value.
             builder.ins().stack_store(
-                resource_error_tag,
+                failure_tag,
                 reply,
                 i32::try_from(wire.reply_tag_offset).expect("reply tag offset is u32"),
             );

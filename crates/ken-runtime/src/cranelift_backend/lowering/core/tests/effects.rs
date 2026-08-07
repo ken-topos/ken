@@ -2538,6 +2538,91 @@ extern "C" fn capacity_probe_dispatch(
     0
 }
 
+/// A dispatch probe for `ConsoleWrite`, for the `D5` transport control.
+///
+/// It exists because `capacity_probe_dispatch` returns `-1` for every operation
+/// that is not `BufferAllocate` and does so BEFORE incrementing `calls` — so on
+/// a Console program that probe's `calls == 0` means "no BufferAllocate
+/// dispatch", not "no dispatch", and the run fails at `require_i64(status, 0)`
+/// for a reason that has nothing to do with the code under test. Counting every
+/// call, whatever the operation, is what makes a zero here mean zero.
+#[cfg(test)]
+#[derive(Debug, Default, PartialEq, Eq)]
+struct ConsoleWireProbe {
+    calls: usize,
+}
+
+#[cfg(test)]
+extern "C" fn console_probe_dispatch(
+    host_context: *const std::ffi::c_void,
+    operation: i64,
+    _request: *const std::ffi::c_void,
+    _request_size: i64,
+    reply: *mut std::ffi::c_void,
+) -> i64 {
+    // SAFETY: the direct context points at the live probe for the duration of
+    // the compiled call and is never retained by the dispatcher.
+    let probe = unsafe { &mut *(host_context.cast_mut().cast::<ConsoleWireProbe>()) };
+    // Counted FIRST, and for every operation. A dispatch that happened and was
+    // then rejected is still a dispatch.
+    probe.calls += 1;
+    if operation != ken_host::HostOpV1::ConsoleWrite as i64 {
+        return -1;
+    }
+    let wire = ken_host::host_effect_wire_layout_v1(ken_host::HostOpV1::ConsoleWrite)
+        .expect("ConsoleWrite has a generated wire layout");
+    // SAFETY: the reply pointer names the target-C-sized stack record the
+    // compiled caller supplied for this operation.
+    unsafe { std::ptr::write_bytes(reply.cast::<u8>(), 0, wire.reply_size as usize) };
+    // SAFETY: a generated, aligned u64 field within the zeroed reply above.
+    unsafe {
+        *(reply
+            .cast::<u8>()
+            .add(wire.reply_tag_offset as usize)
+            .cast::<u64>()) = wire.reply_unit_tag
+    };
+    0
+}
+
+#[cfg(test)]
+fn run_console_fixture(
+    build: &dyn Fn(&crate::NativeProcessSymbols) -> RuntimeExpr,
+) -> Result<(i64, ConsoleWireProbe), CraneliftBackendError> {
+    let isa = native_isa().unwrap();
+    let mut builder = JITBuilder::with_isa(isa, default_libcall_names());
+    builder.symbol("ken_host_dispatch_v1", console_probe_dispatch as *const u8);
+    let symbols = crate::NativeProcessSymbols::legacy_prelude();
+    let compiled = compile_expr_into_module(
+        JITModule::new(builder),
+        "d5_console_transport",
+        Linkage::Local,
+        &build(&symbols),
+        &NativeSeedEnvironment::empty(),
+        BTreeMap::new(),
+        None,
+        true,
+        Some(&symbols),
+        Some(crate::cranelift_backend::test_support::test_only_distinguished_root_join_plan()),
+        None,
+    )?;
+    let input = BorrowedFixtureValue {
+        kind: 1,
+        tag: 0,
+        data: std::ptr::null(),
+        len: 0,
+    };
+    let mut probe = ConsoleWireProbe::default();
+    let invocation = RootIngressFixture {
+        process_input: &input,
+        host_context: (&mut probe as *mut ConsoleWireProbe).cast(),
+        capability: 0,
+    };
+    let (_, result) = compiled
+        .run(Some((&invocation as *const RootIngressFixture).cast()))
+        .unwrap();
+    Ok((result.unwrap(), probe))
+}
+
 /// `Err(InvalidBounds) -> 71`, `Ok(_) -> 41`, anything else traps.
 ///
 /// ⛔ Both outcomes are *values*, not one value and one trap. A fixture that
@@ -3293,10 +3378,10 @@ fn ac_4_byte_span_seats_are_activated_exactly_where_d5_proved_them() {
 /// run once.**
 ///
 /// **MEASURED:** one carried-`Bytes` program at `ConsoleWrite`'s span seat
-/// lowers unmutated, and refuses under
-/// [`EffectSeatDispatchMutation::RemoveCarriedByteSpanAvailability`] with the
-/// exact pre-`D5` message — that seat, that operation, that need, that observed
-/// phase.
+/// lowers, dispatches once and reaches its success value unmutated, and refuses
+/// under [`EffectSeatDispatchMutation::RemoveCarriedByteSpanAvailability`] with
+/// the exact pre-`D5` message — that seat, that operation, that need, that
+/// observed phase.
 /// **CLAIMED:** `D5`'s activation of `(ConsoleWrite, Argument(1))` is what makes
 /// this program compile.
 /// **THE GAP:** this is DETECTOR-side. It proves the row depends on the
@@ -3310,30 +3395,28 @@ fn ac_4_byte_span_seats_are_activated_exactly_where_d5_proved_them() {
 #[test]
 fn ac_2_withdrawing_the_byte_span_availability_restores_the_exact_original_refusal() {
     let carried_console_write = || {
-        run_capacity_fixture(&|_symbols| RuntimeExpr::Call {
+        run_console_fixture(&|symbols| RuntimeExpr::Call {
             callee: Box::new(RuntimeExpr::LexicalClosure {
                 captures: Vec::new(),
                 params: vec!["payload".to_string()],
-                body: Box::new(RuntimeExpr::Effect {
-                    family: "Console".to_string(),
-                    operation: ken_host::HostOpV1::ConsoleWrite,
-                    capability: None,
-                    args: vec![
-                        RuntimeExpr::Construct {
-                            constructor: "ctor:prelude::Stream::Stdout".to_string(),
-                            args: Vec::new(),
-                        },
-                        RuntimeExpr::Var(0),
-                    ],
-                }),
+                body: Box::new(console_outcome_fixture(symbols, RuntimeExpr::Var(0))),
             }),
             args: vec![RuntimeExpr::Value(RuntimeValue::Bytes(b"probe".to_vec()))],
         })
     };
 
+    // The green side RUNS, rather than merely lowering. An earlier draft used
+    // the capacity rig, whose probe rejects every non-`BufferAllocate`
+    // operation, so its `Ok` carried a `-1` result that `.expect` never looked
+    // at -- a green side that proved only that lowering succeeded.
     set_effect_seat_dispatch_mutation(EffectSeatDispatchMutation::Exact);
-    carried_console_write()
+    let (accepted, accepted_probe) = carried_console_write()
         .expect("`D5`: a carried byte span lowers at the seat `D5` activated");
+    assert_eq!(
+        (accepted, accepted_probe.calls),
+        (41, 1),
+        "`D5`: and the program dispatches once and reaches its success value"
+    );
 
     set_effect_seat_dispatch_mutation(
         EffectSeatDispatchMutation::RemoveCarriedByteSpanAvailability,
@@ -3350,5 +3433,140 @@ fn ac_2_withdrawing_the_byte_span_availability_restores_the_exact_original_refus
         ),
         "the restored refusal must be the original one, whole: operation, slot, \
          need and observed phase; got {reason}"
+    );
+}
+
+/// The `ConsoleWrite` analogue of [`capacity_outcome_fixture`]: it MATCHES on
+/// the host result so both branches become an `Int` the compiled function can
+/// return. A fixture returning the raw `HostResult` cannot be observed at all —
+/// the value is not an `i64` — which is why the first draft of the control below
+/// read `-1` on every run including its own baseline.
+///
+/// The error branch destructures `IOError::Other <code>` and returns the CODE,
+/// so a refusal is observed as the exact resource code that produced it rather
+/// than as "some error".
+#[cfg(test)]
+fn console_outcome_fixture(
+    symbols: &crate::NativeProcessSymbols,
+    payload: RuntimeExpr,
+) -> RuntimeExpr {
+    RuntimeExpr::Match {
+        scrutinee: Box::new(RuntimeExpr::Effect {
+            family: "Console".to_string(),
+            operation: ken_host::HostOpV1::ConsoleWrite,
+            capability: None,
+            args: vec![
+                RuntimeExpr::Construct {
+                    constructor: "ctor:prelude::Stream::Stdout".to_string(),
+                    args: Vec::new(),
+                },
+                payload,
+            ],
+        }),
+        cases: vec![
+            crate::RuntimeMatchCase {
+                constructor: symbols.result_err.clone(),
+                binders: 1,
+                body: RuntimeExpr::Match {
+                    scrutinee: Box::new(RuntimeExpr::Var(0)),
+                    cases: vec![crate::RuntimeMatchCase {
+                        // `IOError::Other`, the last of the twelve.
+                        constructor: symbols.io_errors[11].clone(),
+                        binders: 1,
+                        body: px8n_failure(symbols, RuntimeExpr::Var(0)),
+                    }],
+                    default: RuntimeTrap {
+                        code: RuntimeTrapCode::PatternMatchFailure,
+                        message: "console error was not IOError::Other".to_string(),
+                    },
+                },
+            },
+            crate::RuntimeMatchCase {
+                constructor: symbols.result_ok.clone(),
+                binders: 1,
+                body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int(41.into()))),
+            },
+        ],
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "console result default".to_string(),
+        },
+    }
+}
+
+/// **`RT-CARRIER-BYTESPAN-OBSERVE` `D5` — the observer's two refusals reach the
+/// program as TWO DISTINCT TYPED VALUES, with zero host dispatch.**
+///
+/// **MEASURED:** with the byte-span outcome forced to `1` and then to `2` after
+/// the observer boundary, one carried-`Bytes` `ConsoleWrite` program returns the
+/// two resource codes as `IOError::Other` payloads, the wire probe records zero
+/// dispatches in both runs, and the unmutated program dispatches once and
+/// succeeds.
+/// **CLAIMED:** the separation `D3` built the bounds status for survives the
+/// lowering layer and becomes a value a Ken program can discriminate.
+/// **THE GAP:** this isolates the PROPAGATION layer. It is not evidence that
+/// `D3` ever produces outcome `1` from a real out-of-bounds node — that witness
+/// is `D6`'s and is still owed. Forcing the outcome is what lets this control
+/// exist without one.
+///
+/// **Why this control had to be written.** The first `D5` candidate mapped both
+/// refusals onto `reply_resource_error_tag`, which `ConsoleWrite` and
+/// `FsWriteFile` do not accept, so `require_one_of_i64` rejected the reply and
+/// both outcomes collapsed into the generic compiled-function failure. Zero host
+/// dispatch still held, so the honest-looking half of the claim was true while
+/// the visible half was not. `AC-2`'s valid-`Bytes` control cannot see this,
+/// because it never makes the observer refuse.
+#[test]
+fn d5_the_two_byte_span_refusals_are_distinct_typed_values_without_dispatch() {
+    let carried = || {
+        run_console_fixture(&|symbols| RuntimeExpr::Call {
+            callee: Box::new(RuntimeExpr::LexicalClosure {
+                captures: Vec::new(),
+                params: vec!["payload".to_string()],
+                body: Box::new(console_outcome_fixture(symbols, RuntimeExpr::Var(0))),
+            }),
+            args: vec![RuntimeExpr::Value(RuntimeValue::Bytes(b"probe".to_vec()))],
+        })
+    };
+    let run = |mutation| {
+        set_effect_seat_dispatch_mutation(mutation);
+        let outcome = carried();
+        set_effect_seat_dispatch_mutation(EffectSeatDispatchMutation::Exact);
+        outcome.expect("the fixture lowers under every outcome")
+    };
+
+    // The BASELINE, and it is a required control rather than scene-setting.
+    // Without it the two forced runs could differ from a baseline that was
+    // already broken, and the first draft of this test did exactly that.
+    let (accepted, accepted_probe) = run(EffectSeatDispatchMutation::Exact);
+    assert_eq!(
+        (accepted, accepted_probe.calls),
+        (41, 1),
+        "unmutated: the program must dispatch once and reach its success value"
+    );
+
+    let (bounds, bounds_probe) = run(EffectSeatDispatchMutation::ForceByteSpanOutcomeBounds);
+    let (not_a_span, not_a_span_probe) =
+        run(EffectSeatDispatchMutation::ForceByteSpanOutcomeNotASpan);
+
+    // Zero host dispatch: the refusal is decided and answered before the wire.
+    assert_eq!(
+        (bounds_probe.calls, not_a_span_probe.calls),
+        (0, 0),
+        "a byte-span refusal must be answered with no host dispatch at all"
+    );
+    // The exact codes, as `IOError::Other` payloads. Asserted by value rather
+    // than by inequality: a repair that made the two differ but carried the
+    // wrong meanings would pass an inequality and be wrong.
+    assert_eq!(
+        (bounds, not_a_span),
+        (RESOURCE_ERROR_INVALID_BOUNDS, RESOURCE_ERROR_MALFORMED_RESOURCE),
+        "outcome 1 must arrive as InvalidBounds and outcome 2 as MalformedResource"
+    );
+    // And neither is the generic compiled-function failure, which is what a
+    // reply the operation does not accept collapses into.
+    assert!(
+        bounds != -1 && not_a_span != -1,
+        "a refusal collapsed into the generic failure instead of reaching a value"
     );
 }
