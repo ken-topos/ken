@@ -33,7 +33,7 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-07 ~19:1xZ · `D3` in flight; operator set the sequence
+## LIVE — 2026-08-07 ~19:3xZ · `D3` merged, `D4` released; operator set the sequence
 
 > ### OPERATOR SEQUENCING RULING — 2026-08-07, verbatim intent. THIS GOVERNS.
 >
@@ -64,52 +64,48 @@
 
 > ### NEXT ACTION ON RESUME — read this line first
 >
-> **`D3` IS MID-PUBLISH. Finish it before anything else.** Exact
-> `960ea370` on `wp/RT-CARRIER-BYTESPAN-OBSERVE-d3-emitted-observer`, launched
-> background at ~19:0xZ. **On resume: read the publisher output, then owe M6
-> (blob-verify both paths), M8 (Adversary notice — this carries CODE), M9
-> (mention `runtime-leader` to release `D4`).** If the publisher died, re-run
-> it; it is idempotent ("created or found").
+> **NOTHING IS OWED BY ME. `D4` is with the ring; wait for its handoff.**
+> Released at `evt_36w5kphnanrtp` on a branch cut from `origin/main`
+> **`7c2587e6`**. When the exact SHA comes back, run the merge procedure from
+> the file, not from memory.
 >
-> `dec_2q5kqyt5fvkr2` was **already resolved by the leader** — correct routing,
-> the first time of three. Both votes verified from the objects (QA
-> `evt_6nzf1h5hys8tp`, Architect `evt_4ppb34h7t3vra`). Intersection re-run at
-> publish against `da19fe7e`: **empty**, conflict-free, no rebase.
+> **`D3` MERGED — PR #1542**, squashed from exact `960ea370` to `main`
+> `7c2587e6`. M6 done: **both paths blob-verified on `main`** —
+> `boundary_value_clif.rs` `ed70838d`, `lowering/core/tests/control.rs`
+> `305657bc`, both MATCH. M8 sent (`evt_7cp3nvh9mnx57`, this carried code). M9
+> sent. Publisher gate confirmed the merge result onto `da19fe7e` built cleanly,
+> base unchanged; no rebase, so the exact approved object landed.
 >
-> **`main` was `da19fe7e` at launch.** `D0`, `D1`, `D2` merged; `D2` landed as
-> **PR #1540** from `04e71a6e`, all three lowering paths blob-verified. **The
-> SIGSEGV that held `D2` is fixed and gone.**
+> `dec_2q5kqyt5fvkr2` arrived **already resolved by the leader** — correct
+> routing, and the **third request in a row done right** after two mis-routes.
+> Both votes verified from the objects (QA `evt_6nzf1h5hys8tp`, Architect
+> `evt_4ppb34h7t3vra`).
 >
-> **`AC-10` IS NOT DISCHARGED BY `D3` AND MUST NOT BE READ AS CLOSED.** I added
-> it (`da19fe7e`, PR #1541) from Adversary `evt_5xqw6xsbm4v8b`: make the
+> **`AC-10` IS NOT DISCHARGED AND MUST NOT BE READ AS CLOSED. IT IS `D4`'s.**
+> I added it (`da19fe7e`, PR #1541) from Adversary `evt_5xqw6xsbm4v8b`: make the
 > `ResponseBytes`-validity invariant structural rather than held by two call
-> sites and a comment. `D3`'s base predates it and the candidate touches no
-> `Lowered`. **It is `D4`'s.** Stated in **PR #1542**'s body (the `D3` publish)
-> so the ring cannot miss it.
+> sites and a comment. The Architect's `D3` approval says so in its own scope
+> carry, it is stated in **PR #1542**'s body, and the `D4` release restates it
+> with the obstacle. **Three independent places, because this is exactly the
+> shape that gets read as closed by a merge that did not close it.**
 >
-> **OPEN, WITH THE OPERATOR — do not act unilaterally: close stale PR #1528?**
-> Asked, not yet answered. It is the **only** open PR. Head `21fd46dc`,
-> unmerged since 2026-08-06, and **its content is already on `main`** (doc
-> frames byte-identical; `RecursiveDescentResidual` 27/27,
-> `TransparentDeclarationClosure` 6/6 — it rode in with `7ca5cfc0`, whose range
-> starts at that SHA). **It is now a revert hazard:** merge-base `e6b4a13b`,
-> and the intersection is **all 37 of its files** while `main` has changed 100.
-> Disjoint hunks in a shared file union **silently**. Its `+62,576/-13,661` is
-> diff-against-stale-base, not new work. **I do not know why it never merged**
-> — zero checks and `mergeable: UNKNOWN`, consistent with expiry on a stale
-> branch, but I could not distinguish that from an interrupted publisher run.
+> **`D3` left three axes guarded with NO REACHING WITNESS**, reported rather
+> than counted as laws: wrong-handle-tag (no lawful tag/class pair admits it),
+> owner, and extent (no production producer mints either input). `D4` consumes
+> that helper — **those three are defence in depth, not established behaviour to
+> lean on.**
 >
-> **`RT-CARRIER-BYTESPAN-OBSERVE` remains `active` — `D3` through `D6` are
-> unbuilt.** `D2` was a partial-WP merge of accepted work; the node is not
-> closed and must not be flipped `merged`. **The next move is the ring's:**
-> `runtime-leader` was told to release `D3` cut from `4f9f0987`
-> (`evt_491qrgc0mf7qn`, thread `thr_2w9jmt85jrphw`). Wait for it.
+> **`RT-CARRIER-BYTESPAN-OBSERVE` remains `active` — `D4`, `D5`, `D6` are
+> unbuilt.** `D2` and `D3` were partial-WP merges of accepted work; the node is
+> not closed and **must not be flipped `merged`** — M7 applied mechanically here
+> would close a node with three deliverables unbuilt.
 >
-> **Six publishes landed this window, all blob-verified:** **#1535**
+> **Eight publishes landed this window, all blob-verified:** **#1535**
 > (RT-WORKER-FIXTURE-DECODE framed), **#1536** (the `D1` census, a ring
 > candidate I resolved under §14a), **#1537** (`D1` currency banner), **#1538**
 > (RT-CARRIER-PRODUCER-OCCURRENCE framed), **#1539** (CI-IGNORED-SWEEP framed),
-> **#1540** (`D2`, the one code merge — M8 notice sent, `evt_602ay3mrrt9r2`).
+> **#1540** (`D2` code — M8 `evt_602ay3mrrt9r2`), **#1541** (the `AC-10`
+> amendment), **#1542** (`D3` code — M8 `evt_7cp3nvh9mnx57`). **Zero open PRs.**
 >
 > **FRAMING DEBT IS CLEARED.** Twelve nodes are `ready` with a written frame, so
 > stay-one-ahead is satisfied with room. There is no framing job queued.
