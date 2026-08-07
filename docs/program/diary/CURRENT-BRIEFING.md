@@ -33,57 +33,102 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-07 ~14:2xZ · Runtime EXECUTING RT-CARRIER-BYTESPAN-OBSERVE
+## LIVE — 2026-08-07 ~17:3xZ · Runtime EXECUTING RT-CARRIER-BYTESPAN-OBSERVE `D0`
 
 > ### NEXT ACTION ON RESUME — read this line first
 >
 > **The Runtime ring is WORKING and nothing is with me or with the operator.**
-> `main` is `89916fc1`. Two doc-only publishes landed this window (PR #1533
-> release + corrections, PR #1534 Librarian as-built), both verified
-> blob-identical on `origin/main`.
+> `main` is `08deb691` (PR #1535, doc-only, four paths verified blob-identical).
 >
-> 1. **RT-CARRIER-BYTESPAN-OBSERVE is RELEASED and `active`.** Kick
->    `evt_7wg9j79tdkdep` is the thread anchor; base `9c41cb56`; leader
->    confirmed `Working`. Handoff gate was run on all three seats — leader and
->    QA showed `Context compacted`, implementer verified at ctx 0%.
+> 1. **THE FLEET RESTARTED at ~16:44-16:57Z** — all 28 seats reconnected. The
+>    Runtime ring re-oriented itself correctly and resumed: implementer on
+>    `wp/RT-CARRIER-BYTESPAN-OBSERVE-d0-census` at `9c41cb56`, measuring `D0`
+>    baselines; leader event-driven on the handoff it can name. **The restart
+>    cost the implementer its context, not its place.**
+> 2. **RE-ARM THE WATCHDOG — and note the restart is exactly what drops it.**
+>    `set_interval` is process-local and does not survive a compaction or an
+>    MCP reconnect. Armed at 900s this window. A backstop that silently fell
+>    over catches nothing and the failure is invisible.
+> 3. **RT-CARRIER-BYTESPAN-OBSERVE is RELEASED and `active`.** Kick
+>    `evt_7wg9j79tdkdep` is the thread anchor; base `9c41cb56`.
 >    **Do not re-release it and do not release a second ring.**
-> 2. **Fleet is still SINGLE-THREADED** (operator, 2026-08-07).
+> 4. **Fleet is still SINGLE-THREADED** (operator, 2026-08-07).
 >    `KERNEL-NESTED-IND` stays stood down despite a written frame and an idle
 >    kernel ring. **A posture, not an oversight — do not "fix" it.**
-> 3. **The next thing owed to me is the ring's own move**, not a Steward
->    action. Expect a `D0` baseline or a hard stop. Nine `ready` Runtime nodes
->    carry frames behind this one and nothing declares a `depends_on` edge to
->    it, so **no successor framing is owed** — the stay-one-ahead rule is
->    satisfied.
-> 4. **Framing debt, in priority order, and none of it is blocking:**
->    [[RT-WORKER-FIXTURE-DECODE]], [[RT-CARRIER-PRODUCER-OCCURRENCE]] and
->    [[CI-IGNORED-SWEEP]] are all `draft` with frames owed. All three now carry
->    substantial written inputs, so each is a frame-authoring job rather than an
->    investigation.
-> 5. **Four of RT-CARRIER-BYTESPAN-OBSERVE's fixed inputs were STALE and I
->    corrected them before releasing.** The load-bearing one: its `#[ignore]`
->    deliverable is **30 rows across ten files, not four**. Also corrected —
->    `FsChangeMode` was listed "not measured" and has three rows; both baselines
->    in 1c; and the false "fifth px4b row belongs to `RT-ENTRY-TRAP-254`" clause
->    (that node is `closed`/`superseded_by`, its row un-ignored by
->    `RT-SRCBODY-BIND-ORDER` `D4`).
-> 6. **`AC-5`'s target-redirect red is NOT discharged**, and the Adversary has
->    since raised the stakes on it — see the capture-order block below.
-> 7. **RE-ARM THE WATCHDOG.** `set_interval` is process-local and does **not**
->    survive a compaction or an MCP reconnect. Re-arm it as part of resuming,
->    before anything else — a scheduler whose backstop silently fell over
->    catches nothing, and the failure is invisible.
+> 5. **The next thing owed to me is the ring's own move.** Expect a `D0`
+>    baseline or a hard stop. Nothing declares a `depends_on` edge to the
+>    in-flight node, so stay-one-ahead is satisfied by construction.
+> 6. **[[RT-WORKER-FIXTURE-DECODE]] IS FRAMED — `ready`, size M**, frame at
+>    `docs/program/wp/RT-WORKER-FIXTURE-DECODE.md`, on `main`. Sequenced behind
+>    the in-flight node (same crate). **Framing it falsified two claims in its
+>    own node text** — see the block below; do not rebuild from the old text.
+> 7. **Framing debt remaining, neither blocking:**
+>    [[RT-CARRIER-PRODUCER-OCCURRENCE]] and [[CI-IGNORED-SWEEP]], both `draft`
+>    with substantial written inputs — frame-authoring jobs, not
+>    investigations.
 >
-> **State at the last checkpoint, so a stale read is detectable:** the ring cut
-> `wp/RT-CARRIER-BYTESPAN-OBSERVE-d0-census` from `9c41cb56`, the leader
-> assigned a delta-free `D0` census over all 30 owned rows, and the implementer
-> was running baselines. **If `origin/main` has moved past `89916fc1`, this
-> block is stale — trust the repository.**
+> **State at the last checkpoint, 2026-08-07 ~17:35Z:** `D0` handed back and
+> routed; **`D1` is with Runtime QA**; **`D2` is a bounded fork with the
+> Architect** — normalize invocation-owned sources into the measured persistent
+> lane, or authorize a new invocation-owned byte-span representation — and the
+> ring is **held on that ruling**. Thread `thr_2w9jmt85jrphw`.
+>
+> **STALENESS WARNING, AND READ THE DIRECTION.** The marker on this block used
+> to be *"if `origin/main` has moved past `08deb691`."* **That marker cannot
+> fire on ring progress**, because a ring advancing `D0`→`D1`→`D2` moves no
+> ref I can see — it merges nothing until the candidate lands. So the block
+> ages silently in exactly the window it is most read. ⇒ **Re-derive ring state
+> from `get_recent_context` on `thr_2w9jmt85jrphw` plus the three panes, never
+> from this paragraph.** A moved `main` proves staleness; an unmoved `main`
+> proves nothing.
+
+### OPEN, MINE: M8's doc-only discriminator contradicts the Adversary's scope
+
+**Surfaced 2026-08-07 by `evt_5r0hgy45v1r8x`** — the Adversary hunted the
+`89916fc1` merge off its own ground-truth read and opened with *"no merge
+notification was sent to me for this one."* It was right that none was sent.
+
+**Both of my rules fired and they disagree.** `§10⁻a`'s scope table puts
+**`library/` inside** the Adversary's surface. `merge-procedure.md` M8 says
+doc-only merges do not concern it and makes **`--doc-only` the discriminator**.
+A `library/`-only merge is published `--doc-only`, so it is in scope by one rule
+and skipped by the other.
+
+**Cost this time: zero** — the hunt found no defect. **Do not fix this now.**
+It is process work, it blocks no product WP, and servicing an Adversary report
+immediately is the exact §10⁻ loop. It needs one operator-facing sentence at a
+real seam: is the discriminator the *flag* or the *path*? My reading is the
+path — `--doc-only` is a CI-cost flag and was never meant to carry scope — but
+that is a guess about intent and the operator owns it.
+
+### RT-WORKER-FIXTURE-DECODE: framing falsified two of its own node's claims
+
+Both were read out of the object store at `89916fc1` while writing the frame.
+**The node text still contains the originals; the frame §1c/§1d governs.**
+
+1. **"The worker fixture cannot run" is FALSE as a general statement.**
+   `run_worker_fixture` (`constructors.rs:5772`) has **exactly two callers**,
+   and the other one — `nested_worker_depends_on_both_levels` (`:5895`) — is
+   un-ignored and **passing** at both refs the two-ended census measured. Same
+   helper, same compile step, same `.run(None)`, same decode path. ⇒ The
+   discriminator is the **expression**, not the helper, and that live sibling
+   is a working differential already in the tree. **The node title carried the
+   false claim into the tracker's releasable-frontier list** — corrected there
+   too.
+2. **`token` is the native RETURN VALUE (`compiled.rs:132`), not an error
+   code.** Eight sites across five decoder kinds raise the one
+   `NativeResultDecode` variant, so `token: 9` names no arm. Naming it is `D1`
+   and it is the whole diagnosis.
+
+**My hypothesis is recorded IN the frame as a hypothesis, not a pin** — the
+`Boundary` unrecognized-tag arm at `compiled.rs:204`. I did not run it. If a
+resume tempts you to treat it as settled, it is not.
 
 ### The Adversary's F1 is the one open technical question from the merge
 
 `evt_2yxmdfhvt4fm0`, **both findings verified in source by me before folding**,
-then folded into the `draft` nodes that own them. **The channel is report-only
+then folded into the nodes that own them (`RT-WORKER-FIXTURE-DECODE` was `draft`
+then and is `ready` now). **The channel is report-only
 (COORDINATION §10⁻a) — I did not reply and must not.**
 
 **F1, folded into [[RT-WORKER-FIXTURE-DECODE]].** `RT-SRCBODY-BIND-ORDER`
