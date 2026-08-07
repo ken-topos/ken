@@ -2863,10 +2863,11 @@ fn c2_ac6_host_result_covers_resource_token_and_response_bytes_payloads() {
             let response_len = builder.ins().iconst(types::I64, response_len);
             let result = Lowered::HostResult {
                 success,
-                error: Box::new(Lowered::ResponseBytes {
-                    pointer: response_pointer,
-                    len: response_len,
-                }),
+                // `D4b`: the span is warranted by `response_backing` above,
+                // which is real storage of exactly `response_len` bytes.
+                error: Box::new(Lowered::ResponseBytes(
+                    SafeByteSpan::for_control(response_pointer, response_len),
+                )),
                 ok: Box::new(Lowered::ResourceToken { value: resource }),
                 err_constructor: symbols.result_err.clone(),
                 ok_constructor: symbols.result_ok.clone(),
@@ -8746,8 +8747,14 @@ fn d2_runtime_span_edge(source: &[u8], declared_len: i64) -> (i64, Option<u64>, 
         let len = builder
             .ins()
             .iconst(cranelift_codegen::ir::types::I64, declared_len);
+        // `D4b`: the test-only `for_control` constrains neither field, which is
+        // what keeps `declared_len != source.len()` reachable here.
         Ok(compiler
-            .transfer_into_carrier(builder, root, &Lowered::ResponseBytes { pointer, len })?
+            .transfer_into_carrier(
+                builder,
+                root,
+                &Lowered::ResponseBytes(SafeByteSpan::for_control(pointer, len)),
+            )?
             .word)
     });
     let mut store = crate::boundary_value::BoundaryValueStore::new();
@@ -9198,4 +9205,70 @@ fn d4_a_seat_whose_need_is_not_a_byte_span_is_refused() {
         "`D4`: the refusal must name the need it got and the need it requires, \
          got: {rendered}"
     );
+}
+
+// ─── `RT-CARRIER-BYTESPAN-OBSERVE` `D4b` / `AC-10` — THE EVASION PROBE ──────
+
+/// **The `AC-10` positive control: a construction that bypasses the masking
+/// helper, and the sibling that proves the refusal is not vacuous.**
+///
+/// Run it — it is not automatic, and that is stated rather than implied:
+///
+/// ```text
+/// RUSTFLAGS='--cfg ken_ac10_evasion_probe' \
+///   ./scripts/ken-cargo build -p ken-runtime --all-targets
+/// ```
+///
+/// **Expected, and MEASURED on rustc 1.96.0 at this SHA:** exactly ONE error,
+/// `E0451: fields `pointer` and `len` of struct `safe_byte_span::SafeByteSpan`
+/// are private`, pointing at `refused_bypass`. `warranted_sibling` compiles
+/// silently in the same run.
+///
+/// ⇒ **MEASURED:** the braced literal does not compile from this module.
+/// **CLAIMED:** it does not compile *because the fields are private to
+/// `safe_byte_span`* — not because the fixture is malformed.
+/// **THE GAP is closed by the sibling, not by the error code.** The two
+/// functions share module, imports, signature and argument types and differ in
+/// exactly one token — the braced literal versus the mint. A malformed fixture
+/// would redden BOTH; only the bypass reddens. This is the discipline
+/// `values.rs` records for its `compile_fail` fences, and it is load-bearing
+/// here because rustdoc does not bind `EXXXX` annotations on this toolchain.
+///
+/// **Why this is a `cfg` probe and NOT a `compile_fail` doctest**, though a
+/// doctest is the reflex. A doctest is compiled as an EXTERNAL crate, so it can
+/// reach only `pub` items; `SafeByteSpan` is `pub(in crate::cranelift_backend)`
+/// and `Lowered` is crate-internal, so the fence would fail with a
+/// privacy/resolution error at the `use` line — green for a reason that has
+/// nothing to do with the mechanism, and it would stay green if the fields
+/// became `pub` tomorrow. It would also contribute no CI signal at all: CI runs
+/// nextest, which does not run doctests (`values.rs` records this).
+///
+/// **This probe covers the SPELLING only; its production sibling covers the
+/// PROVENANCE.** Refusing the braced literal here says nothing about whether a
+/// production caller can mint a span some other way — the first `D4b` candidate
+/// passed this probe while leaving exactly that hole open. The claim that
+/// production has no raw mint is witnessed by `ac10_production_mint_probe` in
+/// `lowering`, which must be run against the PRODUCTION profile; `for_control`
+/// resolves here by construction, so this module structurally cannot test it.
+///
+/// **RESIDUAL — neither probe guards the mechanism's STRENGTH.** They witness
+/// what is refused today. Nothing reddens if a later edit moves `SafeByteSpan`
+/// up to `lowering` scope, marks the fields `pub`, or drops the `#[cfg(test)]`
+/// from `for_control`. Pinning that would require asserting on source text,
+/// which the operator rule forbids.
+#[cfg(ken_ac10_evasion_probe)]
+mod ac10_evasion_probe {
+    use super::*;
+
+    type ProbeValue = cranelift_codegen::ir::Value;
+
+    /// The bypass. Must not compile.
+    pub(super) fn refused_bypass(pointer: ProbeValue, len: ProbeValue) -> Lowered {
+        Lowered::ResponseBytes(SafeByteSpan { pointer, len })
+    }
+
+    /// Non-vacuity sibling: identical but for the mint. Must compile.
+    pub(super) fn warranted_sibling(pointer: ProbeValue, len: ProbeValue) -> Lowered {
+        Lowered::ResponseBytes(SafeByteSpan::for_control(pointer, len))
+    }
 }

@@ -52,6 +52,8 @@ pub(in crate::cranelift_backend) use cranelift_frontend::{
 };
 pub(in crate::cranelift_backend) use cranelift_module::{FuncId, Linkage, Module};
 
+pub(in crate::cranelift_backend) use safe_byte_span::SafeByteSpan;
+
 // --- crate root ------------------------------------------------------------
 pub(in crate::cranelift_backend) use crate::{
     RuntimeDeclaration, RuntimeDeclarationKind, RuntimeExpr, RuntimeGroundValue, RuntimePartiality,
@@ -1626,7 +1628,8 @@ pub(in crate::cranelift_backend) fn d4a_describe_binding(
                     err_constructor,
                     ..
                 } => format!("specialized-hostresult({success:?},{ok_constructor},{err_constructor})"),
-                Lowered::ResponseBytes { pointer, len } => {
+                Lowered::ResponseBytes(span) => {
+                    let (pointer, len) = (span.pointer(), span.len());
                     format!("specialized-responsebytes({pointer:?},{len:?})")
                 }
                 Lowered::Bytes(bytes) => format!("specialized-bytes({bytes:?})"),
@@ -2618,10 +2621,10 @@ enum Lowered {
     /// this value is not a host-reply proof carrier; it is the ordinary unary
     /// constructor representation deforested to one native scalar.
     StructuralNat(StructuralNatV1),
-    ResponseBytes {
-        pointer: cranelift_codegen::ir::Value,
-        len: cranelift_codegen::ir::Value,
-    },
+    /// A runtime byte span that will be dereferenced and copied. The payload is
+    /// a [`SafeByteSpan`], so the braced literal is not constructible outside
+    /// `safe_byte_span` — `AC-10`.
+    ResponseBytes(SafeByteSpan),
     HostResult {
         success: cranelift_codegen::ir::Value,
         error: Box<Lowered>,
@@ -4104,9 +4107,9 @@ fn d9_collect(
         | Lowered::BorrowedNativeValue { pointer: value } => words.push(*value),
         Lowered::BoundedNat(nat) => words.push(nat.value),
         Lowered::StructuralNat(nat) => words.push(nat.value),
-        Lowered::ResponseBytes { pointer, len } => {
-            words.push(*pointer);
-            words.push(*len);
+        Lowered::ResponseBytes(span) => {
+            words.push(span.pointer());
+            words.push(span.len());
         }
         Lowered::HostResult {
             success, error, ok, ..
@@ -7090,9 +7093,15 @@ impl<'a> Lowering<'a> {
             //
             // The `(tag, class)` still comes from the sole disposition
             // authority; only the disposition's ANSWER for this variant moved.
-            Lowered::ResponseBytes { pointer, len } => {
+            Lowered::ResponseBytes(span) => {
                 let (tag, class) = Self::carrier_handle_disposition(value)?;
-                self.emit_carrier_bytes_runtime_span(builder, tag, class, *pointer, *len)
+                self.emit_carrier_bytes_runtime_span(
+                    builder,
+                    tag,
+                    class,
+                    span.pointer(),
+                    span.len(),
+                )
             }
             Lowered::BorrowedOption { .. } => Err(unsupported(
                 lowered_value_kind(value),
@@ -9987,6 +9996,198 @@ impl BoundedNatV1 {
         Self { value }
     }
 }
+/// **`RT-CARRIER-BYTESPAN-OBSERVE` `D4b` / `AC-10` — the `ResponseBytes`
+/// validity invariant, made STRUCTURAL.**
+///
+/// Since `D2`, [`Lowered::ResponseBytes`] means *a span that will be
+/// dereferenced and copied*, so every instance must independently be a valid
+/// span. Before `D4b` that invariant was carried by two call sites and a doc
+/// comment: any code in this crate could write the braced literal and mint an
+/// unestablished span, and nothing would say so.
+///
+/// **The submodule is the mechanism, and its depth is load-bearing.** A private
+/// field is visible to the declaring module *and every descendant of it*. Every
+/// construction site — the producer in `core`, the rebuild below, and both
+/// `core::tests` controls — is a descendant of `lowering`, so a newtype declared
+/// at `lowering` scope would be constructible by all of them and would refuse
+/// nothing. Declaring it one level DOWN inverts that: `lowering` is the parent
+/// of `safe_byte_span`, not a descendant, so the braced literal is `E0451`
+/// everywhere outside these braces and the two constructors below are the only
+/// way in.
+///
+/// **Field privacy alone was NOT enough, and the first `D4b` candidate proved
+/// it** (Architect, on `450fff8b`). Closing the braced literal closes a
+/// *spelling*; it does not close *provenance*. That candidate paired it with an
+/// unconditional `established_by_caller(pointer, len)` visible to all of
+/// `cranelift_backend`, so any production descendant could still mint a fresh
+/// span from arbitrary SSA values without ever masking — and the candidate's own
+/// compile-positive sibling was exactly that construction. Named and greppable
+/// is an auditable convention, not a mechanism.
+///
+/// **The production census, which is the actual `AC-10` claim.** Exactly one
+/// production entry point creates a span from nothing, and it masks:
+///
+/// - [`SafeByteSpan::masked_at_producer`] — emits the `select` pair itself.
+/// - [`SafeByteSpan::rebuild_from_collected`] — takes `self`, so it cannot mint
+///   from nothing. It carries an existing span's provenance forward through a
+///   collect/rebuild round trip and is unreachable without one.
+/// - `for_control` — `#[cfg(test)]`, so it does not exist in a production
+///   build at all.
+///
+/// ⇒ a newly added production construction has no raw mint to reach for: it
+/// must either mask, or already hold a span that did.
+///
+/// **What this does and does not establish.** `pointer` and `len` are
+/// Cranelift SSA values, opaque at Rust compile time, so no mechanism here can
+/// *verify* that a span points at live memory. What is structural is the
+/// closure of the construction surface: every production span is rooted in a
+/// mask, by a chain the compiler enforces rather than a convention a reader
+/// must honour.
+mod safe_byte_span {
+    use super::{types, FunctionBuilder, InstBuilder};
+
+    /// A `{pointer, len}` byte span rooted in a masking mint. The fields are
+    /// private to this module by design — see the module-level note.
+    #[derive(Clone, Copy)]
+    pub(in crate::cranelift_backend) struct SafeByteSpan {
+        pointer: cranelift_codegen::ir::Value,
+        len: cranelift_codegen::ir::Value,
+    }
+
+    impl SafeByteSpan {
+        /// **Self-establishing mint: the mask is emitted HERE, not at the call
+        /// site** (Architect `dec_12s3j2gj67c66`).
+        ///
+        /// The unselected arm becomes the canonical empty span `{null, 0}`,
+        /// whose copy loop runs zero times. Because the `select` pair lives
+        /// inside this constructor, a producer that holds a `success`
+        /// discriminant cannot obtain a span that skips it: there is no
+        /// argument ordering, and no later edit to the call site, that yields
+        /// an unmasked value from this function.
+        pub(in crate::cranelift_backend) fn masked_at_producer(
+            builder: &mut FunctionBuilder<'_>,
+            pointer_type: cranelift_codegen::ir::Type,
+            pointer: cranelift_codegen::ir::Value,
+            len: cranelift_codegen::ir::Value,
+            success: cranelift_codegen::ir::Value,
+        ) -> Self {
+            let null = builder.ins().iconst(pointer_type, 0);
+            let empty = builder.ins().iconst(types::I64, 0);
+            Self {
+                pointer: builder.ins().select(success, pointer, null),
+                len: builder.ins().select(success, len, empty),
+            }
+        }
+
+        /// **Provenance-carrying rebuild: takes `self`, so it cannot mint.**
+        ///
+        /// `d9_collect` takes a span apart into a flat value list and
+        /// `rebuild_recursive_argument` puts it back together. The rebuild is
+        /// order-preserving, so the reconstructed pair is the same span that was
+        /// collected — but the point here is the receiver: because this is a
+        /// method on an existing `SafeByteSpan`, a caller that does not already
+        /// hold one cannot reach it. The new span inherits the old span's
+        /// provenance rather than asserting its own.
+        ///
+        /// This is what lets production keep the rebuild without granting every
+        /// producer a fresh raw mint.
+        pub(in crate::cranelift_backend) fn rebuild_from_collected(
+            self,
+            pointer: cranelift_codegen::ir::Value,
+            len: cranelift_codegen::ir::Value,
+        ) -> Self {
+            Self { pointer, len }
+        }
+
+        /// **Test-only control mint, deliberately unconstrained.**
+        ///
+        /// The two legitimate direct constructions in `core::tests` hand-build a
+        /// span with no `success` discriminant to mask against. This does NOT
+        /// constrain `len` against any source length: the `D2` edge control
+        /// varies the declared length away from the true one precisely so the
+        /// emitted guards are reachable, and a mint that clamped it would
+        /// silently disarm that control.
+        ///
+        /// It is `#[cfg(test)]` so that this freedom cannot leak into a
+        /// production build — that gating is what keeps the census above true.
+        #[cfg(test)]
+        pub(in crate::cranelift_backend) fn for_control(
+            pointer: cranelift_codegen::ir::Value,
+            len: cranelift_codegen::ir::Value,
+        ) -> Self {
+            Self { pointer, len }
+        }
+
+        pub(in crate::cranelift_backend) fn pointer(self) -> cranelift_codegen::ir::Value {
+            self.pointer
+        }
+
+        pub(in crate::cranelift_backend) fn len(self) -> cranelift_codegen::ir::Value {
+            self.len
+        }
+    }
+}
+/// **`AC-10`'s PRODUCTION-position probe: the census above, witnessed rather
+/// than asserted.**
+///
+/// The sibling probe in `core::tests::constructors` witnesses that the braced
+/// literal is refused. It cannot witness the census claim that *production has
+/// no raw mint*, because it lives under `#[cfg(test)]`, where `for_control`
+/// exists by construction. This module sits in production code, so it sees the
+/// surface a new producer would actually see:
+///
+/// ```text
+/// RUSTFLAGS='--cfg ken_ac10_production_mint_probe' \
+///   ./scripts/ken-cargo build -p ken-runtime
+/// ```
+///
+/// **Expected, and MEASURED on rustc 1.96.0 at this SHA:** exactly ONE error,
+/// `E0599: no associated function ... named `for_control` ... in the current
+/// scope`, on `refused_raw_mint`. `warranted_rebuild` compiles silently.
+///
+/// ⇒ **MEASURED:** production cannot reach the unconstrained mint.
+/// **CLAIMED:** every production span is therefore rooted in
+/// [`SafeByteSpan::masked_at_producer`], since the only other production route
+/// takes an existing span by receiver. **THE GAP is closed by
+/// `warranted_rebuild`**, which proves the refusal is about *minting* and not
+/// about the fixture: it builds a `ResponseBytes` in this same module and
+/// compiles, because it is handed a span that already exists.
+///
+/// **This probe carries ONE refusal on purpose — measured, not assumed.** It
+/// first also carried the braced literal, and enabling it reported only the
+/// `E0599`: the resolution failure aborts the compilation before the privacy
+/// pass runs, so the `E0451` never appeared and a reader counting errors would
+/// have concluded the braced literal was *accepted* here. One refusal per probe
+/// is the only shape that cannot mask its sibling. The braced literal is
+/// witnessed separately by `ac10_evasion_probe`, and the privacy that refuses it
+/// is module-scoped — `lowering` and its descendants are alike outside
+/// `safe_byte_span` — so that probe covers this position too.
+///
+/// **The production profile is the only one that can see this.** Under
+/// `--all-targets` the lib-test target enables `cfg(test)`, `for_control`
+/// resolves, and `refused_raw_mint` would compile there — the same blindness
+/// that let a `#[cfg(test)]` defect reach production past three approvals
+/// earlier in this WP.
+#[cfg(ken_ac10_production_mint_probe)]
+mod ac10_production_mint_probe {
+    use super::{Lowered, SafeByteSpan};
+
+    type ProbeValue = cranelift_codegen::ir::Value;
+
+    /// The test-only mint, reached from production. Must not compile: `E0599`.
+    pub(super) fn refused_raw_mint(pointer: ProbeValue, len: ProbeValue) -> Lowered {
+        Lowered::ResponseBytes(SafeByteSpan::for_control(pointer, len))
+    }
+
+    /// Non-vacuity: rebuilding through a span that already exists must compile.
+    pub(super) fn warranted_rebuild(
+        existing: SafeByteSpan,
+        pointer: ProbeValue,
+        len: ProbeValue,
+    ) -> Lowered {
+        Lowered::ResponseBytes(existing.rebuild_from_collected(pointer, len))
+    }
+}
 #[derive(Clone)]
 struct DynamicConstructorV1 {
     discriminator: cranelift_codegen::ir::Value,
@@ -11119,7 +11320,7 @@ fn site_operand_witness(value: &Lowered) -> Option<SiteOperandWitness> {
             Some(Values(vec![*value]))
         }
         Lowered::BorrowedNativeValue { pointer } => Some(Values(vec![*pointer])),
-        Lowered::ResponseBytes { pointer, len } => Some(Values(vec![*pointer, *len])),
+        Lowered::ResponseBytes(span) => Some(Values(vec![span.pointer(), span.len()])),
         Lowered::Int { value, .. } | Lowered::Bool { value, .. } => Some(Values(vec![*value])),
         // The nat wrappers carry a validated payload rather than a bare CLIF
         // value; their inner value is what distinguishes two of them.
@@ -16821,7 +17022,7 @@ impl<'a> Lowering<'a> {
                         .load(types::I64, MemFlags::trusted(), *pointer, 24),
                 ))
             }
-            Lowered::ResponseBytes { pointer, len } => Ok((*pointer, *len)),
+            Lowered::ResponseBytes(span) => Ok((span.pointer(), span.len())),
             Lowered::Bytes(bytes) => {
                 if bytes.is_empty() {
                     return Ok((
@@ -18069,8 +18270,8 @@ impl<'a> Lowering<'a> {
                 format!("bytes_length expects 1 arg, got {}", args.len()),
             )
         })?;
-        if let Lowered::ResponseBytes { len, .. } = arg {
-            return self.lower_unsigned_u64_int(builder, len);
+        if let Lowered::ResponseBytes(span) = arg {
+            return self.lower_unsigned_u64_int(builder, span.len());
         }
         if let Lowered::BorrowedNativeValue { pointer } = arg {
             let kind = builder
@@ -18122,7 +18323,8 @@ impl<'a> Lowering<'a> {
                 "bytes_at requires a statically known Int index",
             ));
         };
-        if let Lowered::ResponseBytes { pointer: data, len } = bytes {
+        if let Lowered::ResponseBytes(span) = bytes {
+            let (data, len) = (span.pointer(), span.len());
             let index_value = builder.ins().iconst(types::I64, index);
             let present = builder.ins().icmp(
                 cranelift_codegen::ir::condcodes::IntCC::UnsignedLessThan,
@@ -18769,9 +18971,9 @@ fn append_recursive_argument_values(
             | Lowered::ResourceToken { value } => output.push(*value),
             Lowered::BoundedNat(nat) => output.push(nat.value),
             Lowered::StructuralNat(nat) => output.push(nat.value),
-            Lowered::ResponseBytes { pointer, len } => {
-                output.push(*pointer);
-                output.push(*len);
+            Lowered::ResponseBytes(span) => {
+                output.push(span.pointer());
+                output.push(span.len());
             }
             Lowered::BorrowedNativeValue { pointer } => output.push(*pointer),
             Lowered::Bytes(_) | Lowered::String(_) => {}
@@ -18837,10 +19039,12 @@ fn rebuild_recursive_argument(
         Lowered::StructuralNat(_) => Lowered::StructuralNat(StructuralNatV1 {
             value: next(values)?,
         }),
-        Lowered::ResponseBytes { .. } => Lowered::ResponseBytes {
-            pointer: next(values)?,
-            len: next(values)?,
-        },
+        // Rebuilt through the EXISTING span's receiver, so the reconstruction
+        // inherits that span's provenance instead of minting a fresh warrant.
+        // Argument order is left-to-right, matching `d9_collect`'s push order.
+        Lowered::ResponseBytes(span) => {
+            Lowered::ResponseBytes(span.rebuild_from_collected(next(values)?, next(values)?))
+        }
         Lowered::BorrowedNativeValue { .. } => Lowered::BorrowedNativeValue {
             pointer: next(values)?,
         },

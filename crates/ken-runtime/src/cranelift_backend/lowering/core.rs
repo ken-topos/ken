@@ -41,6 +41,12 @@ thread_local! {
 /// ABI-authority contract; building on it would silently promote an
 /// implementation detail into one. The mask makes the span self-validating
 /// regardless of what the reply buffer happens to hold.
+///
+/// **`D4b` / `AC-10` — the `select` pair moved INTO
+/// [`SafeByteSpan::masked_at_producer`].** This function is no longer the place
+/// the invariant is kept; it is a caller that cannot avoid it. Reading the two
+/// reply fields is all that is left here, because the only route from a
+/// `{span, success}` triple to a `ResponseBytes` now emits the mask itself.
 fn masked_reply_response_bytes(
     builder: &mut FunctionBuilder<'_>,
     pointer_type: cranelift_codegen::ir::Type,
@@ -59,12 +65,13 @@ fn masked_reply_response_bytes(
         reply,
         i32::try_from(len_offset).expect("reply bytes len offset is u32"),
     );
-    let null = builder.ins().iconst(pointer_type, 0);
-    let empty = builder.ins().iconst(types::I64, 0);
-    Lowered::ResponseBytes {
-        pointer: builder.ins().select(success, pointer, null),
-        len: builder.ins().select(success, len, empty),
-    }
+    Lowered::ResponseBytes(SafeByteSpan::masked_at_producer(
+        builder,
+        pointer_type,
+        pointer,
+        len,
+        success,
+    ))
 }
 
 #[cfg(test)]
