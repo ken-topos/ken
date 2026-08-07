@@ -1,7 +1,7 @@
 ---
 id: CI-IGNORED-SWEEP
 title: "nothing in the repo ever re-runs an ignored row, so every skip is write-only and a landed repair ships with its own regression cover switched off"
-status: draft
+status: ready
 owner: verify
 size: S
 gate: none
@@ -11,11 +11,33 @@ github: null
 origin: Adversary finding evt_4mwy8tmfmm7tw (F2), triaged and independently confirmed by the Steward against origin/main 533f7c06. Filed as its own node on the operator's ruling 2026-08-07, which kept the RT-SRCBODY-BIND-ORDER candidate's diff minimal rather than folding the sweep into it. Steward-filed (agents cannot create tracked work per COORDINATION §2).
 ---
 
-> ## THE FRAME IS OWED. `draft`, NOT startable.
+> ## FRAMED — `ready`, size S
 >
-> The measurements below are done and reproducible, so the frame is short.
-> What it still owes is the job's exact shape, its non-blocking wiring, and
-> the acceptance criterion that proves the sweep can actually report.
+> Frame:
+> [`CI-IGNORED-SWEEP`](../wp/CI-IGNORED-SWEEP.md)
+>
+> **The frame governs; this file is the origin record.** Where the two differ,
+> the frame is later and was ground against `origin/main` `368ff87e`.
+>
+> **Two things the frame settles, which this record leaves open:**
+>
+> 1. **The classification carrier is DECIDED, not a deliverable to survey.** It
+>    is an explicit checked-in registry keyed on **test path**, and it **fails
+>    toward sweeping**: an unregistered row gets swept. A base-debt row omitted
+>    from the registry costs noise; a policy row omitted costs a missed
+>    regression, and the missed regression is the thing this node exists to
+>    prevent. Frame `D1`.
+> 2. **The two venues use different tools, and that decides the shape.** CI runs
+>    nextest (`ci.yml:121`); **nextest is NOT installed locally** (`cargo nextest
+>    --version` reports `no such command`), and there is no `.config/nextest.toml`.
+>    So the hand-run `-- --ignored` measurement recorded below is libtest syntax
+>    and **does not transfer to the CI job**, and the implementer cannot iterate
+>    on the nextest invocation locally at all. Frame `1e` and `D0`.
+>
+> The frame also adds a control this record does not imply: the exemption
+> mechanism must be structurally unable to deselect a row from the **main**
+> `--workspace` gate (`AC-3`). A registry implemented as a default nextest
+> profile would silently narrow every run.
 
 ## The gap, measured
 
