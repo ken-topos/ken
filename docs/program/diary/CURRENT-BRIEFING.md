@@ -33,7 +33,34 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-07 ~19:0xZ · `D3` IN FLIGHT on the publisher
+## LIVE — 2026-08-07 ~19:1xZ · `D3` in flight; operator set the sequence
+
+> ### OPERATOR SEQUENCING RULING — 2026-08-07, verbatim intent. THIS GOVERNS.
+>
+> **"continue with the D-series, then return to `RT-SEED-CALL-PORT` and
+> continue from there."**
+>
+> ⇒ **Finish `RT-CARRIER-BYTESPAN-OBSERVE` `D4`, `D5`, `D6` first.** Then the
+> **RecursiveDescent retirement campaign resumes, entering at
+> [[RT-SEED-CALL-PORT]]** — which is `ready`, framed, and unblocked
+> (`RT-DECL-CLOSURE-PORT` is merged).
+>
+> **This ANSWERS the open sequencing question and it is no longer mine to
+> weigh.** I had raised that the runtime ring had been off the campaign's
+> critical path for two days while unblocking work compounded, and flagged it
+> as a priority call between ready WPs — the operator's, not mine. It is now
+> decided: **D-series first, campaign second, `RT-SEED-CALL-PORT` is the named
+> entry point.** Do not re-litigate it and do not insert a third thing ahead of
+> the campaign without asking.
+>
+> **Note on `RT-SEED-CALL-PORT` when you get there:** its `D1` may legitimately
+> return "already retired" if `RT-DECL-CLOSURE-PORT`'s machinery subsumed
+> `SeedClosureCall`, at which point the node closes for free. That is recorded
+> in `docs/program/16-recursive-descent-retirement.md §2` as a **prediction, not
+> a measurement** — measure it, do not assume it either way.
+>
+> **PR #1528 is CLOSED** (operator, 2026-08-07). The stale-branch revert hazard
+> is retired and there are now **zero open PRs**.
 
 > ### NEXT ACTION ON RESUME — read this line first
 >
