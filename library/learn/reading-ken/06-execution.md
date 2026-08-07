@@ -181,20 +181,22 @@ The differential discipline chapter
 through the interpreter and native backend, compared at closure-free ground
 observations — has a test for that closure-free case. The
 [native parity test](../../../crates/ken-cli/tests/rt_parity_native.rs)
-runs the same fixture
-through both executors and asserts on the exact result variant, not merely
-`is_err`. That test binary remains excluded from the **sharded** test run —
-`.github/workflows/ci.yml` names it explicitly in an
-`-E 'not (binary(rt_parity_native) or …))'` filter — because one of its seven
-cases costs over three minutes of wall time on its own, not because any case
-fails. A separate `native-rt-parity` job runs all seven cases;
-the required `build + test` job both depends on that job and checks its result.
-Read this precisely too: the shard exclusion prevents duplicate execution; it
-no longer means the binary is absent from CI. A green required CI run
-includes this differential file through its dedicated running home. That is a
-fact about **which suite runs where**, not evidence that the native backend and
-interpreter must agree — the test's result, rather than its placement, carries
-that evidence.
+contains six `assert_narrowed_alike` cases that run the same fixture through
+both executors and assert on the exact result variant, not merely `is_err`.
+All six are currently ignored: five await
+`RT-CARRIER-BYTESPAN-OBSERVE`, and one awaits
+`RT-CLOSURE-BOUNDARY-LANE`. The file's only live test calls `elaborates()`, a
+source-scope rejection check that does not run either executor and is not a
+differential.
+
+The binary remains excluded from the **sharded** test run, and a separate
+`native-rt-parity` job still runs it. The required `build + test` job depends
+on that job and checks its result. Read the resulting green precisely: it
+shows that the dedicated job ran and that the live source-scope check passed.
+It carries no current evidence that the interpreter and native backend agree
+on the six narrowing cases. The differential is therefore **unavailable**
+until both owner nodes re-arm their rows; un-ignoring either node alone would
+leave it partial.
 
 Chapter [04](04-effects-capabilities-and-authority.md) now shows a checked
 filesystem authority exemplar: an explicit `Cap a` parameter beside `[FS]`,
@@ -216,8 +218,9 @@ You can now separate elaboration from execution, identify the marked places
 where partial behavior may enter, and treat the interpreter as the semantic
 oracle for native differential tests. The backend implementation and its
 required CI job are present even though the target decision remains open in
-the specification. The curriculum records that divergence instead of
-reconciling it.
+the specification, but the job currently carries no live interpreter/native
+differential. The curriculum records both divergences instead of reconciling
+them.
 
 ---
 
