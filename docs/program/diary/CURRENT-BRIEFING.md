@@ -33,7 +33,7 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-07 ~19:3xZ · `D3` merged, `D4` released; operator set the sequence
+## LIVE — 2026-08-07 ~20:5xZ · `D4` merged, `D4b` released; operator set the sequence
 
 > ### OPERATOR SEQUENCING RULING — 2026-08-07, verbatim intent. THIS GOVERNS.
 >
@@ -64,36 +64,44 @@
 
 > ### NEXT ACTION ON RESUME — read this line first
 >
-> **NOTHING IS OWED BY ME. `D4` is with the ring; wait for its handoff.**
-> Released at `evt_36w5kphnanrtp` on a branch cut from `origin/main`
-> **`7c2587e6`**. When the exact SHA comes back, run the merge procedure from
+> **NOTHING IS OWED BY ME. `D4b` is with the ring; wait for its handoff.**
+> Released at `evt_4r9kdtvk2nrk0` on a branch cut from `origin/main`
+> **`076337e1`**. When the exact SHA comes back, run the merge procedure from
 > the file, not from memory.
 >
-> **`D3` MERGED — PR #1542**, squashed from exact `960ea370` to `main`
-> `7c2587e6`. M6 done: **both paths blob-verified on `main`** —
-> `boundary_value_clif.rs` `ed70838d`, `lowering/core/tests/control.rs`
-> `305657bc`, both MATCH. M8 sent (`evt_7cp3nvh9mnx57`, this carried code). M9
-> sent. Publisher gate confirmed the merge result onto `da19fe7e` built cleanly,
-> base unchanged; no rebase, so the exact approved object landed.
+> **`D0`-`D4` ARE MERGED.** `D4` landed as **PR #1546** from exact `ce9ef0f3`,
+> all four paths blob-verified on `main`. `main` is **`076337e1`** after the
+> doc-only follow-up (PR #1547). M6/M8/M9 all discharged — Adversary notice
+> `evt_5a4bms7kvrc9b`.
 >
-> `dec_2q5kqyt5fvkr2` arrived **already resolved by the leader** — correct
-> routing, and the **third request in a row done right** after two mis-routes.
-> Both votes verified from the objects (QA `evt_6nzf1h5hys8tp`, Architect
-> `evt_4ppb34h7t3vra`).
+> **`AC-11` IS DISCHARGED; `AC-10` IS NOT AND IS NOW `D4b`.** `AC-11` (the
+> Adversary's `D3` finding: the owner guard proves referent ownership while its
+> doc reads as a guarantee on the returned address) was ruled by the Architect
+> at `dec_5zjh9675253pj` — the view is an **epoch-bounded ephemeral interior
+> borrow**, valid until the next materialization or reservation. **No generation
+> counter, no ABI field.** `AC-10` — make the `ResponseBytes` invariant
+> structural — is the whole of `D4b` and is unbuilt.
 >
-> **`AC-10` IS NOT DISCHARGED AND MUST NOT BE READ AS CLOSED. IT IS `D4`'s.**
-> I added it (`da19fe7e`, PR #1541) from Adversary `evt_5xqw6xsbm4v8b`: make the
-> `ResponseBytes`-validity invariant structural rather than held by two call
-> sites and a comment. The Architect's `D3` approval says so in its own scope
-> carry, it is stated in **PR #1542**'s body, and the `D4` release restates it
-> with the obstacle. **Three independent places, because this is exactly the
-> shape that gets read as closed by a merge that did not close it.**
+> **THE PUBLISHER OUTAGE WAS NEVER A CREDENTIAL PROBLEM, and the misdiagnosis is
+> the lesson.** `scripts/scripted-pr-automerge.sh:210` mints a `ken-ci[bot]`
+> GitHub App token via `.devcontainer/mint-gh-token.sh`; there is **no user
+> login**, so a missing `~/.config/gh` is normal, not evidence. The mint ends in
+> `curl -fsS ... | python3 json.load`, and `curl -f` on a network blip yields
+> **empty stdout**, so python throws and the token comes back empty — which gh
+> then reports as *"not logged into any GitHub hosts."* **The last line is the
+> symptom; the traceback above it is the cause.** I escalated to the operator
+> for an interactive `gh auth login` that was never needed.
+> ⇒ **Mint with a retry and export `GH_TOKEN` BEFORE invoking the publisher**,
+> so its own `gh auth status` check passes and the flaky step is off the
+> critical path. Durable fix (unfiled): a retry inside `mint-gh-token.sh`.
 >
-> **`D3` left three axes guarded with NO REACHING WITNESS**, reported rather
-> than counted as laws: wrong-handle-tag (no lawful tag/class pair admits it),
-> owner, and extent (no production producer mints either input). `D4` consumes
-> that helper — **those three are defence in depth, not established behaviour to
-> lean on.**
+> **TWO PUBLISHER TRAPS, both of which cost me a commit today.**
+> **`--target HEAD` is invalid** — it pushes `refs/heads/HEAD` and fails; pass an
+> explicit SHA. And **the publisher exits 0 on failure**, so
+> `publish && git reset --hard origin/main` in one command **discards the commit
+> it never published.** ⇒ **Blob-verify on `main` FIRST, reset SECOND, always as
+> separate steps.** Both commits were recoverable from reflog only because they
+> were committed rather than staged.
 >
 > **`RT-CARRIER-BYTESPAN-OBSERVE` remains `active` — `D4`, `D5`, `D6` are
 > unbuilt.** `D2` and `D3` were partial-WP merges of accepted work; the node is
