@@ -4890,6 +4890,44 @@ pub(in crate::cranelift_backend) struct PlannedEffectSeat {
     pub(in crate::cranelift_backend) avail: EffectSeatAvail,
 }
 
+/// **Test-only seat construction for the `RT-CARRIER-BYTESPAN-OBSERVE`
+/// `D4` observer control.**
+///
+/// ⛔ Gated on its own, and the gate is not decoration: an earlier draft of
+/// this insertion sat between the mutation enum's `#[cfg(test)]` and its
+/// `#[derive]`, capturing the attribute and shipping that enum into
+/// production builds. The `--lib` test profile cannot observe that, which
+/// is why the repair is validated by a production build.
+#[cfg(test)]
+impl PlannedEffectSeat {
+    /// A seat record for a control, with a caller-chosen `need`.
+    ///
+    /// ⚠ Test-only scaffolding for `RT-CARRIER-BYTESPAN-OBSERVE` `D4`, whose
+    /// observer consumes this record. The id newtypes are `pub(super)` here, so
+    /// a control in the lowering cannot build one itself.
+    ///
+    /// ⛔ `avail` is `SPECIALIZED_ONLY` and stays that way: `D4` activates
+    /// nothing, and a fixture handing itself `EITHER_PHASE` would be asserting
+    /// `D5`'s outcome.
+    #[cfg(test)]
+    pub(in crate::cranelift_backend) fn for_observer_control(
+        need: EffectSeatNeed,
+    ) -> Self {
+        PlannedEffectSeat {
+            effect_origin: StaticOriginId(0),
+            child_origin: StaticOriginId(1),
+            position: 0,
+            operation: ken_host::HostOpV1::FsReadFile,
+            slot: EffectSeatSlot::Argument(0),
+            producer_owner: PredeclaredFunctionId(0),
+            consumer_owner: PredeclaredFunctionId(0),
+            semantic_operation: EffectSeatOperation::ProjectBytesSpan,
+            need,
+            avail: EffectSeatAvail::SPECIALIZED_ONLY,
+        }
+    }
+}
+
 /// **Erase one axis of the seat key, or collapse every seat onto one
 /// contract.**
 ///

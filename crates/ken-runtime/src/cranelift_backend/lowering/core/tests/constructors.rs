@@ -2345,6 +2345,7 @@ fn ac_c7_try_compile_edge_with_operands<'src>(
         store_int_limb: module.declare_func_in_func(helpers.store_int_limb, &mut context.func),
         seal_int: module.declare_func_in_func(helpers.seal_int, &mut context.func),
         int_view: module.declare_func_in_func(helpers.int_view, &mut context.func),
+        bytes_view: module.declare_func_in_func(helpers.bytes_view, &mut context.func),
     };
 
     let mut compiler = bare_carrier_test_lowering(seed_env, plan);
@@ -2493,6 +2494,7 @@ fn c2_compile_edge_with_arg<'src>(
         store_int_limb: module.declare_func_in_func(helpers.store_int_limb, &mut context.func),
         seal_int: module.declare_func_in_func(helpers.seal_int, &mut context.func),
         int_view: module.declare_func_in_func(helpers.int_view, &mut context.func),
+        bytes_view: module.declare_func_in_func(helpers.bytes_view, &mut context.func),
     };
     let mut compiler = bare_carrier_test_lowering(seed_env, plan);
     compiler.function_local.boundary_carrier = Some(carrier);
@@ -9016,5 +9018,184 @@ fn d2_an_unselected_reply_arm_copies_no_bytes() {
         selected, irrelevant,
         "`D2`: ⛔ the SELECTED arm must copy the whole span — without this row \
          an unconditionally-empty mask would pass the negative row"
+    );
+}
+
+// ─── `RT-CARRIER-BYTESPAN-OBSERVE` `D4` — THE LOWERING OBSERVER ────────────
+
+/// A `PlannedEffectSeat` for a byte-span seat, built literally.
+///
+/// ⚠ The coordinates are a fixture's; the field under test is `need`, which is
+/// what the observer consumes. `avail` is left `SPECIALIZED_ONLY` deliberately
+/// — `D4` activates nothing, and a fixture asserting otherwise would be
+/// pre-empting `D5`.
+fn d4_seat(need: EffectSeatNeed) -> PlannedEffectSeat {
+    PlannedEffectSeat::for_observer_control(need)
+}
+
+/// Transfer `literal` into the carrier, observe it through the `D4` observer,
+/// and return the SSA value at `field` (0 pointer, 1 length, 2 outcome).
+fn d4_observe(
+    content: Option<Vec<u8>>,
+    field: usize,
+    expect_len: usize,
+) -> (i64, Option<Vec<u8>>) {
+    let fixture = ac_c7_ctor("Alpha");
+    let (plan, root) = planned_root_occurrence(&fixture);
+    let seed_env = NativeSeedEnvironment::empty();
+    let (_module, code) = ac_c7_compile_edge(&seed_env, plan, move |compiler, builder| {
+        // ⛔ The non-span operand is built HERE because it needs an SSA value.
+        // A `Bool` never denotes a byte span, which is the whole point.
+        let value = match &content {
+            Some(bytes) => Lowered::Bytes(bytes.clone()),
+            None => Lowered::Bool {
+                value: builder.ins().iconst(types::I64, 0),
+                known: Some(false),
+            },
+        };
+        let word = compiler.transfer_into_carrier(builder, root, &value)?;
+        let (pointer, length, outcome) = compiler.observe_carried_bytes_span(
+            builder,
+            d4_seat(EffectSeatNeed::BytesPointerLength),
+            word,
+        )?;
+        Ok(match field {
+            0 => pointer,
+            1 => length,
+            _ => outcome,
+        })
+    });
+    let mut store = crate::boundary_value::BoundaryValueStore::new();
+    let (_arena, base) = ac_c7_bind_arena(&mut store);
+    // ⚠ `store` MUST outlive the dereference below. An earlier draft returned
+    // the raw address and let the store drop at the end of this function; the
+    // caller then read freed memory and saw garbage. That is exactly the
+    // `AC-11` address-stability window, met by a control rather than argued.
+    let raw = ac_c7_run(code, base);
+    let copied = if field == 0 && raw > 0 {
+        Some(unsafe { std::slice::from_raw_parts(raw as *const u8, expect_len) }.to_vec())
+    } else {
+        None
+    };
+    (raw, copied)
+}
+
+/// ⭐⭐ **`D4` — the observer returns a live pointer and length for an
+/// observable span, with outcome `0`.**
+///
+/// **MEASURED:** a carried `Bytes` word observed through the emitted `D3`
+/// helper yields outcome `0`, the exact length, and a pointer whose
+/// dereference is the content.
+/// **CLAIMED:** the lowering can obtain `{pointer, length}` for a carried byte
+/// span without decoding it.
+/// **THE GAP:** ⚠ **no seat is activated.** Every `BytesPointerLength` seat is
+/// still `SPECIALIZED_ONLY` and `Avail` is untouched; `D5` is the activation.
+/// ⛔ A green here is evidence about the observer, never about a seat.
+#[test]
+fn d4_an_observable_span_yields_pointer_length_and_outcome_zero() {
+    let content: Vec<u8> = vec![0x00, 0x7f, 0x80, 0xff];
+    assert_eq!(
+        d4_observe(Some(content.clone()), 2, 0).0,
+        0,
+        "`D4`: an observable span reports outcome 0"
+    );
+    assert_eq!(
+        d4_observe(Some(content.clone()), 1, 0).0,
+        content.len() as i64,
+        "`D4`: and the exact length"
+    );
+    let (pointer, seen) = d4_observe(Some(content.clone()), 0, content.len());
+    assert!(pointer > 0, "`D4`: a real address");
+    assert_eq!(
+        seen.expect("the harness copies while the store is alive"),
+        content,
+        "`D4`: ⛔ the content through the RETURNED pointer, never decoded here"
+    );
+}
+
+/// ⭐ **`D4` — an OBSERVABLE SPAN and a NON-SPAN are distinct outcomes.**
+///
+/// **MEASURED:** a lawful carried `Bytes` value reports outcome **0**; a
+/// carried `Bool`, which never denoted a byte span, reports outcome **2**; and
+/// `0 != 2`.
+/// **CLAIMED:** the observer does not collapse a non-span into the observable
+/// case, so a caller can tell the two apart.
+/// **THE GAP — and it is the load-bearing sentence here.** ⛔ **This says
+/// NOTHING about outcome 1.** `D4` *implements* the propagation of `D3`'s
+/// `BOUNDARY_ERR_BOUNDS` to a distinct outcome **1**, and **does not witness
+/// it**. A mutation mapping `BOUNDARY_ERR_BOUNDS` to outcome `2` would leave
+/// this test GREEN. Do not read the pair below as evidence for the three-way
+/// split; it is evidence for two of its three arms.
+///
+/// ⚠ Stated as the helper's own status, deliberately: the unwitnessed arm is
+/// *"the helper returned `BOUNDARY_ERR_BOUNDS`"*. Any stronger reading —
+/// *"a well-formed span that failed bounds"* — depends on lawful carrier
+/// provenance this rig does not establish.
+///
+/// ⛔ **THE EXACT FIXTURE BLOCKER, so the next author does not re-derive it.**
+/// `D3`'s bounds witness is real, but its `bind` / `rebind` /
+/// `poke_node_field` helpers are private to the sibling `boundary_value_clif`
+/// test module. This rig materializes, transfers and observes inside **one
+/// emitted JIT body**, so Rust never holds a carrier word between those phases
+/// and has nothing to mutate and re-observe.
+///
+/// **The required producer is a SPLIT-PHASE rig:** an emitted producer returns
+/// the carrier word; Rust mutates and rebinds while the node exists; a second
+/// emitted observer accepts that word and invokes
+/// [`Lowering::observe_carried_bytes_span`]. ⛔ **A pre-run poke is not a
+/// substitute** — the node does not exist yet, so the control silently reports
+/// outcome `0`, which is exactly the false green an earlier draft of this test
+/// produced.
+///
+/// ⚠ **This residual is NOT `AC-10`.** `AC-10` is the
+/// `Lowered::ResponseBytes` constructor-closure obligation, now assigned to
+/// `D4b`; it is a separate item and it is not the reason outcome 1 is
+/// unwitnessed here.
+#[test]
+fn d4_a_non_span_is_a_distinct_outcome_from_an_observable_span() {
+    let observable = d4_observe(Some(vec![0x01, 0x02, 0x03]), 2, 0).0;
+    let never_a_span = d4_observe(None, 2, 0).0;
+
+    assert_eq!(observable, 0, "`D4`: an observable span is outcome 0");
+    assert_eq!(
+        never_a_span, 2,
+        "`D4`: a word that never denoted a byte span is outcome 2"
+    );
+    assert_ne!(
+        observable, never_a_span,
+        "`D4`: the outcomes must be distinguishable"
+    );
+}
+
+/// ⭐ **`D4` — the observer CONSUMES the planner record, and refuses a seat
+/// whose need is not a byte span.**
+///
+/// **MEASURED:** asked for a seat whose `need` is `CapabilityTokenScalar`, the
+/// observer returns an error naming the seat, its operation and its need.
+/// **CLAIMED:** the record is load-bearing rather than decorative.
+/// **THE GAP:** ⚠ a Rust-side refusal, so it emits nothing. It says the
+/// observer will not read a value the planner never called a byte span.
+#[test]
+fn d4_a_seat_whose_need_is_not_a_byte_span_is_refused() {
+    let fixture = ac_c7_ctor("Alpha");
+    let (plan, root) = planned_root_occurrence(&fixture);
+    let seed_env = NativeSeedEnvironment::empty();
+    let outcome = ac_c7_try_compile_edge(&seed_env, plan, move |compiler, builder| {
+        let word = compiler.transfer_into_carrier(builder, root, &Lowered::Bytes(vec![1, 2]))?;
+        let (pointer, _len, _outcome) = compiler.observe_carried_bytes_span(
+            builder,
+            d4_seat(EffectSeatNeed::CapabilityTokenScalar),
+            word,
+        )?;
+        Ok(pointer)
+    });
+    let rendered = match outcome {
+        Ok(_) => panic!("`D4`: a non-byte-span seat must be refused"),
+        Err(error) => format!("{error:?}"),
+    };
+    assert!(
+        rendered.contains("BytesPointerLength") && rendered.contains("CapabilityTokenScalar"),
+        "`D4`: the refusal must name the need it got and the need it requires, \
+         got: {rendered}"
     );
 }

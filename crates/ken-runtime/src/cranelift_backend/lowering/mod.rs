@@ -903,6 +903,8 @@ impl ArtifactHelpers<'_> {
                     .declare_func_in_func(self.boundary_value_abi.store_int_limb, func),
                 seal_int: module.declare_func_in_func(self.boundary_value_abi.seal_int, func),
                 int_view: module.declare_func_in_func(self.boundary_value_abi.int_view, func),
+                bytes_view: module
+                    .declare_func_in_func(self.boundary_value_abi.bytes_view, func),
             }),
         }
     }
@@ -2925,6 +2927,7 @@ struct BoundaryCarrierRefs {
     seal_int: FuncRef,
     /// `(arena, word, out_view) -> status` — canonical exact-`Int` view.
     int_view: FuncRef,
+    bytes_view: FuncRef,
 }
 
 /// A value that has crossed into the **operational carrier** — nothing but the
@@ -16935,6 +16938,136 @@ impl<'a> Lowering<'a> {
 
     #[cfg(not(test))]
     fn record_capacity_phase_dispatch(_carried: bool) {}
+
+    /// **`RT-CARRIER-BYTESPAN-OBSERVE` `D4` — the lowering-side byte-span
+    /// observer.**
+    ///
+    /// Consumes the exact [`PlannedEffectSeat`] record, emits one
+    /// `ken_boundary_bytes_view_local` call, and returns SSA
+    /// `(pointer, length, outcome)`.
+    ///
+    /// ⛔ **It never constructs a [`Lowered`] and never decodes at Rust or JIT
+    /// time.** Everything it learns it learns from the helper at run time; the
+    /// only compile-time facts it reads are the planner's, off the record it
+    /// was handed.
+    ///
+    /// ⭐⭐ **THE OUTCOME IS THREE-VALUED, and that is the whole point.** `D3`
+    /// answers a word that never denoted a byte span and a well-formed span
+    /// that fails containment with DIFFERENT statuses, and a caller must not be
+    /// able to read one off the other. So this does **not** funnel the status
+    /// through [`Self::require_i64`] — that collapses every refusal into one
+    /// failure return and would destroy the distinction the helper exists to
+    /// make. The discriminant is:
+    ///
+    /// | outcome | meaning |
+    /// |---|---|
+    /// | `0` | the span is observable; pointer and length are live |
+    /// | `1` | a WELL-FORMED byte span that failed a bounds rule |
+    /// | `2` | the word never denoted a byte span at all |
+    ///
+    /// ⚠ On any non-zero outcome the pointer and length are `0`, so a caller
+    /// that ignores the discriminant reads a null span rather than a plausible
+    /// one — the failure is loud rather than silently wrong.
+    ///
+    /// ⚠ **ADDRESS-STABILITY CONTRACT (`AC-11`, Architect `dec_5zjh9675253pj`).**
+    ///
+    /// The returned pointer is an ephemeral view into the persistent image's
+    /// current published data table. It remains valid only until the next
+    /// materialization or reservation of that image. `PersistentStore` ownership
+    /// guarantees the referent's lifetime, not the stability of this interior
+    /// address. A consumer must use the pointer and length before any such
+    /// operation and must not store or transport the pair across one.
+///
+    /// ⛔ **The SSA pair is a BORROWED VIEW, never a new persistent
+    /// representation.** `D5` owns the per-seat proof that the host-marshalling
+    /// consumer uses it before any materialization or reservation; retaining it
+    /// across one is a hard stop and a separate mechanism decision, not
+    /// something this observer may paper over.
+    ///
+    /// ⛔ **Dormant on purpose: no production caller exists yet.** Emitting an
+    /// observer does not make any seat admit a carried word — every
+    /// `BytesPointerLength` seat is still `SPECIALIZED_ONLY`, `Avail` is
+    /// untouched, and `D5` is the per-seat activation. A green control here is
+    /// evidence about this observer and **not** about any seat.
+    #[allow(dead_code)] // `D5` wires the call sites; `D4` lands the mechanism.
+    fn observe_carried_bytes_span(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        seat: PlannedEffectSeat,
+        target: CarriedBoundaryWord,
+    ) -> Result<
+        (
+            cranelift_codegen::ir::Value,
+            cranelift_codegen::ir::Value,
+            cranelift_codegen::ir::Value,
+        ),
+        CraneliftBackendError,
+    > {
+        use cranelift_codegen::ir::condcodes::IntCC;
+        // ⛔ The record is CONSUMED, not decorative. An observer emitted for a
+        // seat whose need is not a byte span would be reading a value the
+        // planner never said was one, and that is a representation decision
+        // taken by the caller rather than by the authority.
+        if seat.need != EffectSeatNeed::BytesPointerLength {
+            return Err(unsupported(
+                "Effect",
+                format!(
+                    "the byte-span observer was asked for seat {:?} of {:?}, whose need is                      {:?} rather than BytesPointerLength",
+                    seat.slot, seat.operation, seat.need
+                ),
+            ));
+        }
+        let refs = self.carrier_refs()?;
+        let boundary_arena = self.carrier_arena()?;
+        let pointer_type = builder.func.dfg.value_type(boundary_arena);
+
+        let view_slot =
+            builder.create_sized_stack_slot(StackSlotData::new(StackSlotKind::ExplicitSlot, 16, 3));
+        let view = builder.ins().stack_addr(pointer_type, view_slot, 0);
+        let call = builder
+            .ins()
+            .call(refs.bytes_view, &[boundary_arena, target.word, view]);
+        let status = builder.inst_results(call)[0];
+
+        let observed = builder.create_block();
+        let refused = builder.create_block();
+        let done = builder.create_block();
+        builder.append_block_param(done, pointer_type);
+        builder.append_block_param(done, types::I64);
+        builder.append_block_param(done, types::I64);
+        let ok = builder.ins().icmp_imm(IntCC::Equal, status, BOUNDARY_OK);
+        builder.ins().brif(ok, observed, &[], refused, &[]);
+
+        builder.switch_to_block(observed);
+        let pointer = builder.ins().stack_load(pointer_type, view_slot, 0);
+        let length = builder.ins().stack_load(types::I64, view_slot, 8);
+        let good = builder.ins().iconst(types::I64, 0);
+        builder
+            .ins()
+            .jump(done, &[pointer.into(), length.into(), good.into()]);
+
+        // ⛔ The two refusals are separated HERE, from the helper's own status,
+        // rather than re-derived from the word. Re-deriving would be a second
+        // authority on a question `D3`'s guards already answer.
+        builder.switch_to_block(refused);
+        let bounded = builder.ins().icmp_imm(
+            IntCC::Equal,
+            status,
+            crate::boundary_value::BOUNDARY_ERR_BOUNDS,
+        );
+        let null = builder.ins().iconst(pointer_type, 0);
+        let empty = builder.ins().iconst(types::I64, 0);
+        let out_of_bounds = builder.ins().iconst(types::I64, 1);
+        let not_a_span = builder.ins().iconst(types::I64, 2);
+        let outcome = builder.ins().select(bounded, out_of_bounds, not_a_span);
+        builder
+            .ins()
+            .jump(done, &[null.into(), empty.into(), outcome.into()]);
+
+        builder.switch_to_block(done);
+        let p = builder.block_params(done);
+        Ok((p[0], p[1], p[2]))
+    }
 
     fn narrow_carried_int_u64(
         &mut self,
