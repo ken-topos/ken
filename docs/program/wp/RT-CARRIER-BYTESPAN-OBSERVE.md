@@ -341,6 +341,53 @@ well-formed span that fails a bounds rule and a word that never denoted a byte
 span are **different answers**, and a caller must not be able to read one off
 the other.
 
+**RECUT, 2026-08-07, on the ring's return (`evt_54ykqzecehwa0`).** `D4` is
+**observer plus `AC-11` only**. `AC-10` moves to `D4b`. The ring reported a
+second thing at the same time, and it is the more important half:
+
+> **`D4` has no seam to witness OUTCOME 1** — a well-formed byte span that fails
+> a bounds rule. The node is materialized inside the same emitted run that
+> observes it, so a pre-run extent poke lands before the node exists and
+> **silently leaves the run at outcome 0.**
+
+**Do not ship that poke as a green control.** A control whose mutation lands
+before its target exists passes for any reason, and this frame has already paid
+for one of those. Delete it or mark it, and report the axis as unwitnessed.
+
+**Before recording it as unwitnessed, answer this specific question, because the
+seam may already exist and be merged.** `D3` faced the same problem and solved
+it: `d3_a_span_past_the_live_data_is_refused_on_the_bounds_axis`
+(`boundary_value_clif.rs:6497`) separates creation from observation by
+
+1. `bind`, then run a **positive control** asserting the intact node is
+   observable;
+2. `drop` the binding;
+3. `poke_node_field(index, NODE_EXTENT, u64::MAX - 1)` — **after** the node
+   exists;
+4. `rebind(persistent)` and assert `BOUNDARY_ERR_BOUNDS`.
+
+`bind`/`rebind`/`poke_node_field` are all merged and live. **Say whether that
+rebind seam transfers to the lowering fixture, and if it does not, say exactly
+what blocks it** — a `D4` residual is acceptable, but only after that question
+is answered rather than skipped.
+
+**And note what the gap is actually about, because it is narrower than "the
+bounds path is unproven."** The bounds arithmetic lives in the `D3` helper, and
+`D3` witnessed it there against a real out-of-bounds node. `D4`'s observer does
+not re-derive bounds; it calls the helper. **So the missing witness is that the
+observer PROPAGATES outcome 1 distinctly, not that the bounds check works.**
+That is a different and probably cheaper control to build — and it is the one
+`D5` needs, because `D5` flips seats on the observer's separation of outcomes.
+
+### `D4b` — `AC-10`, recut as its own bounded deliverable
+
+Make the `ResponseBytes`-validity invariant structural. **The full statement is
+`AC-10`; read it there.** It is bounded, it is independent of `D5` and `D6`, and
+it does **not** gate them.
+
+**It must land before the node closes.** Runtime does not treat it as discharged
+and neither do I.
+
 ### `D5` — flip the phase, per seat, last
 
 Only after producer and reader close together may a `BytesPointerLength` seat
@@ -459,8 +506,12 @@ Every AC names its owning deliverable. **If one cannot, that is the finding.**
 - **`AC-9` (no-regression).** Workspace green **in CI** — never a local
   `cargo test --workspace` (`COORDINATION §12`).
 
-- **`AC-10` (`D3`, `D4`) — the `ResponseBytes`-validity invariant is enforced
+- **`AC-10` (`D4b`) — the `ResponseBytes`-validity invariant is enforced
   structurally, not by convention.**
+
+  **REASSIGNED 2026-08-07 from `D3`/`D4` to `D4b`** on the ring's return
+  (`evt_54ykqzecehwa0`), under the recut this frame authorizes at §3. Nothing
+  below changes; only its owner does.
 
   **STEWARD AMENDMENT, 2026-08-07, after `D2` merged at `4f9f0987`.** Added
   from Adversary `evt_5xqw6xsbm4v8b`, whose central claim I verified in source
