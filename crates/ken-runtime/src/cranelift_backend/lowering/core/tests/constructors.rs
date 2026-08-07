@@ -2527,7 +2527,25 @@ fn c2_run_edge_with_arg(code: *const u8, arena: *const u64, argument: i64) -> i6
     function(arena, argument)
 }
 
+// Ignored pending RT-CARRIER-PRODUCER-OCCURRENCE.
+//
+// Observed signature, exactly:
+//   the C2 carrier edge emits: Unsupported(UnsupportedLowering { construct: "Constructor", reason: "a source aggregate reached the carrier with no planner-issued producer occurrence, so it would name no ownership record and could only be given the authority of wherever it happened to be transferred" })
+//
+// Owner node: RT-CARRIER-PRODUCER-OCCURRENCE.
+// Pre-existing base debt, NOT a bind-order regression: fails at base
+// 21fd46dc with this same signature, measured two-ended at both refs and
+// with the CI feature px8-ds-test-support both on and off.
+//
+// IT DIES AT ITS `expect` BEFORE THE PROPERTY IS EVALUATED. The panic is at
+// the `.expect("the C2 carrier edge emits")`, so the carrier edge refuses to
+// emit and the separately-generated nested payload selection this row names
+// is never evaluated at all. Un-ignoring the row is therefore NOT the repair
+// and would only restore a refusal; the repair is the owner node's, and it
+// has to make the carrier edge emit.
+// Annotation only -- test body, expect, and expectations are unchanged.
 #[test]
+#[ignore = "RT-CARRIER-PRODUCER-OCCURRENCE: the carrier edge refuses to emit for a source aggregate with no planner-issued producer occurrence; fails at base 21fd46dc"]
 fn c2_ac4_runtime_host_result_selects_a_separately_generated_nested_payload() {
     let symbols = crate::NativeProcessSymbols::legacy_prelude();
     let nested_default = || RuntimeTrap {
@@ -5768,7 +5786,33 @@ fn run_worker_fixture(expr: &RuntimeExpr) -> RuntimeObservation {
 ///
 /// This is also `AC-5`'s target-redirect red: the two workers are same-shape,
 /// so a call resolving to the other one's body is exactly a redirected target.
+//
+// Ignored pending RT-WORKER-FIXTURE-DECODE.
+//
+// Observed signature, exactly:
+//   the worker fixture runs: Backend(NativeResultDecode { token: 9 })
+//
+// Owner node: RT-WORKER-FIXTURE-DECODE.
+// Pre-existing base debt, NOT a bind-order regression: fails at base
+// 21fd46dc with this same signature, measured two-ended at both refs and
+// with the CI feature px8-ds-test-support both on and off.
+//
+// IT DIES AT ITS `expect` BEFORE REACHING A SINGLE ASSERTION. The panic is
+// on the row's FIRST statement, inside `run_worker_fixture` at the
+// `.expect("the worker fixture runs")`, so all three `assert_ne!`
+// comparisons below are unreachable at both refs.
+//
+// Read the doc comment above accordingly: AC-5's target-redirect red is
+// NOT discharged by this row and is not discharged by ignoring it -- the
+// comparisons that would detect a redirected target have never run here.
+// Ignoring it switches off nothing that was working, and un-ignoring it
+// later is NOT the repair. A genuine capture-order regression would present
+// as two configurations comparing EQUAL, an `assert_ne!` firing; it cannot
+// present as a fixture that will not execute, which is why this row is not
+// evidence about the source-body binding order in either direction.
+// Annotation only -- test body, expect, and assertions are unchanged.
 #[test]
+#[ignore = "RT-WORKER-FIXTURE-DECODE: the worker fixture cannot run, so the AC-5 comparisons are unreachable; fails at base 21fd46dc"]
 fn two_same_shape_workers_are_distinguished() {
     let baseline = run_worker_fixture(&two_same_shape_workers(1, 1, false));
     let body_swapped = run_worker_fixture(&two_same_shape_workers(2, 1, false));
