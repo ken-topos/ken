@@ -100,8 +100,12 @@ jobs:
       # duplicated or silently dropped — and a dropped test still shows a
       # green gate.
       #
-      # `rt_parity_native` is a differential (interp-vs-native) oracle, not
-      # CI hygiene — see `native-rt-parity` below and
+      # `rt_parity_native` was given its own job to serve as a differential
+      # (interp-vs-native) oracle rather than as CI hygiene. It carries NO
+      # such differential at this candidate: its six `assert_narrowed_alike`
+      # rows are ignored and the one row still running is not a differential.
+      # The exclusion below is still correct — see `native-rt-parity` below
+      # for which nodes re-arm it, and
       # docs/program/issues/CI-SKIPPED-NATIVE-TESTS.md. Measured 7 tests /
       # 266.7s wall / 470.6s CPU as one binary, where
       # `fs_write_at_malformed_offset_narrows_to_invalid_offset` alone takes
