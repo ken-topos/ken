@@ -57,7 +57,8 @@
 > it (`da19fe7e`, PR #1541) from Adversary `evt_5xqw6xsbm4v8b`: make the
 > `ResponseBytes`-validity invariant structural rather than held by two call
 > sites and a comment. `D3`'s base predates it and the candidate touches no
-> `Lowered`. **It is `D4`'s.** Stated in #1543's body so the ring cannot miss it.
+> `Lowered`. **It is `D4`'s.** Stated in **PR #1542**'s body (the `D3` publish)
+> so the ring cannot miss it.
 >
 > **OPEN, WITH THE OPERATOR — do not act unilaterally: close stale PR #1528?**
 > Asked, not yet answered. It is the **only** open PR. Head `21fd46dc`,
