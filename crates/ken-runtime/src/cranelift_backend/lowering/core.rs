@@ -19,6 +19,54 @@ thread_local! {
         const { std::cell::Cell::new(0) };
 }
 
+/// **`RT-CARRIER-BYTESPAN-OBSERVE` `D2` — the reply byte span, MASKED at the
+/// typed producer** (Architect `dec_12s3j2gj67c66`).
+///
+/// ⭐ **Why the masking lives HERE and not in the carrier.** Since `D2`,
+/// [`Lowered::ResponseBytes`] means *a byte span that will be dereferenced and
+/// copied*, so **every instance must independently be a valid span** — being
+/// the arm a runtime discriminant does not select cannot legalize a pointer
+/// nobody established. The carrier materializes both `HostResult` children
+/// eagerly and B2V controls pin that, so the obligation cannot be discharged by
+/// making transfer lazy. It is discharged where `success`, the operation and the
+/// byte source are all already in scope: right here.
+///
+/// ⛔ **Not a placeholder lane and not a new representation.** The unselected
+/// arm is the canonical EMPTY span `{null, 0}` — an ordinary, lawful
+/// `ResponseBytes` whose copy loop runs zero times. Nothing downstream learns a
+/// new shape.
+///
+/// ⚠ **This deliberately does NOT rest on the dispatcher clearing
+/// `reply.bytes`.** That is a true implementation fact today and it is not an
+/// ABI-authority contract; building on it would silently promote an
+/// implementation detail into one. The mask makes the span self-validating
+/// regardless of what the reply buffer happens to hold.
+fn masked_reply_response_bytes(
+    builder: &mut FunctionBuilder<'_>,
+    pointer_type: cranelift_codegen::ir::Type,
+    reply: cranelift_codegen::ir::StackSlot,
+    data_offset: u32,
+    len_offset: u32,
+    success: cranelift_codegen::ir::Value,
+) -> Lowered {
+    let pointer = builder.ins().stack_load(
+        pointer_type,
+        reply,
+        i32::try_from(data_offset).expect("reply bytes data offset is u32"),
+    );
+    let len = builder.ins().stack_load(
+        types::I64,
+        reply,
+        i32::try_from(len_offset).expect("reply bytes len offset is u32"),
+    );
+    let null = builder.ins().iconst(pointer_type, 0);
+    let empty = builder.ins().iconst(types::I64, 0);
+    Lowered::ResponseBytes {
+        pointer: builder.ins().select(success, pointer, null),
+        len: builder.ins().select(success, len, empty),
+    }
+}
+
 #[cfg(test)]
 fn c2_unit_emission_epoch() -> Option<u64> {
     C2_UNIT_EMISSION_EPOCH.with(std::cell::Cell::get)
@@ -14168,39 +14216,33 @@ impl<'a> Lowering<'a> {
                 success_tag,
             );
             let ok = if operation == ken_host::HostOpV1::FsReadFile {
-                Lowered::ResponseBytes {
-                    pointer: builder.ins().stack_load(
-                        pointer_type,
-                        reply,
-                        i32::try_from(wire.reply_bytes_data_offset)
-                            .expect("reply bytes data offset is u32"),
-                    ),
-                    len: builder.ins().stack_load(
-                        types::I64,
-                        reply,
-                        i32::try_from(wire.reply_bytes_len_offset)
-                            .expect("reply bytes len offset is u32"),
-                    ),
-                }
+                // `D2` — self-validating span; see `masked_reply_response_bytes`.
+                masked_reply_response_bytes(
+                    builder,
+                    pointer_type,
+                    reply,
+                    wire.reply_bytes_data_offset,
+                    wire.reply_bytes_len_offset,
+                    success,
+                )
             } else if operation == ken_host::HostOpV1::FsOpen {
                 Lowered::ResourceToken { value: detail }
             } else if operation == ken_host::HostOpV1::BufferAllocate {
                 Lowered::ResourceToken { value: detail }
             } else if operation == ken_host::HostOpV1::BufferFreeze {
-                Lowered::ResponseBytes {
-                    pointer: builder.ins().stack_load(
-                        pointer_type,
-                        reply,
-                        i32::try_from(wire.reply_bytes_data_offset)
-                            .expect("reply bytes data offset is u32"),
-                    ),
-                    len: builder.ins().stack_load(
-                        types::I64,
-                        reply,
-                        i32::try_from(wire.reply_bytes_len_offset)
-                            .expect("reply bytes len offset is u32"),
-                    ),
-                }
+                // `D2` — the SECOND site, and it needs the mask for the same
+                // reason. ⛔ Not a copy of the arm above by accident: both
+                // construct a `ResponseBytes` from the reply span, so a mask at
+                // only one of them leaves the other dereferencing an
+                // unestablished pointer on its failure path.
+                masked_reply_response_bytes(
+                    builder,
+                    pointer_type,
+                    reply,
+                    wire.reply_bytes_data_offset,
+                    wire.reply_bytes_len_offset,
+                    success,
+                )
             } else if operation == ken_host::HostOpV1::FsReadAt {
                 let reply_data = builder.ins().stack_load(
                     pointer_type,
