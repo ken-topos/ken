@@ -2276,6 +2276,15 @@ fn region_data_base(
 /// [`BOUNDARY_ERR_BOUNDS`]. A caller cannot read one off the other, which is
 /// exactly what `D4` needs in order to separate them without guessing.
 ///
+/// ⚠ **ADDRESS-STABILITY CONTRACT (`AC-11`, Architect `dec_5zjh9675253pj`).**
+///
+/// The returned pointer is an ephemeral view into the persistent image's
+/// current published data table. It remains valid only until the next
+/// materialization or reservation of that image. `PersistentStore` ownership
+/// guarantees the referent's lifetime, not the stability of this interior
+/// address. A consumer must use the pointer and length before any such
+/// operation and must not store or transport the pair across one.
+///
 /// ⚠ **It never constructs a `Lowered`, never touches `Avail`, and activates
 /// nothing.** Emitting this helper does not make any seat admit a carried word;
 /// that is `D5`, and a green body here is not evidence for it.

@@ -4900,6 +4900,35 @@ pub(in crate::cranelift_backend) struct PlannedEffectSeat {
 /// the function is right. What sees them is the independent recomputation of
 /// the contract from the operation and the slot at the ledger close.
 #[cfg(test)]
+impl PlannedEffectSeat {
+    /// A seat record for a control, with a caller-chosen `need`.
+    ///
+    /// ⚠ Test-only scaffolding for `RT-CARRIER-BYTESPAN-OBSERVE` `D4`, whose
+    /// observer consumes this record. The id newtypes are `pub(super)` here, so
+    /// a control in the lowering cannot build one itself.
+    ///
+    /// ⛔ `avail` is `SPECIALIZED_ONLY` and stays that way: `D4` activates
+    /// nothing, and a fixture handing itself `EITHER_PHASE` would be asserting
+    /// `D5`'s outcome.
+    #[cfg(test)]
+    pub(in crate::cranelift_backend) fn for_observer_control(
+        need: EffectSeatNeed,
+    ) -> Self {
+        PlannedEffectSeat {
+            effect_origin: StaticOriginId(0),
+            child_origin: StaticOriginId(1),
+            position: 0,
+            operation: ken_host::HostOpV1::FsReadFile,
+            slot: EffectSeatSlot::Argument(0),
+            producer_owner: PredeclaredFunctionId(0),
+            consumer_owner: PredeclaredFunctionId(0),
+            semantic_operation: EffectSeatOperation::ProjectBytesSpan,
+            need,
+            avail: EffectSeatAvail::SPECIALIZED_ONLY,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(in crate::cranelift_backend) enum EffectSeatPlanMutation {
     Exact,
