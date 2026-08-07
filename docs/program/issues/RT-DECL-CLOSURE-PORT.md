@@ -1,7 +1,7 @@
 ---
 id: RT-DECL-CLOSURE-PORT
 title: "Transparent-declaration-closure emission port — a retained TransparentDeclarationClosure residual forces the whole object onto the monolithic RecursiveDescent root, which exceeds Cranelift's per-function ceiling"
-status: active
+status: merged
 owner: runtime
 size: L
 gate: none

@@ -1,7 +1,7 @@
 ---
 id: RT-SRCBODY-BIND-ORDER
 title: "Functionized source-body units install the parameter run in ABI order where the body reads de Bruijn-nearest-first, so every multi-parameter source body binds its parameters permuted"
-status: ready
+status: merged
 owner: runtime
 size: M
 gate: none

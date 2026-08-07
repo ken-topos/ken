@@ -33,9 +33,323 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-07 ~02:1xZ · ONE blocker left: nine `scenario.rs` rows, with the operator
+## LIVE — 2026-08-07 ~11:5xZ · Both operator decisions RULED; Runtime executing
 
-**The GitHub outage is over. CI works. `main` is still `3015aafd`.**
+> ### NEXT ACTION ON RESUME — read this line first
+>
+> **MERGED. `RT-SRCBODY-BIND-ORDER` landed; `main` moved `533f7c06` ->
+> `7ca5cfc0`.** PR #1529 merged at exact `acfcc915` on `dec_6ajfyekdp2qf8`.
+> **M6 verified 52 changed paths, ALL blob-identical on `origin/main`, 0
+> differ.** Three nodes flipped `merged`. Nothing is with the operator.
+>
+> 1. **The Runtime ring is FREE and its next node is
+>    [[RT-CARRIER-BYTESPAN-OBSERVE]]** (`ready`, size L, frame written, base is
+>    **`main`** not the branch — the publisher squashed, so `21fd46dc` is no
+>    longer an ancestor of `main`). Run the handoff-gate compaction before
+>    releasing it; **that gate was missed once on this ring already.**
+> 2. **Fleet is still SINGLE-THREADED** (operator, 2026-08-07).
+>    `KERNEL-NESTED-IND` stays stood down despite a written frame and an idle
+>    kernel ring. **A posture, not an oversight — do not "fix" it.**
+> 3. **FOUR cited sources route to the Librarian** —
+>    `.github/workflows/ci.yml`, `crates/ken-cli/tests/px4b_native_production.rs`,
+>    `crates/ken-cli/tests/rt_parity_native.rs`,
+>    `crates/ken-runtime/src/cranelift_backend.rs`.
+> 4. **Two new owner nodes are FILED** — [[RT-WORKER-FIXTURE-DECODE]] and
+>    [[RT-CARRIER-PRODUCER-OCCURRENCE]], both `draft`, runtime, size `TBD`,
+>    frames owed. **Do not re-file them and do not fold either into a released
+>    owner.** Their rows are `#[ignore]`d and **both die at an `expect` before
+>    any assertion**, so un-ignoring is NOT the repair.
+> 5. **`AC-5`'s target-redirect red is NOT discharged.** Its detector cannot
+>    reach its three `assert_ne!` comparisons and has not been able to for an
+>    unknown span. Recorded in the annotation itself so it survives the skip.
+> 6. **I did NOT append the tracker-sync commit** to the ring candidate,
+>    deliberately and for the second time: it would have moved the tip off
+>    `acfcc915` and voided a Decision scoped to that exact object, and the
+>    publisher force-pushes the BRANCH and re-reads its tip. The tracker rides
+>    this corpus publish instead — same durability, no voided gate.
+
+### THE ENUMERATION WAS CLOSED OVER THE WRONG POPULATION — my error
+
+**"The complete `--no-fail-fast` surface is 40" ranged over `ken-cli` and
+`ken-verify`. That is 2 of 8 workspace members.** The workspace is
+`ken-kernel`, `ken-elaborator`, `ken-interp`, `ken-cli`, `ken-foundation`,
+**`ken-runtime`**, `ken-host`, `ken-verify`, and CI runs
+`cargo nextest run --workspace`.
+
+⇒ **Six packages were never enumerated — including `ken-runtime`, the crate the
+`D1` repair MODIFIES.** An enumeration that excludes the crate under repair
+cannot bound that repair's blast radius. **I accepted the number without asking
+which packages it ranged over.**
+
+**What failed** — both unannotated `ken-runtime` lib unit tests in
+`crates/ken-runtime/src/cranelift_backend/lowering/core/tests/constructors.rs`:
+
+| test | line | why it matters |
+|---|---|---|
+| `two_same_shape_workers_are_distinguished` | `:5772` | its own doc comment says swapping a body **or its capture order** changes the linked result, and calls it `AC-5`'s target-redirect red |
+| `c2_ac4_runtime_host_result_selects_a_separately_generated_nested_payload` | `:2531` | nested payload selection |
+
+**RESOLVED — the `D1`-regression hypothesis is FALSIFIED, and two was the whole
+population, not a floor.** Kept because the *shape* of the error is worth
+recognising: I accepted "the complete surface is 40" as authoritative sizing
+without asking which packages it ranged over.
+
+### THE CENSUS IS CLOSED OVER ALL EIGHT MEMBERS. Both rows are BASE DEBT.
+
+`evt_ksrhrv82t5ae`, `--no-fail-fast`, one `-p` per command, never `--workspace`
+(`COORDINATION §12` unchanged). Absolute counts, passed/failed/ignored:
+
+| package | base `21fd46dc` | candidate `fb99d0fc` |
+|---|---|---|
+| `ken-kernel` | 215 / 0 / 0 | 215 / 0 / 0 |
+| `ken-elaborator` | 1106 / 0 / 0 | 1106 / 0 / 0 |
+| `ken-interp` | 178 / 0 / 3 | 178 / 0 / 3 |
+| `ken-foundation` | 19 / 0 / 0 | 19 / 0 / 0 |
+| `ken-host` | 55 / 0 / 0 | 55 / 0 / 0 |
+| `ken-runtime --lib` | 778 / 2 / 1 | 783 / 2 / 1 |
+
+**Both rows fail at BOTH ends with identical signatures.** Base debt, annotated
+under the fork, **not** a regression. The `+5` at the candidate is `D3`'s tests
+plus the sentinel, not a behaviour change.
+
+**NEITHER IS AN ASSERTION FAILURE — I verified this in the source, not from the
+report.** `two_same_shape_workers_are_distinguished` panics on its **first
+statement**, in `run_worker_fixture` at `.expect("the worker fixture runs")`, so
+all three `assert_ne!` comparisons are **dead code at both refs**.
+`c2_ac4_...` panics at `.expect("the C2 carrier edge emits")` — the carrier
+refuses to emit. **A `D1` capture-order regression presents as two
+configurations comparing EQUAL, an `assert_ne!` firing.** It cannot present as a
+fixture that will not execute, and not at a base predating the change.
+
+**The consequence, and it must not be lost in the annotation:** `AC-5`'s
+target-redirect red is asserted by a test that cannot reach its assertions.
+Annotating switches off nothing that was working, and **un-ignoring it later is
+NOT the repair** — restoring the fixture is. [[RT-WORKER-FIXTURE-DECODE]] owns
+that; [[RT-CARRIER-PRODUCER-OCCURRENCE]] owns the other.
+
+### THE COLD-WORKTREE ARTIFACT — why no repair credit is claimed
+
+**The ring's first base run reported 738 passed / 42 failed. Re-run WARM, same
+ref, same command: 778 / 2 / 1.** The extra 40 were
+`native_execution_differential` and `object_linker_packaging` rows needing built
+artifacts on disk. **The 42 is a build-state artifact, not a property of
+`21fd46dc`** — so any reading that this candidate "fixes 39 rows" is false, and
+the **"fixes six base failures" clause is removed from the publish
+description.** The implementer caught it because base-full disagreed with
+base-lib, and flagged it rather than quietly using the warm number. **A
+single-ended run could not have produced that disagreement.**
+
+### THE FEATURE HYPOTHESIS IS MEASURED DEAD. Do not re-raise it.
+
+> **`-p ken-runtime --lib --features px8-ds-test-support --no-fail-fast` is base
+> 778/2/1 and candidate 783/2/1 — IDENTICAL to the feature-off runs at both
+> ends, same two rows, same signatures. Nothing flipped.** It was mine
+> (`evt_6e8kxam15ax4g`) and the ring killed it by measurement rather than
+> argument, which is what I asked for.
+>
+> **The audit closed BY CONSTRUCTION, which is stronger than the grep I asked
+> for:** `ken-runtime` is the **only** workspace member declaring a `[features]`
+> table at all, and the only member-to-member activation anywhere is `ken-cli`'s
+> dev-dependency on it. The other five declare **zero** features, so their `-p`
+> runs cannot differ from `--workspace`. The three other `features = [` hits are
+> third-party (`rustix`, `linux-raw-sys`, `criterion`). **No reruns owed.**
+>
+> **There was never a local/CI disagreement to explain.** Both CI rows occur
+> exactly once and **neither passes at the candidate**. The "duplicated name"
+> in the interim was a **third** test,
+> `object_linker_packaging::tests::each_of_the_eight_authorized_limits_is_part_of_the_package_identity`,
+> listed twice in one binary's base failure list.
+
+**The mechanism below is still TRUE and still worth knowing — it just was not
+the cause here.** Filed as fleet memory
+`a-p-scoped-run-and-cis-workspace-run-compile-different-feature-sets`.
+
+**The bare-name ambiguity DOES NOT EXIST for these two rows.** Each name occurs
+**exactly once** in all of `crates/` (`constructors.rs:5772` and `:2531`; every
+other hit is under `docs/`). `mod constructors;` is declared once
+(`core/tests/mod.rs:59`), `mod tests;` once (`core.rs:12`), there is **no
+`#[path]` anywhere in ken-runtime**, and the crate declares **no `[[test]]`,
+`[[bin]]` or `[[bench]]` target**. ⇒ One symbol, one binary. **My "disambiguate
+by binary" instruction could not have produced a finding, and the premise was my
+paraphrase of the implementer's interim, not their report.**
+
+**The actual axis is FEATURE UNIFICATION.** `ci.yml:120` runs
+`cargo nextest run --workspace --locked --partition count:N/4`; the ring runs
+`-p ken-runtime --lib`. ken-runtime has one non-default feature,
+`px8-ds-test-support`, and **`ken-cli`'s `[dev-dependencies]` enables it**. The
+workspace is `resolver = "2"`, so one `--workspace` test invocation compiles
+ken-runtime once under the **union** its dependents demand. ⇒ **feature ON in
+CI, OFF under `-p`.**
+
+**Most gated sites are `#[cfg(any(test, feature = "px8-ds-test-support"))]`,
+true in ANY lib-test build — they do NOT discriminate.** The only feature-only
+sites are `cranelift_backend.rs:76` and `lowering/mod.rs:12381`. **Do not settle
+this by reading them.** The probe:
+
+```sh
+scripts/ken-cargo test -p ken-runtime --lib --features px8-ds-test-support --no-fail-fast
+```
+
+at **both** ends. Rows flip ⇒ that is the reconciliation. Rows do not flip ⇒ the
+hypothesis is dead and the axis is elsewhere; **a dead hypothesis measured beats
+a live one assumed.** I did **not** run it — the build lock is the ring's and
+contending for it would stall the critical path.
+
+**The general form, and it binds every local measurement:** a `-p <pkg>` run
+activates that package's **default** features only; CI's `--workspace` run
+activates the **union every member demands, dev-dependencies included.** So the
+operator's `-p`-only rule (§12) that keeps the box alive also makes a local
+differential **non-equivalent to CI** for any package a sibling enables a
+non-default feature on. Cheap check: grep the workspace `Cargo.toml`s for
+`features = [` on path deps and carry the matching `--features` on **both** ends.
+
+### RETRACTED — there was NO mention gap and NO stall. Both were MY instruments.
+
+⛔ **This block previously reported a three-occurrence mention gap on
+`runtime-leader` and a nine-minute implementer stall. Neither exists.**
+Retracted to the ring at `evt_4yh3568e6f488`.
+
+**Error 1 — I read a field that does not exist.** Convo events carry mentions
+at **`metadata.mentions`**, not at a top-level `mentions` key. My probe read
+the top-level key, so it returned `None` for **every event in the space,
+including my own posts whose mentions demonstrably arrived.** Measured
+correctly, all three of the leader's handoffs were right:
+`evt_72f386mgvth4t` → `['agt_37reqvb6ce400']`, `evt_3mj0a2bv40266` →
+`['agt_37reqftfe6g00']`, `evt_cjx7b0kgywca` → `['agt_37reqg3nync00']`.
+
+**Error 2 — I truncated the pane probe.** `tmux capture-pane -S -4` showed an
+empty composer and no `Working` line, and I called it idle. **The window was
+too small to contain the spinner directly above it.** The implementer had been
+running continuously for 12+ minutes.
+
+⭐ **Both are the same failure: a confident explanation built on an unverified
+instrument, which launders a measurement error into a finding.** The tell I
+walked past twice: **my own messages showed the identical `None`**, and I did
+not ask why. ⇒ **When an instrument reports a defect, first check what it says
+about a case whose answer you already know.**
+
+⚠ **Cost:** a false correction posted to a teammate and one redundant
+re-dispatch. **Do not re-derive the mention gap from an older briefing copy.**
+>
+> **Chain:** `21fd46dc` (frozen base) → `aa032cc2` → `8696e8c5` (`D13`, 31
+> rows) → `7d204438` (`D14`, +9 `scenario.rs`) → `d0942803` (`D15`, `ci.yml`)
+> → **`fb99d0fc`** (`:103` respin, QA-approved).
+
+### PUBLISH PRE-CLEARED at `fb99d0fc` — both axes, measured 2026-08-07 ~12:3xZ
+
+| axis | result |
+|---|---|
+| **base/intersection** | merge-base `e6b4a13b`; `comm -12` of the candidate's changed files against `main`'s is **EMPTY** ⇒ **immaterial, do NOT rebase** |
+| **attributability** | `main` is **GREEN** at `533f7c06` ⇒ any red on the candidate is the candidate's |
+
+⛔ **`git diff --stat origin/main fb99d0fc` shows 89 files / -22863 and that is
+NOT a staleness signal.** A squash applies **merge-base → branch**, never
+**main → branch**, so files `main` gained since `e6b4a13b` that the candidate
+does not touch are **not** reverted. That stat **fires identically on safe and
+unsafe candidates**; the intersection is the only test that discriminates, and
+it is empty. (COORDINATION §14(5) correction.)
+
+### DEFECT to raise with runtime-leader AFTER this lands, not now
+
+**Both review requests carried `mentions: None`** — `evt_72f386mgvth4t` (QA)
+and `evt_3mj0a2bv40266` (Architect) name the reviewer **in prose only**. That
+is the classic silent stall (§2). It did not bite: QA answered and the
+Architect pane read `Working`, i.e. **a redundant wake path masked it**. ⛔ The
+next handoff may not be so lucky. One line to the leader at the seam; **do not
+interrupt a live review over it.**
+> 2. **When it lands**, run M6-M9 (see "Owed the moment the merge lands").
+> 3. **Do NOT release a second ring.** Operator ruled single-threaded
+>    2026-08-07; `KERNEL-NESTED-IND` stays stood down despite a written frame
+>    and an idle kernel ring. This is a posture, not an oversight.
+>
+> **My unpublished work sits on `steward/work` ahead of `origin/main`.** It is
+> held under COORDINATION §10⁻ rule 1 while Runtime holds finished unmerged
+> work. Publish it at the same seam as the candidate, not before.
+
+### THE 40-ROW SET CANNOT CLEAR CI ON ITS OWN. Adversary F1/F3, confirmed.
+
+**Do not re-derive this and do not re-open it.** Adversary `evt_4mwy8tmfmm7tw`;
+every claim re-measured by me against the tree, not taken on report.
+
+All three binaries that merged node `CI-SKIPPED-NATIVE-TESTS` exists to run are
+gutted by the annotation:
+
+| binary | at base `21fd46dc` | annotated |
+|---|---|---|
+| `px8f_write_partition.rs` | 1 live | **0 live** |
+| `px8f_buffer_native.rs` | 1 live | **0 live** |
+| `rt_parity_native.rs` | 7 live | **1 live** |
+
+**The two zero-selection jobs HARD-FAIL.** CI installs `cargo-nextest@latest`
+= **0.9.140**, whose `--no-tests` default is `auto`, *"defaulting to fail"*.
+⭐ **Measured directly on a dependency-free scratch crate, with a positive
+control:** a binary whose only `#[test]` is `#[ignore]`d exits **4**
+(`error: no tests to run`); a binary with one live test exits **0**. The
+aggregator (`ci.yml:296-304`) tests only `result == success`, so it fails with
+them.
+
+⛔ **My "CI should go green in one pass" instruction to the ring was FALSE** and
+is corrected at `evt_7wyhwwcnec4yq`.
+
+**The third binary fails the OTHER way and is the more dangerous one.**
+`rt_parity_native` keeps one test, so it reports **green** — but the six ignored
+rows are exactly the six calling `assert_narrowed_alike`, and the survivor
+(`:786`) calls `elaborates()`, a source-scope check. `ci.yml:227` states in its
+own voice the condition the job was built to end: *"a green CI carried no
+information about whether native and interp agreed."* **True again, and nothing
+reports it.**
+
+**Operator ruling 2026-08-07: fold a minimal `ci.yml` companion** — `D15`,
+released at `evt_xy3s7s2qf2pq`. `--no-tests=pass` on the two `px8f` jobs **only**
+(the flag is fail-open; it is defensible only where the emptiness is known,
+owned and named), plus an **in-place correction** of the false `ci.yml:227`
+claim. `AC-2` is the load-bearing one: un-ignore one `px8f` row, observe the job
+go RED, restore — proving the flag suppresses only empty-selection and not a
+real failure.
+
+**Publisher CAN push `.github/workflows/`** — tested, not cited: `ken-ci[bot]`
+authored **seven** workflow commits on `main`, latest `a1e29284` 2026-07-27.
+
+### `D15` RESPIN — a SECOND copy of the false claim, at `ci.yml:103`
+
+**The ring found it and asked before spending the review cycle.** My `AC-3`
+named `ci.yml:227`, so it was **structurally unable** to catch a second copy
+160 lines earlier — the one a reader meets first.
+
+**`AC-3` restated as a property, and this is the durable form:** *no sentence
+anywhere in `.github/workflows/ci.yml` asserts in the present tense that
+`rt_parity_native` currently carries the interp-vs-native differential;
+discharge by grep over the whole file, not by reading the block you edited.*
+
+⛔ **Bounded deliberately — do NOT sweep further.** `:92-94`
+(`(14m41s, 7 tests) RESTORED`, with a cited measurement source) and the
+measurement sentences after `:103` (`7 tests / 266.7s / 470.6s`, the ~250s
+outlier, the nested-brackets structural fact) are **records and still true**.
+**Instructions get corrected; records stay records.** Over-correcting them is
+the opposite error and was ruled out explicitly.
+
+### No over-annotation. The suppressed population was swept once, by hand.
+
+At `7d204438`, on request: `ken-cli` `-- --ignored` = **0 passed / 34 failed**;
+`ken-verify` = **0 passed / 10 failed**. **All 44 suppressed rows still fail.**
+
+⛔ **Nothing in the repo does this automatically** — `--ignored`,
+`--run-ignored`, `include-ignored` grep **empty** across `.github/`, `scripts/`,
+`docs/program/`. Every skip is write-only, so a landed repair ships with its own
+regression cover off. Filed as **[[CI-IGNORED-SWEEP]]** (`draft`, verify, S) on
+the operator's ruling; **not** folded into this candidate.
+
+### Both operator decisions — RULED 2026-08-07, do not re-ask
+
+| question | ruling |
+|---|---|
+| Nine `ken-verify` `scenario.rs` lib unit tests — in the skip set? | **IN. The set closes at 40, not 31.** Same discipline as the other 31: exact signature, owning node, `fails at base 21fd46dc`. |
+| Runtime held, kernel idle with a shovel-ready frame — open a second ring? | **HOLD SINGLE-THREADED.** Do not release `KERNEL-NESTED-IND` or any other node in parallel. |
+
+**PR #1265 was CLOSED at 11:25:19Z** — that item is resolved and needs no
+further recommendation.
+
+**The GitHub outage is over and CI works. `main` is `533f7c06`.**
 
 ### The candidate is exonerated and `ken-cli` is GREEN
 
@@ -74,20 +388,20 @@ newer work.
 content — `main` moving past a PR produces the same signal. Use `git cherry`
 (patch-equivalence) plus **which side was touched later**.
 
-**Still open: #1529 (candidate), #1528 (closes as superseded when #1529 lands),
-#1265 (OPERATOR — carries `fb8ec38`/`430798bf`/`548682c3`/`42ccd8ec`, all
-explicitly banned from import).**
+**Still open: #1529 (candidate), #1528 (closes as superseded when #1529
+lands). #1265 was CLOSED at 2026-08-07T11:25:19Z** — it carried `fb8ec38`,
+`430798bf`, `548682c3`, `42ccd8ec`, all explicitly banned from import. **Two
+open PRs, both accounted for.**
 
-### THE ONLY THING LEFT
+### The nine `scenario.rs` rows are IN — ruled, dispatched, in flight
 
-**Nine `ken-verify` LIB UNIT TESTS in `scenario.rs`** — unit tests over
-production source, not integration parity rows. **With the operator.** Their
-skip authorization plausibly aimed at the integration/CI-gate surface, and this
-is a different kind of debt. **DO NOT ANNOTATE `scenario.rs` until they rule.**
+The ruling went to runtime-leader as `evt_gjaaqcn0sftc` in `thr_69qrsxjk8wrcd`:
+annotate all 40, then **one** review cycle — QA then Architect on the exact
+final SHA. A new SHA voids `dec_wyn3kvzhs9at`; read Decisions from the
+**object**.
 
-⇒ On their answer: add the nine to `8696e8c5` **or** close the set at 31.
-**One review cycle either way** — QA then Architect on the exact final SHA. A
-new SHA voids `dec_wyn3kvzhs9at`; read Decisions from the **object**.
+**An unmatched row gets its own node, never a nearest fit.** The ring was told
+to stop and ask rather than assign a row to the nearest shape.
 
 ### THE NUMBER IS 31 — my off-by-one, twice
 
@@ -119,11 +433,25 @@ call these byte-span); frame marker → [[RT-FRAME-MARKER-ONCE]]; closure lane �
 [[RT-PROCESS-EXIT-STATUS]]. **An unmatched row gets its OWN node, never a
 nearest fit.**
 
-### Still unexplained — do not paper over it
+### CI 14 vs local 40 — EXPLAINED 2026-08-07. It was never a second population.
 
-**CI showed 14 where local shows 40.** Fail-fast plus sharding explains the
-direction; it is **not proven**. The ring correctly refused to size an
-annotation on that discrepancy.
+**`.github/workflows/ci.yml:117` runs `cargo nextest run --workspace --locked`
+with no `--no-fail-fast`, and there is no `.config/nextest.toml`.** nextest
+therefore **cancels the run on first failure**; only the tests already in
+flight finish and report.
+
+⇒ **CI's 14 is a TRUNCATED VIEW of the same set the ring enumerated at 40**,
+not a disagreeing measurement. This is the identical per-binary peeling caught
+at `D10`, one layer up — and it is why sizing an annotation off CI's list can
+never converge while sizing off the local `--no-fail-fast` run can.
+
+**Two consequences, both given to the ring.** The closed local enumeration is
+the authoritative sizing input. And after all 40 are annotated CI should go
+green in **one** pass — **a 41st row would be new information, not another
+peel; report it, do not absorb it, do not re-baseline.**
+
+**The ring was right to refuse to size on the discrepancy.** The refusal is
+what kept the number honest until the mechanism was found.
 
 ### Why the set kept growing, recorded because I missed it once
 
@@ -134,59 +462,31 @@ un-hides the next row in the same binary.** The implementer caught this during
 it complete.** `D12`'s whole-package `--no-fail-fast` run is the closed
 enumeration that ended the peeling.
 
-### BLOCKED ON A GITHUB ACTIONS OUTAGE — not on the candidate, not on a seat
+### ACTIONS IS RECOVERED. The outage block is retired — do not re-diagnose it.
 
-**Incident `qcvjkzcs7j74`, Critical, open since 2026-08-06T15:22Z.** Webhook
-triggers throttled to roughly 15%. **The merge cannot land until Actions
-recovers**, and no action here changes that.
-
-**The tell, so nobody re-diagnoses it:** PR #1528 has a `ken-ci` **check-suite**
-with **no workflow run behind it** and `updated_at` frozen at `created_at`, and
-**no workflow run exists repo-wide since 12:11Z**. The workflow is `active`; my
-token cannot read `actions/permissions` (403), so repo settings were ruled out
-by the repo-wide gap rather than by reading them.
-
-To resume: read the Actions component at
-`https://www.githubstatus.com/api/v2/summary.json`, confirm a run finally
-exists, then re-run the publisher on the same SHA. If the suite still never
-dispatches after recovery, closing and reopening the PR is the standard nudge —
-**ask the operator first.**
+Incident `qcvjkzcs7j74` is over. **Measured 2026-08-07: runs complete normally
+and `main` is GREEN at `533f7c06`** (run at 04:47:35Z, conclusion `success`).
+Greenness on `main` is what makes a red on a candidate *attributable* rather
+than inherited — re-establish it before publishing any cut.
 
 ### State of the publish
 
 | item | value |
 |---|---|
-| candidate | `21fd46dce478ed3a1a17622c33212e20ca545991` |
-| its parent | `b914c7ff`, the previously approved candidate |
-| Decision | `dec_4w8wn4ymn32cm` — **resolved**, Architect approved on cast |
-| PR | **#1528**, open, `MERGEABLE`, head = `21fd46dc` |
-| CI | check-suite `ken-ci` **created and QUEUED** at 20:19:06Z |
+| local branch `wp/RT-SRCBODY-BIND-ORDER` | **`8696e8c5`** — the `D13` annotation tip, local only, **never pushed** |
+| PR **#1529** head | **`aa032cc2`** — the PRE-annotation SHA |
+| #1529 CI | **8 failed / 4 passed** — expected at `aa032cc2`, and **not a finding about the ring's work** |
+| PR **#1528** | open; closes as superseded when #1529 lands |
+| `main` | `533f7c06`, green |
 
-**The publisher exited non-zero and that is NOT a candidate failure.** It waited
-322s, found **zero check runs** because the suite was still `queued`, printed
-*"no checks reported on the branch"* and died. **A queued suite and a suite that
-never triggered are indistinguishable to `gh pr checks`**, and the script treats
-both as fatal.
+⛔ **Do not read #1529's reds as a candidate defect.** The PR head is two
+commits behind the annotated tip. The reds are the unannotated base-debt rows,
+which is exactly what the 40-row annotation exists to close.
 
-⇒ **Resume by re-running the publisher on the same SHA.** `gh pr list --head`
-finds #1528, so it will not create a second PR; it proceeds to poll and merge.
-Do **not** re-push, do not open a new PR, do not re-vote.
-
-```sh
-export GH_TOKEN="$(/workspaces/ken/.devcontainer/mint-gh-token.sh)"
-scripts/scripted-pr-automerge.sh \
-  --target 21fd46dce478ed3a1a17622c33212e20ca545991 \
-  --title "RT-DECL-CLOSURE-PORT + RT-CONTSRC-PRODUCER-LOCAL: continuation source coordinate and typed-unit port; five known rows ignored" \
-  --description-file <the file below>
-```
-
-Description body is preserved at
-`docs/program/diary/pr-1528-description.md`. Check the suite first:
-
-```sh
-gh api repos/swe-toolkit/ken/commits/21fd46dc.../check-suites \
-  --jq '.check_suites[] | "\(.app.slug) \(.status) \(.conclusion//"-")"'
-```
+**The publisher force-pushes the head branch, so publishing moves #1529's head
+to whatever `wp/RT-SRCBODY-BIND-ORDER` points at.** That is the intended path
+here — but assert the branch is at the **reviewed** SHA immediately before the
+run, never at whatever the ring last committed.
 
 ### THE PUBLISH REF IS FROZEN AT `21fd46dc`. A live trap was disarmed here.
 
@@ -360,6 +660,24 @@ Suite at `21fd46dc`: **14 passed / 0 failed / 5 ignored, no sixth row.**
 **A skipped row measures nothing.** Greenness here is achieved by not asking the
 question. That is the whole reason both successor frames make un-skipping a
 deliverable rather than a courtesy.
+
+### M1 CAUGHT A REAL GATE MISS — record the shape, it will recur
+
+**Both reviewers approved the exact SHA in PROSE and no Decision object bound
+it.** `dec_wyn3kvzhs9at` was `resolved` — against the **superseded**
+`aa032cc2`. Publishing on the strength of two convincing posts is exactly the
+Sec1ct breach, where *"(Architect + Spec)"* read as approval while the
+Architect had never voted.
+
+⇒ **Read the Decision store from the OBJECT at merge time, every time.** A
+resolved Decision on a superseded SHA is not authorization; it is the most
+persuasive possible way to be wrong. Routed back at `evt_6fp23qzn7cf34`; the
+leader opened `dec_6zp34ra9hjb58` and it cost one round trip.
+
+**Also: I did NOT append the tracker-sync commit** that `merge-procedure.md`
+step 3 asks for on ring candidates. It would have changed the SHA and voided an
+approval the Architect scoped to `fb99d0fc` **alone**. The tracker rides my own
+corpus publish immediately behind — same durability, no voided gate.
 
 ### Owed the moment the merge lands, in order
 

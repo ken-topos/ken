@@ -1,7 +1,7 @@
 ---
 id: RT-CONTSRC-PRODUCER-LOCAL
 title: "Producer-local continuation source coordinate — a mid-body value is a third availability class with no ABI seat, so continuation specialization cannot name its environment"
-status: active
+status: merged
 owner: runtime
 size: L
 gate: none
