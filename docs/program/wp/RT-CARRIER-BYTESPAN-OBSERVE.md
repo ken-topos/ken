@@ -734,6 +734,27 @@ obviously transferable:
 
 ⇒ **"Buildable" is meaningless without "in which build, on which rig."**
 
+**AN INSERTION STEALS THE LEADING TRIVIA OF THE ITEM BELOW IT. This node has
+now paid for that THREE TIMES.** Twice it took a doc comment; at `D4` it took a
+`#[cfg(test)]` — the new `impl` landed between `EffectSeatPlanMutation`'s
+attribute and its `#[derive]`, so the enum lost its gate and compiled into
+**production builds** while its re-export stayed test-gated. `D4b`, `D5` and
+`D6` all still insert into these files.
+
+⇒ **Anchor an insertion on the START of the target's leading block — its first
+`///` line or its first attribute — never between an attribute and its item,
+and give the inserted item its OWN doc and its OWN attributes.**
+
+⇒ **The attribute case is strictly worse than the doc case, and the reason is
+the instrument.** Under `cfg(test)` both items compile and both are used, so a
+stolen `#[cfg(test)]` is **invisible in exactly the profile that runs the
+tests.** `796/0/3` was true across the defect and after the repair, unchanged.
+**Prove any `cfg` change with a production-profile
+`scripts/ken-cargo build -p ken-runtime`, never with a test run**, and review a
+diff by asking *"did any `cfg` attribute change owner"* — a `+`-only hunk
+opening directly under a context-line attribute is the tell, because the
+attribute looks untouched precisely by being context.
+
 **Gate-shaped is not gate-satisfying.** A control whose red can only be
 demonstrated by an **uncommitted** production mutation is gate-shaped. The gate
 must be re-runnable by someone who was not present for the demonstration — that
