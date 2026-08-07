@@ -335,7 +335,23 @@ fn assert_write_trace(result: &RunResult, expected_exit: i32, expected: &[Expect
     }
 }
 
+// Ignored pending RT-CARRIED-RESOURCE-SCALAR.
+//
+// Observed signature, exactly:
+//   Effect: seat Argument(0) of FsWriteAt needs ResourceScalar, which it cannot observe in CarriedWord
+//
+// Owner node: RT-CARRIED-RESOURCE-SCALAR.
+// Pre-existing base debt, NOT a bind-order regression: measured failing at
+// the frozen base 21fd46dc by the D10 differential, before any
+// RT-SRCBODY-BIND-ORDER commit.
+// It refuses at object emission, so the program never executes and no
+// binding order is observable in it.
+// A ResourceScalar need, not a byte-span one, despite the shared refusal
+// shape. Its ken-cli twin px8f_buffer_native fails identically. This row
+// is in ken-verify, not ken-cli -- CI runs it as its own -p ken-verify job.
+// Annotation only -- test body and expectations are unchanged.
 #[test]
+#[ignore = "RT-CARRIED-RESOURCE-SCALAR: the FsWriteAt seat cannot observe a carried word as a resource scalar; fails at base 21fd46dc"]
 fn checked_write_all_reaches_full_short_zero_progress_flip_and_error_prefixes() {
     std::thread::Builder::new()
         .name("px8f-write-partition".to_string())

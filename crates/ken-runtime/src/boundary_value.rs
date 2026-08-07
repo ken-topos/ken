@@ -126,6 +126,31 @@ pub enum BoundaryTag {
     /// Handle to a `HostResult`: a runtime success discriminant plus the two
     /// payload words it selects between.
     InvocationHostResult = 8,
+    /// Handle to a `Constructor`/`Record` aggregate **at least one of whose
+    /// children is invocation-owned**, so the aggregate itself cannot outlive
+    /// the invocation (`RT-DECL-CLOSURE-PORT` `D7`).
+    ///
+    /// ⭐ **This tag exists because the lifetime of an aggregate is a MEET over
+    /// its children, and no per-value shape can compute it.** `Constructor` and
+    /// `Record` are persistable *shapes*, so the value-shape disposition
+    /// reaches for [`BoundaryTag::PersistentGround`]. That is right only when
+    /// every child outlives the parent. When one child is an invocation-arena
+    /// referent — a borrowed host buffer, a capability or resource token, a
+    /// `HostResult` — a `PersistentGround` parent naming it is precisely the
+    /// dangling relation `store_field`'s escape guard refuses.
+    ///
+    /// ⛔ **It is NOT a second persistable lane and NOT a widening.** The
+    /// admitted classes are exactly `Constructor` and `Record`; its referent
+    /// owner is the invocation arena, so every escape check that already keys
+    /// on [`BoundaryReferentOwner::InvocationArena`] governs it unchanged, and
+    /// a word carrying it may not be published past the invocation.
+    ///
+    /// ⚠ The alternative — keeping one aggregate tag and rejecting the mixed
+    /// case — is what the tree did before, and it rejected a **sound**
+    /// program: an invocation-scoped aggregate over invocation-scoped children
+    /// dangles nothing. The defect was the missing lane, not the missing
+    /// refusal.
+    InvocationAggregate = 9,
 }
 
 // ⛔ There is deliberately NO `ImmediateCapability` and no `ImmediateResource`.
@@ -145,7 +170,7 @@ impl BoundaryTag {
     /// this list cannot drift from the enum: adding a variant without extending
     /// the `match` is a compile error, and the array length is checked against
     /// it in this module's tests.
-    pub const ALL: [BoundaryTag; 9] = [
+    pub const ALL: [BoundaryTag; 10] = [
         BoundaryTag::ImmediateBool,
         BoundaryTag::ImmediateInt,
         BoundaryTag::ImmediateExitStatus,
@@ -155,6 +180,7 @@ impl BoundaryTag {
         BoundaryTag::PersistentClosure,
         BoundaryTag::InvocationBorrowed,
         BoundaryTag::InvocationHostResult,
+        BoundaryTag::InvocationAggregate,
     ];
 
     /// Decode a tag byte. `None` for any byte outside the closed set — an
@@ -170,6 +196,7 @@ impl BoundaryTag {
             6 => BoundaryTag::PersistentClosure,
             7 => BoundaryTag::InvocationBorrowed,
             8 => BoundaryTag::InvocationHostResult,
+            9 => BoundaryTag::InvocationAggregate,
             _ => return None,
         })
     }
@@ -186,9 +213,9 @@ impl BoundaryTag {
             BoundaryTag::PersistentGround | BoundaryTag::PersistentClosure => {
                 BoundaryReferentOwner::PersistentStore
             }
-            BoundaryTag::InvocationBorrowed | BoundaryTag::InvocationHostResult => {
-                BoundaryReferentOwner::InvocationArena
-            }
+            BoundaryTag::InvocationBorrowed
+            | BoundaryTag::InvocationHostResult
+            | BoundaryTag::InvocationAggregate => BoundaryReferentOwner::InvocationArena,
         }
     }
 
@@ -230,7 +257,8 @@ impl BoundaryTag {
             BoundaryTag::PersistentGround
             | BoundaryTag::PersistentClosure
             | BoundaryTag::InvocationBorrowed
-            | BoundaryTag::InvocationHostResult => None,
+            | BoundaryTag::InvocationHostResult
+            | BoundaryTag::InvocationAggregate => None,
         }
     }
 }
@@ -660,6 +688,14 @@ pub(crate) const BOUNDARY_TAG_CLASS_RELATION: &[(BoundaryTag, &[BoundaryClass])]
     (
         BoundaryTag::InvocationHostResult,
         &[BoundaryClass::HostResult],
+    ),
+    // ⛔ Exactly the two aggregate classes, and nothing else. This lane exists
+    // to carry a `Constructor`/`Record` whose lifetime meet is the invocation;
+    // admitting `Bytes`/`String`/`Int` here would create a second, redundant
+    // encoding of values that have no children to take a meet over.
+    (
+        BoundaryTag::InvocationAggregate,
+        &[BoundaryClass::Constructor, BoundaryClass::Record],
     ),
 ];
 
@@ -2690,6 +2726,13 @@ impl BoundaryValueStore {
             BoundaryTag::ImmediateExitStatus
             | BoundaryTag::ImmediateBoundedNat
             | BoundaryTag::ImmediateStructuralNat => Err(BOUNDARY_ERR_CLASS),
+            // ⛔ An invocation-owned aggregate under a persistent parent is the
+            // dangling relation itself, so this reports `ERR_ESCAPE` rather
+            // than `ERR_CLASS`. The word is well-formed and its class is a
+            // perfectly good aggregate class; what is wrong is the edge.
+            // Reporting the class error here would name the wrong defect at a
+            // reader that is otherwise the clearest place to see it.
+            BoundaryTag::InvocationAggregate => Err(BOUNDARY_ERR_ESCAPE),
             BoundaryTag::PersistentGround | BoundaryTag::PersistentClosure => {
                 if let Some(image) = images.get(&word.payload()) {
                     return Ok(image.clone());
@@ -2816,7 +2859,11 @@ impl BoundaryValueStore {
             | BoundaryTag::ImmediateStructuralNat
             | BoundaryTag::PersistentClosure
             | BoundaryTag::InvocationBorrowed
-            | BoundaryTag::InvocationHostResult => None,
+            | BoundaryTag::InvocationHostResult
+            // An invocation aggregate is never store-adopted, so there is no
+            // adopted ground value to observe. It joins the other two
+            // invocation-owned tags rather than getting an arm of its own.
+            | BoundaryTag::InvocationAggregate => None,
         }
     }
 

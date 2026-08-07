@@ -2949,14 +2949,35 @@ mod tests {
 
         let (success, success_provenance) = run("px8tr-post-effect-success", false);
         assert_eq!(success.status.code(), Some(0));
+        // ⭐⭐ `RT-DECL-CLOSURE-PORT` `D6a` — THE EVIDENCE RULE, APPLIED.
+        //
+        // This row used to assert `DeforestedAnswerResumed`. That event is
+        // recorded while lowering the **specialized** branch, where the
+        // scrutinee is a compile-time `Lowered::Constructor` and
+        // `actual_constructor` can name it. On the activated functionized lane
+        // the checked answer arrives as a **carried** word, and nothing at
+        // compile time knows what a runtime word holds — so keeping that
+        // assertion here would require a compile-time fact as proof of a
+        // runtime one, which is exactly what the frame forbids.
+        //
+        // ⛔ The pair below is the ruled replacement, and neither half
+        // substitutes for the other:
+        //
+        // - **runtime**: `success.status.code() == Some(0)` above. The linked
+        //   artifact ran, took the return case, and exited through the unique
+        //   return-case-dependent success. Only that can testify to a runtime
+        //   choice.
+        // - **emission**: `CarriedAnswerRouteEmitted`, which claims only that
+        //   the carried route was emitted into this frame's return case.
+        //
+        // ⚠ `DeforestedAnswerResumed` is NOT deleted — it remains the
+        // specialized branch's evidence wherever that branch is the one lowered.
         assert!(success_provenance.iter().any(|event| matches!(
             event,
-            crate::cranelift_backend::Px8trTrapProvenanceEvent::DeforestedAnswerResumed {
+            crate::cranelift_backend::Px8trTrapProvenanceEvent::CarriedAnswerRouteEmitted {
                 checked_frame_id: 7,
-                actual_constructor: Some(constructor),
                 return_constructor,
-            } if constructor == "ctor:prelude::Result::Ok"
-                && return_constructor == "ctor:fixture::PX8TR::ITree::Ret"
+            } if return_constructor == "ctor:fixture::PX8TR::ITree::Ret"
         )));
         assert!(!success_provenance.iter().any(|event| matches!(
             event,
@@ -2966,23 +2987,128 @@ mod tests {
         let (trapped, trapped_provenance) = run("px8tr-post-effect-route-disabled", true);
         assert_eq!(trapped.status.code(), Some(1));
         assert!(String::from_utf8_lossy(&trapped.stderr).contains("explicit entry trap"));
+
+        // ── ⭐⭐ `RT-DECL-CLOSURE-PORT` `D6a` — EXACT TRAP PROVENANCE ──
+        //
+        // The frame requires the disabled half to be proven through *"the
+        // planner trap identity at the unit `TrapWord` and root propagation
+        // seat"*, and says why in one clause: **the generic process `-4` string
+        // alone is not exact provenance.**
+        //
+        // ⛔ That clause is doing real work, and the exit code plus the stderr
+        // line above are exactly what it rules insufficient. `-4` is the root
+        // adapter's *single* process-trap sentinel and `explicit entry trap` is
+        // the starter's *single* trap line — both are emitted identically for
+        // every trap this fixture could reach. A row resting on them alone
+        // passes whether the artifact took the checked-`ITree` default or any
+        // other trap, including one reached by a defect.
+        //
+        // ⚠ MEASURED / CLAIMED / THE GAP.
+        // **MEASURED:** with the repair disabled, the artifact emits the exact
+        // planned `PX8-TR checked ITree recursor default` identity into a
+        // generated unit's `TrapWord`; with the repair enabled the same fixture
+        // never emits that trap at any seat.
+        // **CLAIMED:** the trap the disabled artifact runs into is that exact
+        // planned default, and it is the checked-answer fallback's absence that
+        // puts it there.
+        // **THE GAP:** the provenance is a compile-time emission record, so it
+        // testifies that the identity was *planted*, not that the process
+        // reached it. The exit status and the trap line close that half, and
+        // neither substitutes for the other — the same pairing rule the
+        // success half is held to above.
         let expected = RuntimeTrap {
             code: RuntimeTrapCode::PatternMatchFailure,
             message: "PX8-TR checked ITree recursor default".to_string(),
         };
+        let planted = trapped_provenance
+            .iter()
+            .find_map(|event| match event {
+                crate::cranelift_backend::Px8trTrapProvenanceEvent::PlannedTrapEmitted {
+                    trap,
+                    seat: crate::cranelift_backend::PlannedTrapSeat::UnitTrapWord,
+                    planned_identity,
+                    emitted_word,
+                } if trap == &expected => Some((*planned_identity, *emitted_word)),
+                _ => None,
+            })
+            .expect(
+                "the disabled checked-answer route seals the exact planned checked-ITree \
+                 default into a generated unit's TrapWord",
+            );
+        // ⭐ The pair, not the planned word alone. Asserting only that the
+        // planner issued an identity would ask the planner whether it agrees
+        // with itself; `TrapIdentityMutation::{Zero,Substitute}` perturbs the
+        // *emitted* word and would leave such a check green.
+        assert!(
+            planted.0 > 0,
+            "the checked-ITree default must hold a real planner-issued identity, not a placeholder"
+        );
+        assert_eq!(
+            planted.1, planted.0,
+            "the word stored in the unit TrapWord must be the planner-issued identity itself"
+        );
+        // ⭐ And the identity has to *discriminate*. This artifact emits a
+        // second planned trap — the `Result` default — and if the plan issued
+        // one identity for both, every assertion above would still pass while
+        // naming nothing. ⛔ The relation is pinned, never the numbers: the
+        // planner's numbering is free to change, and it is only their
+        // distinctness that this row depends on.
+        let sibling = trapped_provenance
+            .iter()
+            .find_map(|event| match event {
+                crate::cranelift_backend::Px8trTrapProvenanceEvent::PlannedTrapEmitted {
+                    trap,
+                    seat: crate::cranelift_backend::PlannedTrapSeat::UnitTrapWord,
+                    planned_identity,
+                    ..
+                } if trap != &expected => Some(*planned_identity),
+                _ => None,
+            })
+            .expect("the fixture also plans a distinct sibling default, so identity can discriminate");
+        assert_ne!(
+            planted.0, sibling,
+            "two different planned traps sharing one identity would make this row vacuous"
+        );
+
+        // ── the root propagation seat ──
+        //
+        // ⚠ This chain is **route-independent** — it is identical on the
+        // success run — so it is provenance, not a discriminator, and it is
+        // recorded as such. Its job is to make the `-4` above legible: the
+        // identity survives every intermediate unit hop verbatim and is
+        // collapsed at exactly one seat, the root's process lane. ⛔ No
+        // identity is claimed at these seats because none is knowable there —
+        // the propagated word is a runtime `stack_load`.
         assert!(trapped_provenance.iter().any(|event| matches!(
             event,
-            crate::cranelift_backend::Px8trTrapProvenanceEvent::CheckedRecursorDefault {
-                checked_frame_id: 7,
-                actual_constructor: Some(constructor),
-                trap,
-            } if constructor == "ctor:prelude::Result::Ok" && trap == &expected
+            crate::cranelift_backend::Px8trTrapProvenanceEvent::UnitTrapWordPropagated {
+                seat: crate::cranelift_backend::PlannedTrapSeat::UnitTrapWord,
+                identity_preserved: true,
+            }
         )));
         assert!(trapped_provenance.iter().any(|event| matches!(
             event,
-            crate::cranelift_backend::Px8trTrapProvenanceEvent::FinalProcessObjectTrap { trap }
-                if trap == &expected
+            crate::cranelift_backend::Px8trTrapProvenanceEvent::UnitTrapWordPropagated {
+                seat: crate::cranelift_backend::PlannedTrapSeat::RootProcessSentinel,
+                identity_preserved: false,
+            }
         )));
+
+        // ── ⭐ THE DISCRIMINATING PAIR ──
+        //
+        // Same fixture, same plan, one bit flipped. With the checked-answer
+        // fallback enabled the planned checked-`ITree` default is not emitted
+        // **at any seat** — the fallback took the return case instead of
+        // sealing the closed default. This is what makes the disabled half
+        // evidence about the route rather than about the fixture.
+        assert!(
+            !success_provenance.iter().any(|event| matches!(
+                event,
+                crate::cranelift_backend::Px8trTrapProvenanceEvent::PlannedTrapEmitted { trap, .. }
+                    if trap == &expected
+            )),
+            "the enabled route must not seal the checked-ITree default anywhere"
+        );
     }
 
     #[cfg(target_os = "linux")]

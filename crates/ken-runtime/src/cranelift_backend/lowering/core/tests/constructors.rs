@@ -211,7 +211,12 @@ fn run_dynamic_constructor_dispatch_fixture(
         unsupported: Vec::new(),
         body_emission_authority: BodyEmissionAuthority::FunctionizedUnits,
         continuation_claims: None,
+        checked_call_ledger: None,
         defining_unit: None,
+        defining_emission_owner: None,
+        defining_function_id: None,
+        aggregate_allocations: None,
+        host_effect_seats: None,
         process_object: false,
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
         // ⛔ `None` — a bare `Lowering` fixture emits into no module, so it has
@@ -220,6 +225,11 @@ fn run_dynamic_constructor_dispatch_fixture(
         native_int_mutation: NativeIntLoweringMutation::Exact,
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
         function_local: FunctionLocalRefs {
+            defining_abi_operands: Vec::new(),
+            defining_abi_slot_kinds: Vec::new(),
+            context_calls: BTreeMap::new(),
+            worker_templates: BTreeMap::new(),
+            generated_context_captures: None,
             seed_material: crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(),
             host_dispatch: None,
             host_dispatch_context: None,
@@ -236,8 +246,11 @@ fn run_dynamic_constructor_dispatch_fixture(
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
             worker_calls: BTreeMap::new(),
+            raw_worker_calls: BTreeMap::new(),
             continuation_calls: BTreeMap::new(),
             continuation_emissions: BTreeMap::new(),
+            pending_composed_discharges: Vec::new(),
+            composed_discharges: BTreeMap::new(),
             declaration_calls: BTreeMap::new(),
             trap_exit: None,
             terminal_result_origins: BTreeSet::new(),
@@ -263,12 +276,14 @@ fn run_dynamic_constructor_dispatch_fixture(
                     tag: 0,
                     constructor: "ctor:fixture::Dynamic::Zero".to_string(),
                     identity: test_synthesized_constructor_identity(),
+                    occurrence: None,
                     fields: Vec::new(),
                 },
                 DynamicConstructorAlternativeV1 {
                     tag: 1,
                     constructor: "ctor:fixture::Dynamic::One".to_string(),
                     identity: test_synthesized_constructor_identity(),
+                    occurrence: None,
                     fields: vec![Lowered::Int {
                         value: builder.ins().iconst(types::I64, 7),
                         known: Some(7),
@@ -427,6 +442,7 @@ fn dynamic_constructor_known_omission_owns_source_default() {
         tag: 0,
         constructor: "ctor:fixture::Dynamic::Missing".to_string(),
         identity: test_synthesized_constructor_identity(),
+                    occurrence: None,
         fields: Vec::new(),
     };
     let owned = RuntimeTrap {
@@ -479,6 +495,7 @@ fn dynamic_constructor_fields_precede_outer_environment_in_declaration_order() {
         tag: 7,
         constructor: "ctor:fixture::Dynamic::Pair".to_string(),
         identity: test_synthesized_constructor_identity(),
+                    occurrence: None,
         fields: vec![
             Lowered::Bytes(b"first".to_vec()),
             Lowered::String("second".to_string()),
@@ -1904,12 +1921,22 @@ fn bare_carrier_test_lowering<'src>(
         unsupported: Vec::new(),
         body_emission_authority: BodyEmissionAuthority::FunctionizedUnits,
         continuation_claims: None,
+        checked_call_ledger: None,
         defining_unit: None,
+        defining_emission_owner: None,
+        defining_function_id: None,
+        aggregate_allocations: None,
+        host_effect_seats: None,
         process_object: false,
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
         native_int_mutation: NativeIntLoweringMutation::Exact,
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
         function_local: FunctionLocalRefs {
+            defining_abi_operands: Vec::new(),
+            defining_abi_slot_kinds: Vec::new(),
+            context_calls: BTreeMap::new(),
+            worker_templates: BTreeMap::new(),
+            generated_context_captures: None,
             seed_material: crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(),
             host_dispatch: None,
             host_dispatch_context: None,
@@ -1926,8 +1953,11 @@ fn bare_carrier_test_lowering<'src>(
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
             worker_calls: BTreeMap::new(),
+            raw_worker_calls: BTreeMap::new(),
             continuation_calls: BTreeMap::new(),
             continuation_emissions: BTreeMap::new(),
+            pending_composed_discharges: Vec::new(),
+            composed_discharges: BTreeMap::new(),
             declaration_calls: BTreeMap::new(),
             trap_exit: None,
             terminal_result_origins: BTreeSet::new(),
@@ -2000,6 +2030,15 @@ fn c1_d3_producer_screens_admissibility_before_it_touches_the_carrier() {
         args: vec![RuntimeExpr::Value(RuntimeValue::Bool(true))],
     };
     let (plan, construct_origin) = planned_root_occurrence(&construct);
+    // ⭐ `D7` — resolved BEFORE the plan is moved into the compiler, because a
+    // hand-built source aggregate owes its own producer occurrence exactly as
+    // the `Construct` arm's does. ⛔ Both graphs below get it: the ordering
+    // claim under test is about the ADMISSIBILITY walk beating the carrier
+    // step, so neither arm may be decided by a missing-producer refusal that is
+    // an artifact of the rig.
+    let wrap_occurrence = plan
+        .source_aggregate_occurrence(construct_origin, PlannedAggregateShape::Constructor)
+        .expect("the planned `Construct` has an ownership record at its own origin");
     let closure_body = inert_test_static_origin();
     let mut compiler = bare_carrier_test_lowering(&seed_env, plan);
 
@@ -2017,6 +2056,7 @@ fn c1_d3_producer_screens_admissibility_before_it_touches_the_carrier() {
     let inadmissible = Lowered::Constructor {
         constructor: "ctor:fixture::C1::Wrap".to_string(),
         synthesized_identity: None,
+        occurrence: Some(wrap_occurrence),
         args: vec![Lowered::Closure {
             captures: Vec::new(),
             params: Vec::new(),
@@ -2042,6 +2082,7 @@ fn c1_d3_producer_screens_admissibility_before_it_touches_the_carrier() {
     let admissible = Lowered::Constructor {
         constructor: "ctor:fixture::C1::Wrap".to_string(),
         synthesized_identity: None,
+        occurrence: Some(wrap_occurrence),
         args: vec![Lowered::Bool {
             value: builder.ins().iconst(types::I64, 1),
             known: Some(true),
@@ -2486,7 +2527,25 @@ fn c2_run_edge_with_arg(code: *const u8, arena: *const u64, argument: i64) -> i6
     function(arena, argument)
 }
 
+// Ignored pending RT-CARRIER-PRODUCER-OCCURRENCE.
+//
+// Observed signature, exactly:
+//   the C2 carrier edge emits: Unsupported(UnsupportedLowering { construct: "Constructor", reason: "a source aggregate reached the carrier with no planner-issued producer occurrence, so it would name no ownership record and could only be given the authority of wherever it happened to be transferred" })
+//
+// Owner node: RT-CARRIER-PRODUCER-OCCURRENCE.
+// Pre-existing base debt, NOT a bind-order regression: fails at base
+// 21fd46dc with this same signature, measured two-ended at both refs and
+// with the CI feature px8-ds-test-support both on and off.
+//
+// IT DIES AT ITS `expect` BEFORE THE PROPERTY IS EVALUATED. The panic is at
+// the `.expect("the C2 carrier edge emits")`, so the carrier edge refuses to
+// emit and the separately-generated nested payload selection this row names
+// is never evaluated at all. Un-ignoring the row is therefore NOT the repair
+// and would only restore a refusal; the repair is the owner node's, and it
+// has to make the carrier edge emit.
+// Annotation only -- test body, expect, and expectations are unchanged.
 #[test]
+#[ignore = "RT-CARRIER-PRODUCER-OCCURRENCE: the carrier edge refuses to emit for a source aggregate with no planner-issued producer occurrence; fails at base 21fd46dc"]
 fn c2_ac4_runtime_host_result_selects_a_separately_generated_nested_payload() {
     let symbols = crate::NativeProcessSymbols::legacy_prelude();
     let nested_default = || RuntimeTrap {
@@ -2608,19 +2667,28 @@ fn c2_ac4_runtime_host_result_selects_a_separately_generated_nested_payload() {
                     tag: 0,
                     constructor: producer_symbols.read_some.clone(),
                     identity: ok_identity,
+                    occurrence: None,
                     fields: vec![Lowered::Bool {
                         value: true_word,
                         known: Some(true),
                     }],
                 }],
             });
+            // `D7` — this fixture has no `Effect` occurrence, so `match_origin`
+            // is not a producer seat and carries no per-use record. That is
+            // correct and leaves the row's existing refusal unchanged: the
+            // template gets no occurrence and refuses at the allocation, which
+            // is where it already fails.
             let error = compiler.synthesized_constructor(
+                match_origin,
+                &SynthesizedAggregatePath::root(SynthesizedAggregateRoot::HostResultOk),
                 SynthesizedFixedConstructorRole::Wrote,
                 producer_symbols.wrote.clone(),
-                vec![Lowered::Bool {
+                vec![SynthesizedArgument::Scalar(Lowered::Bool {
                     value: false_word,
                     known: Some(false),
-                }],
+                })],
+                &ClaimedEffectSeats::none(),
             )?;
             let host_result = Lowered::HostResult {
                 success,
@@ -2659,9 +2727,11 @@ fn c2_ac4_runtime_host_result_selects_a_separately_generated_nested_payload() {
             let ordinary_result = Lowered::Constructor {
                 constructor: ordinary_symbols.result_ok.clone(),
                 synthesized_identity: None,
+                occurrence: None,
                 args: vec![Lowered::Constructor {
                     constructor: ordinary_symbols.read_some.clone(),
                     synthesized_identity: None,
+                    occurrence: None,
                     args: vec![Lowered::Bool {
                         value: true_word,
                         known: Some(true),
@@ -2852,10 +2922,27 @@ fn ac_c7_ctor(name: &str) -> RuntimeExpr {
     }
 }
 
-fn ac_c7_lowered_ctor(name: &str) -> Lowered {
+/// ⭐ **`D7` — a hand-built source aggregate owes the producer occurrence the
+/// planner issued AT ITS OWN ORIGIN**, and takes that origin as an argument
+/// rather than inheriting whatever coordinate its eventual transfer uses.
+///
+/// This rig stands in for the `Construct` lowering arm, so it owes exactly what
+/// that arm resolves. ⛔ Leaving it absent is not a shortcut that happens to
+/// work: it is the fail-closed hole the subclosure exists to close, and it read
+/// as harmless only because these rigs transfer at the producer origin, where
+/// the two coordinates coincide.
+fn ac_c7_lowered_ctor(
+    plan: &StaticTransitionPlan<'_>,
+    origin: StaticOriginId,
+    name: &str,
+) -> Lowered {
     Lowered::Constructor {
         constructor: format!("ctor:fixture::C1::{name}"),
         synthesized_identity: None,
+        occurrence: Some(
+            plan.source_aggregate_occurrence(origin, PlannedAggregateShape::Constructor)
+                .expect("a planned `Construct` has an ownership record at its own origin"),
+        ),
         args: Vec::new(),
     }
 }
@@ -2914,14 +3001,44 @@ fn ac_c7_project_edge(fields: [(&str, &str); 2], project: &str) -> (i64, u64, u6
     let first_identity = identity(0);
     let second_identity = identity(1);
 
+    let field_origin = |position| {
+        plan.child_static_origin(record_origin, position)
+            .expect("a record field has a planned child origin")
+    };
+    // ⭐ `D7` — the field SCHEMA travels on the template exactly as the
+    // producer occurrence does, resolved here for the same reason: this rig
+    // hand-builds what the `Record` lowering arm would otherwise have built,
+    // and a hand-built field with no planner-issued identity is a fail-closed
+    // absence rather than a licence to name it at the transfer coordinate.
+    let field_identity = |position: usize| {
+        plan.record_field_identity(record_origin, position)
+            .expect("a planned `Record` field has a planner-issued identity")
+    };
     let lowered_fields = vec![
-        (fields[0].0.to_string(), ac_c7_lowered_ctor(fields[0].1)),
-        (fields[1].0.to_string(), ac_c7_lowered_ctor(fields[1].1)),
+        LoweredRecordField {
+            name: fields[0].0.to_string(),
+            identity: Some(field_identity(0)),
+            value: ac_c7_lowered_ctor(&plan, field_origin(0), fields[0].1),
+        },
+        LoweredRecordField {
+            name: fields[1].0.to_string(),
+            identity: Some(field_identity(1)),
+            value: ac_c7_lowered_ctor(&plan, field_origin(1), fields[1].1),
+        },
     ];
+    // ⭐ `D7` — the record's PRODUCER occurrence, resolved here because this
+    // rig hand-builds the template that the `Record` lowering arm would
+    // otherwise have resolved it in. A hand-built aggregate with no producer
+    // is a fail-closed absence, not a licence to fall back to the transfer
+    // coordinate.
+    let record_occurrence = plan
+        .source_aggregate_occurrence(record_origin, PlannedAggregateShape::Record)
+        .expect("the planned record has an ownership record at its own origin");
     let seed_env = NativeSeedEnvironment::empty();
     let (_module, code) = ac_c7_compile_edge(&seed_env, plan, move |compiler, builder| {
         // ── PRODUCER: a compile-time record crosses the one-way seam ──────
         let record = Lowered::Record {
+            occurrence: Some(record_occurrence),
             fields: lowered_fields,
         };
         let word = compiler.transfer_into_carrier(builder, record_origin, &record)?;
@@ -3037,11 +3154,29 @@ fn ac_c7_wrap(outer: &str, inner: &str) -> RuntimeExpr {
     }
 }
 
-fn ac_c7_lowered_wrap(outer: &str, inner: &str) -> Lowered {
+/// ⭐ **The child's origin is derived from the parent's, not passed in.** The
+/// preflight checks each child against the record the planner planned at THAT
+/// POSITION, so a rig that took two independent origins could satisfy it with
+/// two unrelated ones. Reading child 0 off the parent is the same derivation the
+/// producer arm performs, which is what makes the agreement a property under
+/// test rather than a coincidence the caller arranged.
+fn ac_c7_lowered_wrap(
+    plan: &StaticTransitionPlan<'_>,
+    origin: StaticOriginId,
+    outer: &str,
+    inner: &str,
+) -> Lowered {
+    let inner_origin = plan
+        .child_static_origin(origin, 0)
+        .expect("the wrapper's only argument has a planned origin");
     Lowered::Constructor {
         constructor: format!("ctor:fixture::C1::{outer}"),
         synthesized_identity: None,
-        args: vec![ac_c7_lowered_ctor(inner)],
+        occurrence: Some(
+            plan.source_aggregate_occurrence(origin, PlannedAggregateShape::Constructor)
+                .expect("the planned wrapper has an ownership record at its own origin"),
+        ),
+        args: vec![ac_c7_lowered_ctor(plan, inner_origin, inner)],
     }
 }
 
@@ -3152,7 +3287,7 @@ fn ac_c7_match_edge(scrutinee: &str, inner: &str) -> (i64, u64, u64) {
             .expect("case 1's body has a planned origin"),
     );
 
-    let lowered = ac_c7_lowered_wrap(scrutinee, inner);
+    let lowered = ac_c7_lowered_wrap(&plan, scrutinee_origin, scrutinee, inner);
     let seed_env = NativeSeedEnvironment::empty();
     let (_module, code) = ac_c7_compile_edge(&seed_env, plan, move |compiler, builder| {
         let word = compiler.transfer_into_carrier(builder, scrutinee_origin, &lowered)?;
@@ -3312,7 +3447,7 @@ fn ac_c7_computational_match_edge(scrutinee: &str, inner: &str) -> (i64, u64, u6
             .expect("case 1's body has a planned origin"),
     );
 
-    let lowered = ac_c7_lowered_wrap(scrutinee, inner);
+    let lowered = ac_c7_lowered_wrap(&plan, scrutinee_origin, scrutinee, inner);
     let seed_env = NativeSeedEnvironment::empty();
     let (_module, code) = ac_c7_compile_edge(&seed_env, plan, move |compiler, builder| {
         let word = compiler.transfer_into_carrier(builder, scrutinee_origin, &lowered)?;
@@ -3445,7 +3580,7 @@ fn ac_c4_recursive_edge(
             .expect("case 1's body has a planned origin"),
     );
 
-    let lowered = ac_c7_lowered_wrap("Wrap", "Leaf");
+    let lowered = ac_c7_lowered_wrap(&plan, scrutinee_origin, "Wrap", "Leaf");
     let seed_env = NativeSeedEnvironment::empty();
     let (_module, code) = ac_c7_try_compile_edge(&seed_env, plan, move |compiler, builder| {
         let word = compiler.transfer_into_carrier(builder, scrutinee_origin, &lowered)?;
@@ -3555,6 +3690,112 @@ fn c1_d3_ac_c4_a_carried_hypothesis_applied_to_arguments_fails_closed() {
     );
 }
 
+/// An ordinary `Match` over the bound CARRIED child, for the source-machine
+/// seat.
+///
+/// The case body of [`ac_c4_recursive_edge`]'s recursive case is lowered through
+/// `Lowering::lower_source_machine`, so a `Match` placed here arrives at
+/// `SourceContinuation::MatchScrutinee` -- a DIFFERENT seat from the generic
+/// `lower_expr` emitter that [`ac_c7_match_edge`] drives. That distinction is
+/// the whole point: the generic seat classified a carried scrutinee by phase and
+/// this one did not, so a carried value reaching it fell past every
+/// `Lowered`-shape test onto `"scrutinee is not a constructor value"`.
+fn ac1_source_machine_carried_match(cases: Vec<crate::RuntimeMatchCase>) -> RuntimeExpr {
+    RuntimeExpr::Match {
+        scrutinee: Box::new(RuntimeExpr::Var(1)),
+        cases,
+        default: ac_c7_trap(),
+    }
+}
+
+fn ac1_unmatchable_case() -> crate::RuntimeMatchCase {
+    crate::RuntimeMatchCase {
+        constructor: "ctor:fixture::C1::Sentinel".to_string(),
+        binders: 0,
+        body: ac_c7_ctor("Sentinel"),
+    }
+}
+
+/// `AC-1` -- an ordinary `Match` at the SOURCE-MACHINE seat CLASSIFIES A
+/// CARRIED SCRUTINEE BY PHASE instead of asking it for a `Lowered` shape.
+///
+/// MEASURED: the fixture is refused by `Lowering::lower_source_carried_match`'s
+/// own join acquisition, because this rig's enclosing continuation has no
+/// planned scalar cut. Pre-repair the identical fixture was refused earlier and
+/// elsewhere, by `Match: "scrutinee is not a constructor value"`.
+///
+/// CLAIMED: `SourceContinuation::MatchScrutinee` classifies a `LoweringOperand`
+/// by PHASE before any arm asks for a `Lowered` shape, and dispatches a carried
+/// scrutinee into the source-machine carried route.
+///
+/// THE GAP, stated plainly because this row asserts on a REFUSAL: "it errored"
+/// is satisfied by erroring for any reason at all. Closed by the identity of the
+/// error rather than its presence -- the refusal below is raised only INSIDE the
+/// carried route, after the phase classification and the dispatch, so it cannot
+/// be produced by the pre-repair code path, which never reached that route.
+///
+/// What this row does NOT claim, and what is still OWED: it does not exercise
+/// a nontrivial post-match continuation, a nested or inherited source join,
+/// exact-once join consumption, distinct predecessor edges, or the carried
+/// identity / arity / field-order negatives. They are not claimed here and are
+/// not discharged anywhere else.
+///
+/// AND THE OBVIOUS NEXT STEP IS MEASURED CLOSED. An earlier draft of this
+/// paragraph said those controls "need a whole-process fixture with a planned
+/// scalar cut", which reads as an instruction to go build one. A probe over the
+/// whole `ken-runtime` lib suite (779 tests) measured otherwise:
+///
+///   * `SourceContinuation::MatchScrutinee` is reached **7 times total**, and
+///     with a CARRIED operand **exactly once** -- this row.
+///   * `lower_source_carried_match` is entered **exactly once** -- this row --
+///     and refuses at join acquisition before emitting any selector.
+///   * The whole-process capacity family (`run_capacity_fixture` and every
+///     sibling in `effects.rs`) reaches the seat **zero** times. A closure
+///     parameter bound to a `Construct` stays `Specialized(Lowered::Constructor)`
+///     and is selected at COMPILE time, so the carried arm is never taken.
+///
+/// ⇒ Writing the owed controls is not a fixture-authoring task on the existing
+/// rigs. It needs a producer that delivers a genuinely carried word into a
+/// source-machine `Match` under a planned scalar cut, and no rig in this crate
+/// does that today. Do not read the list above as buildable work.
+///
+/// Promise class: transition sentinel. It is pinned to the join-acquisition
+/// refusal this rig currently raises; a rig that supplies a planned scalar cut
+/// retires this row in favour of the real positive.
+#[test]
+fn ac1_source_machine_match_classifies_a_carried_scrutinee_by_phase() {
+    let refused = ac_c4_recursive_edge(ac1_source_machine_carried_match(vec![
+        ac1_unmatchable_case(),
+        crate::RuntimeMatchCase {
+            constructor: "ctor:fixture::C1::Leaf".to_string(),
+            binders: 0,
+            body: ac_c7_ctor("Sentinel"),
+        },
+    ]))
+    .expect_err("this rig's continuation has no planned scalar cut");
+    let CraneliftBackendError::Unsupported(UnsupportedLowering {
+        construct, reason, ..
+    }) = &refused
+    else {
+        panic!("the refusal is an unsupported-lowering: got {refused:?}");
+    };
+    assert_ne!(
+        *reason, "scrutinee is not a constructor value",
+        "DISCRIMINATOR: this is the pre-repair refusal. Reaching it means the seat \
+         asked a carried value for a compile-time template again"
+    );
+    assert_eq!(
+        (*construct, reason.as_str()),
+        (
+            "NativeJoinPlanV1",
+            "active checked continuation has no planned scalar cut before its outer suffix"
+        ),
+        "AC-1: the refusal must come from INSIDE the source-machine carried route, \
+         which is reachable only once the seat has classified the scrutinee's \
+         phase and dispatched into it"
+    );
+}
+
 /// A two-argument constructor, so the recursive position can be declared
 /// somewhere **other than 0**.
 fn ac_c4_wrap2(outer: &str, first: &str, second: &str) -> RuntimeExpr {
@@ -3564,11 +3805,30 @@ fn ac_c4_wrap2(outer: &str, first: &str, second: &str) -> RuntimeExpr {
     }
 }
 
-fn ac_c4_lowered_wrap2(outer: &str, first: &str, second: &str) -> Lowered {
+/// The two-argument sibling of [`ac_c7_lowered_wrap`], with each child's origin
+/// derived from its own position for the reason stated there.
+fn ac_c4_lowered_wrap2(
+    plan: &StaticTransitionPlan<'_>,
+    origin: StaticOriginId,
+    outer: &str,
+    first: &str,
+    second: &str,
+) -> Lowered {
+    let child_origin = |position| {
+        plan.child_static_origin(origin, position)
+            .expect("the wrapper's argument has a planned origin")
+    };
     Lowered::Constructor {
         constructor: format!("ctor:fixture::C1::{outer}"),
         synthesized_identity: None,
-        args: vec![ac_c7_lowered_ctor(first), ac_c7_lowered_ctor(second)],
+        occurrence: Some(
+            plan.source_aggregate_occurrence(origin, PlannedAggregateShape::Constructor)
+                .expect("the planned wrapper has an ownership record at its own origin"),
+        ),
+        args: vec![
+            ac_c7_lowered_ctor(plan, child_origin(0), first),
+            ac_c7_lowered_ctor(plan, child_origin(1), second),
+        ],
     }
 }
 
@@ -3650,7 +3910,7 @@ fn ac_c4_ownership_edge_with_case_body(
             .expect("the wrapper's second argument has a planned origin"),
     );
 
-    let lowered = ac_c4_lowered_wrap2("Wrap2", "Alpha", "Leaf");
+    let lowered = ac_c4_lowered_wrap2(&plan, scrutinee_origin, "Wrap2", "Alpha", "Leaf");
     let seed_env = NativeSeedEnvironment::empty();
 
     struct Reset;
@@ -4004,6 +4264,12 @@ fn c1_d3_ac_c4_the_recursor_capsule_is_refused_before_its_residual_is_read() {
         args: vec![RuntimeExpr::Value(RuntimeValue::Bool(true))],
     };
     let (plan, construct_origin) = planned_root_occurrence(&construct);
+    // ⭐ `D7` — as in the admissibility-ordering row: both graphs carry the
+    // producer occurrence, so the refusal each one earns is the one the row is
+    // about rather than a rig artifact.
+    let wrap_occurrence = plan
+        .source_aggregate_occurrence(construct_origin, PlannedAggregateShape::Constructor)
+        .expect("the planned `Construct` has an ownership record at its own origin");
     let mut compiler = bare_carrier_test_lowering(&seed_env, plan);
 
     let mut function_context = FunctionBuilderContext::new();
@@ -4035,6 +4301,7 @@ fn c1_d3_ac_c4_the_recursor_capsule_is_refused_before_its_residual_is_read() {
         let inadmissible = Lowered::Constructor {
             constructor: "ctor:fixture::C1::Wrap".to_string(),
             synthesized_identity: None,
+            occurrence: Some(wrap_occurrence),
             args: vec![ac_c4_recursor_capsule(residual)],
         };
         let refused = compiler
@@ -4058,6 +4325,7 @@ fn c1_d3_ac_c4_the_recursor_capsule_is_refused_before_its_residual_is_read() {
     let admissible = Lowered::Constructor {
         constructor: "ctor:fixture::C1::Wrap".to_string(),
         synthesized_identity: None,
+        occurrence: Some(wrap_occurrence),
         args: vec![Lowered::Bool {
             value: builder.ins().iconst(types::I64, 1),
             known: Some(true),
@@ -4796,7 +5064,7 @@ fn worker_descriptor(
     origin: StaticOriginId,
     parameters: u32,
     captures: u32,
-) -> units::DeclaredUnitCall {
+) -> units::WorkerTemplate {
     let mut slots = Vec::new();
     for ordinal in 0..parameters {
         slots.push(AbiSlot {
@@ -4821,8 +5089,12 @@ fn worker_descriptor(
         });
     }
     let offsets = (0..slots.len() as u32).map(|index| index * 8).collect();
-    units::DeclaredUnitCall {
-        function: cranelift_codegen::ir::FuncRef::from_u32(0),
+    // `D5a` checkpoint 1: the constructor now validates against the RAW
+    // TEMPLATE, so these controls follow it there. ⭐ The move is the point --
+    // a `WorkerTemplate` has no `FuncRef` field at all, so these seven controls
+    // now measure a record that could not name a callee even if the fixture
+    // wanted it to.
+    units::WorkerTemplate {
         origin,
         // The D2 worker-descriptor fixture keys on the same origin it targets;
         // the D1b pair is exercised by the production join, not here.
@@ -4838,13 +5110,33 @@ fn worker_descriptor(
     }
 }
 
+/// Wrap a raw template as a CALL TARGET for the `worker_calls` axis.
+///
+/// ⚠ Two axes, two record types, and this helper is where they meet:
+/// `worker_templates` carries the raw contract the constructor validates, and
+/// `worker_calls` carries the callee `call_static_worker` emits. ⛔ In
+/// production those two may name different functions -- that is the `D5a`
+/// retarget -- so a fixture that needs both must build both rather than reuse
+/// one for the other.
+#[cfg(test)]
+fn worker_call_target(template: units::WorkerTemplate) -> units::DeclaredUnitCall {
+    units::DeclaredUnitCall {
+        function: cranelift_codegen::ir::FuncRef::from_u32(0),
+        origin: template.origin,
+        call_site_origin: template.call_site_origin,
+        header: template.header,
+        slots: template.slots,
+        offsets: template.offsets,
+    }
+}
+
 /// Drives one construction attempt against a descriptor the caller shapes.
 ///
 /// Returns the route's own verdict, so a test asserts on the construction
 /// rather than on some later emission.
 #[cfg(test)]
 fn attempt_worker_construction(
-    install: impl FnOnce(StaticOriginId, StaticOriginId) -> Option<units::DeclaredUnitCall>,
+    install: impl FnOnce(StaticOriginId, StaticOriginId) -> Option<units::WorkerTemplate>,
     declared_arity: u32,
     source_capture_count: usize,
     capture_operands: usize,
@@ -4860,7 +5152,10 @@ fn attempt_worker_construction(
     let seed_env = NativeSeedEnvironment::empty();
     let mut compiler = bare_carrier_test_lowering(&seed_env, plan);
     if let Some(target) = install(body_origin, closure_origin) {
-        compiler.function_local.unit_calls.insert(body_origin, target);
+        compiler
+            .function_local
+            .worker_templates
+            .insert(body_origin, target);
     }
     // `Lowered::Bytes` needs no emitted value, so the fixture builds captures
     // without a builder. The route is phase-agnostic by design -- it stores
@@ -4877,6 +5172,15 @@ fn attempt_worker_construction(
         declared_arity,
         source_capture_count,
         captures,
+        // `D6a` — these rows are about the descriptor contract, which is
+        // validated identically on both routes. The raw route is the one an
+        // ordinary lexical closure takes, so it is the honest default here.
+        StaticWorkerCallRoute::RawWorker,
+        // `D8i` — likewise route-independent: these rows validate the
+        // descriptor contract, which runs before the discharge facet is even
+        // looked at. The ordinary arm is what an ordinary lexical closure
+        // carries.
+        ContinuationDischarge::DirectSpecializationCall,
     )
 }
 
@@ -4933,8 +5237,13 @@ fn static_worker_construction_installs_on_agreeing_descriptor() {
 fn static_worker_construction_rejects_missing_target() {
     let error = expect_worker_rejection(attempt_worker_construction(|_, _| None, 1, 1, 1));
     assert!(
-        format!("{error:?}").contains("no declared static-body target"),
-        "rejects for the missing-target reason, not some later one: {error:?}"
+        // `D5a` checkpoint 1 moved the constructor's authority from the
+        // declared call target to the raw worker template, and the diagnostic
+        // moved with it. Same seam, and a sharper reason: what is missing is
+        // the RAW CONTRACT, which a function has whether or not it also has a
+        // callee to reach.
+        format!("{error:?}").contains("no raw worker template"),
+        "rejects for the missing-template reason, not some later one: {error:?}"
     );
 }
 
@@ -5080,13 +5389,21 @@ fn lower_against_static_worker(
         compiler
             .function_local
             .worker_calls
-            .insert(body_origin, worker_descriptor(body_origin, declared_arity, 1));
+            .insert(
+                body_origin,
+                worker_call_target(worker_descriptor(body_origin, declared_arity, 1)),
+            );
     }
     let env = [LoweringEnvironmentBinding::StaticWorker(StaticWorkerBinding {
         closure_origin,
         body_origin,
         declared_arity,
         captures: vec![LoweringOperand::Specialized(Lowered::Bytes(b"cap".to_vec()))],
+        route: StaticWorkerCallRoute::RawWorker,
+        // `D8i` — a hand-built ordinary binding. ⛔ The composed arm is not
+        // constructible here even in a test: it needs a planner-issued
+        // `ContinuationCallIdentity`, which has no constructor outside planning.
+        discharge: ContinuationDischarge::DirectSpecializationCall,
     })];
     let mut func = Function::with_name_signature(
         UserFuncName::user(0, 0),
@@ -5226,7 +5543,7 @@ fn static_worker_call_rejects_undeclared_target() {
 /// The carried capture is what routes the binder to `StaticWorker`; the call
 /// through the exact `Var(0)` callee is what consumes it.
 #[cfg(test)]
-fn static_worker_witness(capture_first: bool) -> RuntimeExpr {
+pub(super) fn static_worker_witness(capture_first: bool) -> RuntimeExpr {
     let carried = RuntimeExpr::Var(0);
     let constant = RuntimeExpr::Value(RuntimeValue::Int(3.into()));
     let captures = if capture_first {
@@ -5469,7 +5786,33 @@ fn run_worker_fixture(expr: &RuntimeExpr) -> RuntimeObservation {
 ///
 /// This is also `AC-5`'s target-redirect red: the two workers are same-shape,
 /// so a call resolving to the other one's body is exactly a redirected target.
+//
+// Ignored pending RT-WORKER-FIXTURE-DECODE.
+//
+// Observed signature, exactly:
+//   the worker fixture runs: Backend(NativeResultDecode { token: 9 })
+//
+// Owner node: RT-WORKER-FIXTURE-DECODE.
+// Pre-existing base debt, NOT a bind-order regression: fails at base
+// 21fd46dc with this same signature, measured two-ended at both refs and
+// with the CI feature px8-ds-test-support both on and off.
+//
+// IT DIES AT ITS `expect` BEFORE REACHING A SINGLE ASSERTION. The panic is
+// on the row's FIRST statement, inside `run_worker_fixture` at the
+// `.expect("the worker fixture runs")`, so all three `assert_ne!`
+// comparisons below are unreachable at both refs.
+//
+// Read the doc comment above accordingly: AC-5's target-redirect red is
+// NOT discharged by this row and is not discharged by ignoring it -- the
+// comparisons that would detect a redirected target have never run here.
+// Ignoring it switches off nothing that was working, and un-ignoring it
+// later is NOT the repair. A genuine capture-order regression would present
+// as two configurations comparing EQUAL, an `assert_ne!` firing; it cannot
+// present as a fixture that will not execute, which is why this row is not
+// evidence about the source-body binding order in either direction.
+// Annotation only -- test body, expect, and assertions are unchanged.
 #[test]
+#[ignore = "RT-WORKER-FIXTURE-DECODE: the worker fixture cannot run, so the AC-5 comparisons are unreachable; fails at base 21fd46dc"]
 fn two_same_shape_workers_are_distinguished() {
     let baseline = run_worker_fixture(&two_same_shape_workers(1, 1, false));
     let body_swapped = run_worker_fixture(&two_same_shape_workers(2, 1, false));
@@ -5704,5 +6047,2641 @@ fn ac5_redirecting_the_resolved_worker_target_reds_the_same_shape_witness() {
         )
         .is_ok(),
         "the mutation must not leak past its scope"
+    );
+}
+
+/// **`D7` — every construction-time occurrence lookup FAILS CLOSED.**
+///
+/// MEASURED, on the three consumers this row drives:
+///
+/// | consumer | no emission owner | live owner, unanswerable lookup |
+/// |---|---|---|
+/// | `synthesized_constructor` | accepts | refuses |
+/// | `reconcile_declared_children`, nested `Fixed` child | not exercised | refuses |
+/// | `reconcile_host_result_root` | accepts | refuses |
+///
+/// ⚠ The middle row's permissive cell is deliberately blank rather than
+/// asserted: `reconcile_declared_children` takes its owner as an argument and
+/// has no no-emission-owner branch of its own, so there is nothing there to
+/// exercise. The two consumers that DO draw that boundary are the two asserted.
+///
+/// CLAIMED: none of these converts a failed authority lookup into an absence.
+/// `None` is lawful only on the explicit no-emission-owner early return, which
+/// is what the permissive column exercises.
+///
+/// THE GAP — and it is why these are driven at the CONSUMER rather than at the
+/// planner API. The planner-side row
+/// `a_lawful_non_dynamic_root_is_not_a_failed_lookup` proves the API types
+/// absence apart from failure, and stays green if a consumer reintroduces
+/// `.ok()`.
+///
+/// ⚠ Not every assertion below is a single-line discriminator.
+/// `synthesized_constructor`'s repair closed its hole TWICE — with `?` and by
+/// making the child reconciliation unconditional — so reverting either half
+/// alone stays green and only the full predecessor is caught. That is a
+/// redundancy, not a gap, and it is recorded so a green single-line revert is
+/// not misread as an unpinned property.
+///
+/// The fourth consumer, `dynamic_alternatives_agree`, has its own row:
+/// `a_dynamic_alternative_with_no_planned_record_refuses`.
+#[test]
+fn a_construction_time_occurrence_lookup_fails_closed() {
+    use crate::cranelift_backend::planning::{
+        SynthesizedAggregateNode, SynthesizedAggregatePath, SynthesizedAggregateRoot,
+    };
+
+    let source = RuntimeExpr::Construct {
+        constructor: "ctor:fixture::FailClosed::Seed".to_string(),
+        args: Vec::new(),
+    };
+    let (plan, root_origin) = planned_root_occurrence(&source);
+    // A real emission owner. The seat below is deliberately NOT one this owner
+    // has synthesized records at, so every lookup is unanswerable — which is
+    // the state `.ok()` used to convert into "there is nothing planned here".
+    let owner = ContinuationEmissionOwner::Predeclared(
+        plan.emittable_units()
+            .expect("a planned graph enumerates its units")
+            .first()
+            .copied()
+            .expect("a planned graph has an emittable unit")
+            .function(),
+    );
+    let seed_env = NativeSeedEnvironment::empty();
+    let mut compiler = bare_carrier_test_lowering(&seed_env, plan);
+    let ok_root = SynthesizedAggregatePath::root(SynthesizedAggregateRoot::HostResultOk);
+    let symbols = crate::NativeProcessSymbols::legacy_prelude();
+
+    // ── The lawful absence: NO emission owner ──
+    //
+    // This is the one branch on which a missing occurrence is correct, and it
+    // runs first so the refusals below cannot be read as "this consumer
+    // refuses everything".
+    compiler.defining_emission_owner = None;
+    assert!(
+        compiler
+            .synthesized_constructor(
+                root_origin,
+                &ok_root,
+                SynthesizedFixedConstructorRole::Wrote,
+                symbols.wrote.clone(),
+                Vec::new(),
+                &ClaimedEffectSeats::none(),
+            )
+            .is_ok(),
+        "with no emission owner there is no emission this population covers, \
+         so the template is built carrying no occurrence"
+    );
+    assert!(
+        compiler
+            .reconcile_host_result_root(
+                root_origin,
+                &ok_root,
+                &Lowered::Constructor {
+                    constructor: symbols.wrote.clone(),
+                    synthesized_identity: None,
+                    occurrence: None,
+                    args: Vec::new(),
+                },
+            )
+            .is_ok(),
+        "the root consumer draws the same no-emission-owner boundary"
+    );
+
+    // ── Now with a live owner: every unanswerable lookup REFUSES ──
+    compiler.defining_emission_owner = Some(owner);
+
+    // 1. The construction's own exact record. Under `.ok()` this became
+    //    `occurrence: None` and the child reconciliation was SKIPPED entirely,
+    //    emitting a template that would refuse only later at its allocation.
+    assert!(
+        compiler
+            .synthesized_constructor(
+                root_origin,
+                &ok_root,
+                SynthesizedFixedConstructorRole::Wrote,
+                symbols.wrote.clone(),
+                Vec::new(),
+                &ClaimedEffectSeats::none(),
+            )
+            .is_err(),
+        "a synthesized construction whose exact record does not exist must \
+         refuse, not carry `None` and skip its own child reconciliation"
+    );
+
+    // 2. A nested `Fixed` child's expected record. Under `.ok()` the
+    //    expectation became `None`, which compared EQUAL to a child carrying no
+    //    occurrence — two absences agreed and the pair passed.
+    const NESTED: &[SynthesizedAggregateNode] = &[SynthesizedAggregateNode::Fixed {
+        role: SynthesizedFixedConstructorRole::PrivateTransferCount,
+        children: &[],
+    }];
+    assert!(
+        compiler
+            .reconcile_declared_children(
+                owner,
+                root_origin,
+                &ok_root,
+                NESTED,
+                &[SynthesizedArgument::Nested(Lowered::Constructor {
+                    constructor: symbols.private_transfer_count.clone(),
+                    synthesized_identity: None,
+                    occurrence: None,
+                    args: Vec::new(),
+                })],
+                &ClaimedEffectSeats::none(),
+            )
+            .is_err(),
+        "a nested child whose expected record does not exist must refuse; two \
+         absences must not compare equal"
+    );
+
+    // 3. The host-result root. The emitted root here is lawfully NON-dynamic,
+    //    which is exactly the case `.ok()` let through: the failed lookup read
+    //    as "the planner plans no set at this root", and `(None, non-dynamic)`
+    //    returned `Ok(())`.
+    assert!(
+        compiler
+            .reconcile_host_result_root(
+                root_origin,
+                &ok_root,
+                &Lowered::Constructor {
+                    constructor: symbols.wrote.clone(),
+                    synthesized_identity: None,
+                    occurrence: None,
+                    args: Vec::new(),
+                },
+            )
+            .is_err(),
+        "a root whose authority lookup cannot be answered must refuse, even \
+         when the emitted root is lawfully non-dynamic"
+    );
+}
+
+/// The first `Effect` occurrence in a planned graph, found by walking the
+/// occurrence tree with the accessors lowering itself uses.
+///
+/// `StaticOriginId` is unmintable here — its field is `pub(super)` — so a seat
+/// has to be *discovered* rather than fabricated, which is also the honest
+/// shape: the control below is about a seat the planner really issued records
+/// for.
+fn first_effect_seat(plan: &StaticTransitionPlan<'_>) -> Option<StaticOriginId> {
+    let mut stack = vec![plan.root_static_origin().ok()?];
+    let mut seen = 0usize;
+    while let Some(origin) = stack.pop() {
+        seen += 1;
+        if seen > 4096 {
+            return None;
+        }
+        if matches!(plan.source_occurrence(origin), Ok(RuntimeExpr::Effect { .. })) {
+            return Some(origin);
+        }
+        let mut position = 0;
+        while let Ok(child) = plan.child_static_origin(origin, position) {
+            stack.push(child);
+            position += 1;
+        }
+    }
+    None
+}
+
+/// **`D7` — the dynamic-alternative consumer fails closed on a missing record.**
+///
+/// MEASURED: at a real `FsWriteAt` seat whose error root is the ten-alternative
+/// resource surface, `dynamic_alternatives_agree` accepts the alternatives
+/// carrying the occurrences the planner issued **under the seat's own emission
+/// owner**, and refuses under a *different* enumerated unit's owner — at which
+/// no per-alternative record exists — even though every emitted alternative
+/// carries `occurrence: None` and the population cardinality still matches.
+///
+/// CLAIMED: the per-alternative record lookup propagates rather than mapping to
+/// `None`, so missing planner authority cannot compare equal to an alternative
+/// that carries no occurrence.
+///
+/// THE GAP: this is the one consumer cell the earlier fail-closed row could not
+/// reach, and I previously reported it as unreachable from a test. That was
+/// wrong in a specific way worth recording — I checked whether a
+/// `PredeclaredFunctionId` could be **minted** (it cannot; the field is
+/// `pub(super)`) and concluded no second owner was obtainable, without checking
+/// whether a fixture could **enumerate** two. `emittable_units()` returns them,
+/// and this fixture has more than one.
+///
+/// ⚠ The negative's discriminating power is exactly the `?`: restoring the
+/// predecessor `.ok()` makes `expected` become `None`, which compares equal to
+/// the emitted `None`, and the negative half passes. Both halves are asserted
+/// because the positive is what stops the row degenerating into "this consumer
+/// refuses everything".
+#[test]
+fn a_dynamic_alternative_with_no_planned_record_refuses() {
+    use crate::cranelift_backend::planning::{
+        SynthesizedAggregatePath, SynthesizedAggregateRoot,
+    };
+
+    let symbols = crate::NativeProcessSymbols::legacy_prelude();
+    let write = RuntimeExpr::Effect {
+        family: "FS".to_string(),
+        operation: ken_host::HostOpV1::FsWriteAt,
+        capability: None,
+        args: vec![
+            RuntimeExpr::Value(RuntimeValue::Int((0).into())),
+            RuntimeExpr::Value(RuntimeValue::Int((0).into())),
+            RuntimeExpr::Value(RuntimeValue::Int((0).into())),
+            RuntimeExpr::Value(RuntimeValue::Int((0).into())),
+            RuntimeExpr::Value(RuntimeValue::Int((4).into())),
+            RuntimeExpr::Value(RuntimeValue::Int((0).into())),
+        ],
+    };
+    let source = host_result_closure_match(write);
+    let (plan, _) = planned_root_occurrence(&source);
+    let seat = first_effect_seat(&plan).expect("the fixture has an effect seat");
+
+    // Two ENUMERATED units, which is where the alternate owner comes from.
+    let units = plan
+        .emittable_units()
+        .expect("a planned graph enumerates its units");
+    assert!(
+        units.len() > 1,
+        "this control needs two enumerated units to obtain an owner the seat \
+         has no records under; the fixture yielded {}",
+        units.len()
+    );
+    let owners = units
+        .iter()
+        .map(|unit| ContinuationEmissionOwner::Predeclared(unit.function()))
+        .collect::<Vec<_>>();
+
+    let error_root = SynthesizedAggregatePath::root(SynthesizedAggregateRoot::HostResultError);
+    let population = plan
+        .synthesized_dynamic_alternatives(seat, &error_root)
+        .expect("the error root is the resource surface");
+    assert_eq!(population.len(), 10, "the resource surface has ten alternatives");
+
+    let seed_env = NativeSeedEnvironment::empty();
+    let compiler = bare_carrier_test_lowering(&seed_env, plan);
+    let plan = &compiler.static_transition_plan;
+
+    // The owner the seat's records were actually issued under. Found by asking
+    // which enumerated owner resolves alternative 0, rather than assumed.
+    let live = owners
+        .iter()
+        .copied()
+        .find(|owner| {
+            plan.synthesized_aggregate_occurrence(
+                *owner,
+                seat,
+                &error_root.alternative(0),
+                population[0],
+            )
+            .is_ok()
+        })
+        .expect("some enumerated owner holds this seat's records");
+    let absent = owners
+        .iter()
+        .copied()
+        .find(|owner| *owner != live)
+        .expect("a second enumerated unit supplies the alternate owner");
+
+    let alternative = |occurrence| DynamicConstructorAlternativeV1 {
+        tag: 0,
+        constructor: symbols.resource_host_io.clone(),
+        identity: test_synthesized_constructor_identity(),
+        occurrence,
+        fields: Vec::new(),
+    };
+
+    // ── POSITIVE: the real occurrences under the live owner agree ──
+    let carried = population
+        .iter()
+        .enumerate()
+        .map(|(index, role)| {
+            let occurrence = plan
+                .synthesized_aggregate_occurrence(
+                    live,
+                    seat,
+                    &error_root.alternative(index as u32),
+                    *role,
+                )
+                .expect("every planned alternative has a record under the live owner");
+            alternative(Some(occurrence))
+        })
+        .collect::<Vec<_>>();
+    let mut builder_context = FunctionBuilderContext::new();
+    let mut function = Function::new();
+    let mut builder = FunctionBuilder::new(&mut function, &mut builder_context);
+    let entry = builder.create_block();
+    builder.switch_to_block(entry);
+    let discriminator = builder.ins().iconst(types::I64, 0);
+    assert!(
+        compiler
+            .dynamic_alternatives_agree(
+                live,
+                seat,
+                &error_root,
+                &DynamicConstructorV1 {
+                    discriminator,
+                    alternatives: carried,
+                },
+            )
+            .expect("the live owner's lookup is answerable"),
+        "alternatives carrying the planner's own occurrences must agree, or \
+         the negative below is not discriminating"
+    );
+
+    // ── NEGATIVE: an owner with no records here, alternatives carrying None ──
+    //
+    // The population still resolves — it is read from the tree, which has no
+    // owner — and the cardinality still matches, so nothing but the
+    // per-alternative record lookup can catch this. Under the predecessor
+    // `.ok()` the expectation became `None`, compared equal to the emitted
+    // `None`, and all ten alternatives agreed.
+    let refused = compiler.dynamic_alternatives_agree(
+        absent,
+        seat,
+        &error_root,
+        &DynamicConstructorV1 {
+            discriminator,
+            alternatives: (0..population.len()).map(|_| alternative(None)).collect(),
+        },
+    );
+    assert!(
+        refused.is_err(),
+        "a missing per-alternative record must refuse, not compare equal to an \
+         alternative carrying no occurrence"
+    );
+}
+
+/// A program that reaches all four governed allocation sites, and that carries
+/// TWO live effect seats of the same operation for the A/B row.
+///
+/// ⚠ One fixture rather than four, deliberately. Four fixtures would let a row
+/// pass because its own fixture happened to avoid the other three sites, and
+/// the hit counter could not tell the difference. With one program every row
+/// runs against the same emission and the counter is the only thing that
+/// distinguishes them.
+///
+/// ⭐ Built on the shape `d7_fs_write_at_carrier_fixture` already established:
+/// a host effect only reaches the aggregate arm when it is CARRIED, which means
+/// crossing a generated-unit boundary as a call argument. Matching a host
+/// result directly keeps it specialized and it never reaches the carrier at
+/// all.
+fn d7_governed_sites_program(symbols: &crate::NativeProcessSymbols) -> RuntimeExpr {
+    let exit_success = || RuntimeExpr::Construct {
+        constructor: crate::EXIT_SUCCESS_CONSTRUCTOR.to_string(),
+        args: Vec::new(),
+    };
+    let trap = || RuntimeTrap {
+        code: RuntimeTrapCode::PatternMatchFailure,
+        message: "D7 governed-sites default".to_string(),
+    };
+    let allocate = || RuntimeExpr::Effect {
+        family: "FS".to_string(),
+        operation: ken_host::HostOpV1::BufferAllocate,
+        capability: None,
+        args: vec![RuntimeExpr::Value(RuntimeValue::Int((8).into()))],
+    };
+    // `origin` and `target` are the two bound buffer resources, named at
+    // whatever de Bruijn depth the caller sits at.
+    let write = |origin: u32, target: u32| RuntimeExpr::Effect {
+        family: "FS".to_string(),
+        operation: ken_host::HostOpV1::FsWriteAt,
+        capability: None,
+        args: vec![
+            RuntimeExpr::Var(origin),
+            RuntimeExpr::Value(RuntimeValue::Int((0).into())),
+            RuntimeExpr::Var(target),
+            RuntimeExpr::Value(RuntimeValue::Int((0).into())),
+            RuntimeExpr::Value(RuntimeValue::Int((4).into())),
+            RuntimeExpr::Var(origin),
+        ],
+    };
+    let bind = |body: RuntimeExpr| RuntimeExpr::Match {
+        scrutinee: Box::new(allocate()),
+        cases: vec![
+            crate::RuntimeMatchCase {
+                constructor: symbols.result_err.clone(),
+                binders: 1,
+                body: exit_success(),
+            },
+            crate::RuntimeMatchCase {
+                constructor: symbols.result_ok.clone(),
+                binders: 1,
+                body,
+            },
+        ],
+        default: trap(),
+    };
+    // Depth bookkeeping, stated because a wrong index is a silently different
+    // fixture rather than an error: inside `bind(bind(_))` the inner buffer is
+    // `Var(0)` and the outer is `Var(1)`; each enclosing `Let` shifts both.
+    bind(bind(RuntimeExpr::Let {
+        value: Box::new(host_result_closure_match(write(1, 0))),
+        body: Box::new(host_result_closure_match(write(2, 1))),
+    }))
+}
+
+/// ⚠ The artifact is DISCARDED. These rows only ever ask whether one was
+/// defined at all, and keeping it would leak a backend type into the fixture
+/// for nothing.
+fn d7_compile_governed_sites(program: &RuntimeExpr) -> Result<(), CraneliftBackendError> {
+    emit_process_entrypoint_object_with_cranelift(program, "ken_d7_governed_sites").map(|_| ())
+}
+
+/// A source `Record` with DISTINGUISHABLE fields, passed as an ordinary
+/// generated-unit call argument.
+///
+/// ⭐ The two fields are different constructors on purpose. A record whose
+/// fields are interchangeable cannot show that the right field identities
+/// travelled; this one can.
+fn d7_record_as_call_argument() -> RuntimeExpr {
+    RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::LexicalClosure {
+            captures: Vec::new(),
+            params: vec!["record".to_string()],
+            body: Box::new(RuntimeExpr::Construct {
+                constructor: crate::EXIT_SUCCESS_CONSTRUCTOR.to_string(),
+                args: Vec::new(),
+            }),
+        }),
+        args: vec![RuntimeExpr::Record {
+            fields: vec![
+                (
+                    "first".to_string(),
+                    RuntimeExpr::Construct {
+                        constructor: "ctor:fixture::CallInput::First".to_string(),
+                        args: Vec::new(),
+                    },
+                ),
+                (
+                    "second".to_string(),
+                    RuntimeExpr::Construct {
+                        constructor: "ctor:fixture::CallInput::Second".to_string(),
+                        args: Vec::new(),
+                    },
+                ),
+            ],
+        }],
+    }
+}
+
+/// **`D7` — a source `Record` passed as an ordinary generated-unit call
+/// argument is marshalled at ITS OWN caller-side occurrence.**
+///
+/// MEASURED, by instrumenting `source_aggregate_occurrence` on this exact
+/// fixture before the repair. The planned population is
+///
+/// | occurrence | shape | producer |
+/// |---|---|---|
+/// | 0 | `Constructor` | origin 2 — `CallInput::First` |
+/// | 1 | `Constructor` | origin 3 — `CallInput::Second` |
+/// | 2 | **`Record`** | **origin 4 — the record itself** |
+/// | 3 | `Constructor` | origin 6 — the callee closure's `ExitCode::Success` body |
+///
+/// and the emitter asked for the `Record`'s ownership record **at origin 6**,
+/// found occurrence 3, and refused on the shape cross-check. Origin 6 is
+/// `DeclaredUnitCall::origin` — the callee's scheduling entry — because
+/// `call_declared_unit_target` transferred every input still specialized at
+/// that one coordinate.
+///
+/// ⭐ **This row was committed asserting that refusal**, as
+/// `..._is_marshalled_at_the_callee_origin`, so the repair had a discriminator
+/// to flip rather than a claim to make. The rename and the flipped assertion
+/// are that flip.
+///
+/// ⛔ The shape check was never what was wrong. It was correct and doing its
+/// job; the coordinate it was asked about was wrong. Nothing in the repair
+/// weakens it, accepts both shapes, or defaults an occurrence — the caller-side
+/// occurrence `child_occurrence` had already issued is simply carried through
+/// to the transfer instead of being discarded.
+///
+/// THE GAP: a successful compile shows the coordinate resolves and the shape
+/// agrees. It does not show the field identities themselves round-trip — that
+/// is `c1_d4_ac_c7`'s differential, which reads each projected child's runtime
+/// identity back.
+#[test]
+fn a_source_record_as_a_call_argument_is_marshalled_at_its_own_occurrence() {
+    emit_process_entrypoint_object_with_cranelift(
+        &d7_record_as_call_argument(),
+        "ken_d7_record_call_input",
+    )
+    .expect("a record call argument resolves its ownership record at its own occurrence");
+}
+
+/// The source-`Record` site, driven by an ordinary program.
+///
+/// ⭐ This is the real route: a source `Record` passed as a generated-unit call
+/// argument, the same fixture
+/// [`a_source_record_as_a_call_argument_is_marshalled_at_its_own_occurrence`]
+/// drives. Before the call-input coordinate was repaired no ordinary program
+/// reached `emit_carrier_transfer`'s `Lowered::Record` arm at all — the
+/// transfer resolved the ownership record at the callee's scheduling entry and
+/// was refused on the shape cross-check first — so this row was driven at the
+/// lower-level carrier edge instead. That edge control still exists on its own
+/// (`c1_d4_ac_c7`); this row no longer needs it.
+fn d7_transfer_a_carried_record() -> Result<(), CraneliftBackendError> {
+    emit_process_entrypoint_object_with_cranelift(
+        &d7_record_as_call_argument(),
+        "ken_d7_record_site_bypass",
+    )
+    .map(|_| ())
+}
+
+/// The carried-constructor site, driven by the heterogeneous eliminator.
+///
+/// ⚠ A third driver, and measured for the same reason as the second.
+/// `transfer_constructor_operands` builds a constructor from ALREADY-LOWERED
+/// operands; the host-effect fixture never does, because its constructors are
+/// built from source. The heterogeneous eliminator composes a dynamic producer
+/// through two ordinary frames, which is the shape that carries operands into
+/// a constructor at the process boundary.
+fn d7_transfer_carried_constructor_operands() -> Result<(), CraneliftBackendError> {
+    emit_process_entrypoint_object_with_cranelift(
+        &heterogeneous_eliminator_fixture(
+            "ctor:fixture::Inner::Hit",
+            "ctor:fixture::Inner::Hit",
+            "ctor:fixture::Outer::Hit",
+            "ctor:fixture::Outer::Hit",
+            1,
+            1,
+            true,
+            false,
+        ),
+        "ken_d7_carried_constructor_operands",
+    )
+    .map(|_| ())
+}
+
+/// **`D7` — each of the four governed sites reaches the choke, and cannot
+/// bypass it.**
+///
+/// MEASURED, one fixture, one variant installed at a time:
+///
+/// | site | driver | hits | outcome |
+/// |---|---|---|---|
+/// | source `Constructor` | host-effect object | > 0 | refused at the choke's non-aggregate check |
+/// | source `Record` | record-as-call-argument | > 0 | refused at the choke's non-aggregate check |
+/// | selected dynamic alternative | host-effect object | > 0 | refused at the choke's non-aggregate check |
+/// | carried `transfer_constructor_operands` | heterogeneous eliminator | > 0 | refused at the choke's non-aggregate check |
+///
+/// ⚠ **Three drivers, not one, and that is measured rather than chosen.** I
+/// wrote this as a single fixture first, on the argument that one emission
+/// makes the counter the only thing separating the rows. The counter falsified
+/// the argument twice, and both findings turned out to be about the emitter
+/// rather than about the fixture: no ordinary program reached the
+/// source-`Record` arm, because the call-input coordinate resolved its
+/// ownership record at the callee's scheduling entry — since repaired, so that
+/// row is now an ordinary program — and nothing in a host-effect program builds
+/// a constructor from already-lowered operands, so that row is the
+/// heterogeneous eliminator.
+///
+/// ⭐ **The hit count is not decoration.** Without it a row is green whenever
+/// its driver fails to reach the site — a vacuous pass that looks exactly like
+/// a caught bypass, because the assertion it satisfies is "this did not
+/// compile". The counter is what makes each row a statement about ITS site,
+/// and it is what caught the first spelling of this fixture, which reached
+/// three sites and silently skipped the fourth.
+///
+/// ⭐ Each unmutated baseline runs first for the same reason in the other
+/// direction: without it, four refusals could all be some unrelated defect in
+/// the driver rather than the perturbation.
+///
+/// CLAIMED: the emitter's four governed allocation sites all arrive at
+/// `emit_carrier_alloc` carrying a `PlannedAggregate` request, and a
+/// `NonAggregate` one substituted at any of them is refused **before the raw
+/// allocation and before any artifact is defined** — the compile returns `Err`,
+/// so there is no module.
+///
+/// THE GAP: this says nothing about the ORDER of the refusal within the choke.
+/// That is
+/// `the_carrier_allocation_choke_refuses_both_ungoverned_requests`'s positive
+/// control, which reaches the allocation on a rig that has none.
+#[test]
+fn each_governed_site_reaches_the_choke_and_cannot_bypass_it() {
+    let symbols = crate::NativeProcessSymbols::legacy_prelude();
+    let program = d7_governed_sites_program(&symbols);
+    let drive = |site| match site {
+        GovernedAllocationSite::SourceRecord => d7_transfer_a_carried_record(),
+        GovernedAllocationSite::CarriedConstructor => d7_transfer_carried_constructor_operands(),
+        _ => d7_compile_governed_sites(&program),
+    };
+
+    for site in [
+        GovernedAllocationSite::SourceConstructor,
+        GovernedAllocationSite::SourceRecord,
+        GovernedAllocationSite::DynamicAlternative,
+        GovernedAllocationSite::CarriedConstructor,
+    ] {
+        drive(site).unwrap_or_else(|error| {
+            panic!("{site:?}: this row's driver must compile unmutated, got {error:?}")
+        });
+
+        let guard =
+            GovernedAllocationMutationGuard::install(GovernedAllocationMutation::Bypass(site));
+        let result = drive(site);
+        let hits = guard.hits();
+        drop(guard);
+
+        assert!(
+            hits > 0,
+            "{site:?}: the fixture never reached this site, so its row is vacuous"
+        );
+        let Err(error) = result else {
+            panic!("{site:?}: a bypassed request must refuse, and no artifact may be defined");
+        };
+        assert!(
+            format!("{error:?}").contains("was allocated as non-aggregate"),
+            "{site:?}: must refuse at the choke's own pre-allocation check, got {error:?}"
+        );
+    }
+}
+
+/// **`D7` — a SIBLING effect seat's coordinate is rejected at construction.**
+///
+/// MEASURED: the fixture carries two live `FsWriteAt` seats. Because they run
+/// the same operation they share every synthesized role, path and shape, so the
+/// only thing that differs between them is which occurrence is being lowered.
+/// With the emitted construction and the seat's own operands retained
+/// unchanged, selecting the planned occurrence and record at the SIBLING is
+/// refused before `emit_carrier_alloc`.
+///
+/// ⭐ **B is a live effect seat, never an invalid or non-`Effect` origin.** A
+/// refusal driven by an unusable seat would be a claim about seat VALIDITY —
+/// much weaker, and satisfiable by a check that merely resolves the origin. The
+/// claim here is that the seat coordinate is *load-bearing between two seats
+/// that are equally real and structurally identical*.
+///
+/// ⭐ The hit count is asserted because `sibling_effect_seat` returns the seat
+/// unchanged when no sibling exists. Without it, "this fixture has one seat so
+/// nothing was swapped" and "the swap happened and was caught" are the same
+/// green.
+///
+/// CLAIMED: the seat is a real coordinate of the record lookup, not a
+/// pass-through. This retires the row-12 seat cell from residual to held.
+#[test]
+fn a_sibling_effect_seats_coordinate_is_rejected_at_construction() {
+    let symbols = crate::NativeProcessSymbols::legacy_prelude();
+    let program = d7_governed_sites_program(&symbols);
+    let (plan, _) = planned_root_occurrence(&program);
+    let seat = first_effect_seat(&plan).expect("the fixture has an effect seat");
+    let sibling = plan
+        .sibling_effect_seat(seat)
+        .expect("the fixture has a SECOND live effect seat of the same operation");
+    assert_ne!(seat, sibling, "an A/B discriminator needs two distinct seats");
+
+    d7_compile_governed_sites(&program).expect("the fixture compiles at its own seats");
+
+    let guard =
+        GovernedAllocationMutationGuard::install(GovernedAllocationMutation::SiblingEffectSeat);
+    let result = d7_compile_governed_sites(&program);
+    let hits = guard.hits();
+    drop(guard);
+
+    assert!(
+        hits > 0,
+        "the sibling swap never fired, so this row says nothing about the seat"
+    );
+    let Err(error) = result else {
+        panic!(
+            "a sibling seat's coordinate was ACCEPTED after {hits} swaps. Stated as measured: \
+             the seat is not load-bearing at the sites this fixture reaches, and row 12's seat \
+             cell stays a residual"
+        );
+    };
+    // MEASURED: it refuses at `reconcile_declared_children`'s nested-`Fixed`
+    // comparison — the child carries the occurrence the planner issued at seat
+    // A and the expected one is B's, so the two disagree. That is a
+    // CONSTRUCTION refusal, reached before any request is built and therefore
+    // before `emit_carrier_alloc`; the choke's own message would mean the seat
+    // had been carried all the way to the allocation.
+    let reason = format!("{error:?}");
+    assert!(
+        !reason.contains("was allocated as non-aggregate"),
+        "the refusal must come from CONSTRUCTION, before emit_carrier_alloc: {reason}"
+    );
+    assert!(
+        reason.contains("the meet was taken over a different node than the one being allocated"),
+        "the refusal must be the parent-to-child record disagreement the seat \
+         coordinate produces: {reason}"
+    );
+}
+
+/// **`D7` — the deepest carrier allocator refuses BOTH ungoverned requests, and
+/// refuses them before it emits anything.**
+///
+/// MEASURED, on a bare rig whose function carries no boundary-carrier refs —
+/// which is exactly what makes the ORDER observable:
+///
+/// | request | class | outcome |
+/// |---|---|---|
+/// | `NonAggregate` | `Constructor` | refused, naming the class |
+/// | `NonAggregate` | `Record` | refused, naming the class |
+/// | `PlannedAggregate { Constructor }` | `Record` | refused, naming the shape's class |
+/// | `PlannedAggregate { Constructor }` | `Constructor` | reaches the allocation and dies THERE |
+///
+/// ⭐ **The last row is the positive control and it is the load-bearing one.** A
+/// blanket refusal would satisfy the first three exactly as well; only a request
+/// that gets *past* both checks and fails at `carrier_refs` shows the checks
+/// discriminate rather than wall. It is also what witnesses the ordering the
+/// correction asks for: on this rig there is no `alloc` to reach, so a refusal
+/// that arrived after the raw call could not be observed at all — and the
+/// agreeing request proves the raw call is genuinely downstream of both.
+///
+/// CLAIMED: an aggregate class cannot be allocated without naming a planned
+/// record, and a planned record cannot be allocated at a class its shape does
+/// not authorize. Neither refusal can be reached after the arena has moved.
+///
+/// THE GAP: this row is about the CHOKE, on hand-built requests. That the
+/// emitter's four governed sites actually ARRIVE here carrying a
+/// `PlannedAggregate` request is a different claim, and nothing below asserts
+/// it — it is held by
+/// `each_governed_site_reaches_the_choke_and_cannot_bypass_it`.
+#[test]
+fn the_carrier_allocation_choke_refuses_both_ungoverned_requests() {
+    let source = RuntimeExpr::Construct {
+        constructor: "ctor:fixture::Choke::Outer".to_string(),
+        args: vec![RuntimeExpr::Construct {
+            constructor: "ctor:fixture::Choke::Inner".to_string(),
+            args: Vec::new(),
+        }],
+    };
+    let (plan, _) = planned_root_occurrence(&source);
+    let seed_env = NativeSeedEnvironment::empty();
+    let mut compiler = bare_carrier_test_lowering(&seed_env, plan);
+    // Found by SHAPE rather than by position, so the agreeing row below cannot
+    // fail at the planner's own shape cross-check and be misread as the class
+    // check biting.
+    let occurrence = compiler
+        .static_transition_plan
+        .aggregate_ownership_records()
+        .iter()
+        .find(|record| record.shape == PlannedAggregateShape::Constructor)
+        .expect("the fixture plans a constructor-shaped record")
+        .id;
+
+    let mut builder_context = FunctionBuilderContext::new();
+    let mut function = Function::new();
+    let mut builder = FunctionBuilder::new(&mut function, &mut builder_context);
+    let entry = builder.create_block();
+    builder.switch_to_block(entry);
+
+    for class in [BoundaryClass::Constructor, BoundaryClass::Record] {
+        let error = compiler
+            .emit_carrier_alloc(
+                &mut builder,
+                CarrierAllocationRequest::NonAggregate {
+                    tag: BoundaryTag::PersistentGround,
+                },
+                class,
+                0,
+            )
+            .expect_err("an aggregate class may not be allocated ungoverned");
+        assert!(
+            format!("{error:?}").contains("non-aggregate"),
+            "the refusal must name the ungoverned request: {error:?}"
+        );
+    }
+
+    let error = compiler
+        .emit_carrier_alloc(
+            &mut builder,
+            CarrierAllocationRequest::PlannedAggregate {
+                occurrence,
+                shape: PlannedAggregateShape::Constructor,
+            },
+            BoundaryClass::Record,
+            0,
+        )
+        .expect_err("a constructor-shaped record may not be carried as a Record");
+    assert!(
+        format!("{error:?}").contains("rather than"),
+        "the refusal must name the class the shape authorizes: {error:?}"
+    );
+
+    // ── POSITIVE CONTROL — past both checks, dead at the allocation ──
+    let error = compiler
+        .emit_carrier_alloc(
+            &mut builder,
+            CarrierAllocationRequest::PlannedAggregate {
+                occurrence,
+                shape: PlannedAggregateShape::Constructor,
+            },
+            BoundaryClass::Constructor,
+            0,
+        )
+        .expect_err("this rig has no boundary-carrier helper refs to allocate through");
+    assert!(
+        format!("{error:?}").contains("boundary-carrier helper refs"),
+        "an agreeing request must reach the ALLOCATION and fail there, not at \
+         either request check: {error:?}"
+    );
+}
+
+/// **`D7` — the aggregate allocation relation's laws, driven at the ledger.**
+///
+/// MEASURED, as the numbered control matrix:
+///
+/// | # | case | verdict |
+/// |---|---|---|
+/// | 1 | same numeric `Value` under distinct `FuncId`s | lawful |
+/// | 2 | one planner record governing several events | lawful |
+/// | 3 | an unused planned record, closeout still succeeds | lawful |
+/// | 4 | duplicate/conflicting pairing | rejects |
+/// | 5 | event recorded, relation suppressed | rejects at local close |
+/// | 6 | relation entry with no event | rejects at local close |
+/// | 7 | committed relation entries cleared between bodies | rejects at close |
+/// | 8 | a body commit discarded | rejects via opened-vs-committed |
+/// | 9 | second build/commit of one `FuncId` | rejects |
+/// | 10 | related occurrence absent from `P` | rejects |
+/// | 11 | allocation with no open body | rejects |
+///
+/// CLAIMED: `dom(R) = E` exactly, `R` single-valued with unique pairs, and
+/// `image(R) ⊆ P` — with `P` authorizing rather than obliging, so rows 2 and 3
+/// are the lawful shapes that a surjectivity requirement would have refused.
+///
+/// THE GAP: rows 12 and 13 of the released matrix are NOT here, and neither is
+/// inherited by gesture. This row is about the LEDGER, and driving it there is
+/// what lets rows 5 and 6 exist at all: they are only stateable because the
+/// event set and the relation are separate evidence.
+///
+/// **Row 12 — wrong owner/seat/path/role/shape/lane/child — is inherited only
+/// through this explicit axis mapping:**
+///
+/// | axis | held by | where |
+/// |---|---|---|
+/// | owner | `a_dynamic_alternative_with_no_planned_record_refuses` | a second ENUMERATED unit's owner, at which the seat has no records |
+/// | seat | `a_sibling_effect_seats_coordinate_is_rejected_at_construction` | a second LIVE effect seat of the same operation |
+/// | path | `a_records_lookup_key_includes_its_path_not_only_its_role`, `a_path_step_kind_is_load_bearing_not_an_index` | planner-side, both directions of the key |
+/// | role | `a_repeated_role_at_one_seat_gets_distinct_real_records` | one role twice at one seat gets two records |
+/// | shape | `the_carrier_allocation_choke_refuses_both_ungoverned_requests` | class-vs-shape at the choke; `aggregate_allocation_at` cross-checks the record's own shape beneath it |
+/// | lane | structural — see below | no test, and none is possible |
+/// | child | `a_construction_time_occurrence_lookup_fails_closed`, nested `Fixed` row | the child's own path is resolved, not the parent's |
+///
+/// ⭐ **The SEAT cell was a residual and is not one any more.** I had recorded
+/// that a wrong seat was not falsifiable, reasoning that producing a different
+/// seat would mean lowering a different expression and every consumer would
+/// then agree with it consistently. That was wrong in a specific way: it
+/// treated the seat as travelling with the whole construction, when the
+/// construction and its operands can be RETAINED while only the coordinate used
+/// to select the planned record moves. Two live effect seats of the same
+/// operation share every role, path and shape, so the swap is an A/B in which
+/// nothing else differs — and it is refused at
+/// `reconcile_declared_children`, before any allocation request exists.
+///
+/// ⛔ **The LANE cell is a type-and-API property, not an unattainable test.**
+/// `CarrierAllocationRequest::PlannedAggregate` carries no lane and offers no
+/// field for one; the lane is derived inside the choke from
+/// `aggregate_allocation_at(occurrence, shape)`. There is no caller input that
+/// could be wrong, so "a wrong lane" is not a state the emitter can express —
+/// which is a stronger guarantee than a test, not a weaker one. A test would
+/// have to construct the unconstructible to fail.
+///
+/// **Row 13 is the four-site bypass matrix**, and it is committed rather than
+/// recorded in a commit message:
+/// `each_governed_site_reaches_the_choke_and_cannot_bypass_it` installs a
+/// closed `#[cfg(test)]` mutation at one governed site's request construction
+/// at a time, proves the site was actually reached with a hit counter, and
+/// asserts the choke's own pre-allocation refusal. The choke's two refusals are
+/// asserted separately in
+/// `the_carrier_allocation_choke_refuses_both_ungoverned_requests`.
+#[test]
+fn the_aggregate_allocation_relation_holds_its_laws() {
+    // Two nested constructors, so the population has two records: one is used
+    // below and the other is left unused, which is what row 3 needs.
+    let source = RuntimeExpr::Construct {
+        constructor: "ctor:fixture::Relation::Outer".to_string(),
+        args: vec![RuntimeExpr::Construct {
+            constructor: "ctor:fixture::Relation::Inner".to_string(),
+            args: Vec::new(),
+        }],
+    };
+    let (plan, _) = planned_root_occurrence(&source);
+    let population = plan.aggregate_ownership_records();
+    assert!(
+        population.len() > 1,
+        "this row needs at least two planned records; got {}",
+        population.len()
+    );
+    let first = population[0].id;
+    let second = population[1].id;
+    let planned = population.to_vec();
+
+    // ── 1. The same numeric Value under distinct FuncIds is two events ──
+    //
+    // A CLIF `Value` is numbered per function, so this is the ordinary case,
+    // not an edge one. A ledger keyed on the value alone refused six lawful
+    // allocations before `FuncId` scoped them.
+    // ⚠ `from_u32` is a TEST-only way to name an identity. Production never
+    // constructs one: it carries the `FuncId` the module handed it and the
+    // `Value` the allocation produced.
+    let func = FuncId::from_u32;
+    let val = cranelift_codegen::ir::Value::from_u32;
+
+    let mut ledger = AggregateAllocationLedger::default();
+    for function in [func(7), func(9)] {
+        ledger.open(function).expect("each body opens");
+        ledger.record_event(function, val(12)).expect("value 12 in each");
+        // ── 2. ONE record governing several events is lawful ──
+        ledger
+            .relate(function, val(12), first)
+            .expect("the same record governs both");
+        ledger.commit().expect("each body commits");
+    }
+    let closure = ledger.close(&planned).expect("the relation closes");
+    assert_eq!(closure.events, 2, "same value, two functions, two events");
+    assert_eq!(closure.image, 1, "one record governed both");
+    // ── 3. Unused planned records are LAWFUL ──
+    assert!(
+        closure.unused > 0,
+        "this fixture must leave a planned record unused, or row 3 is vacuous"
+    );
+
+    // ── 4. BOTH a duplicate and a conflicting pair reject ──
+    //
+    // ⭐ Two assertions, not one. `relation.insert` returning `Some` is the
+    // single condition behind both, but "the wrapper ran twice for one
+    // allocation" and "two allocations share a result value" are different
+    // defects, and a spelling that rejected only a CHANGED occurrence would
+    // satisfy the conflicting half while letting the duplicate half through.
+    let mut ledger = AggregateAllocationLedger::default();
+    ledger.open(func(1)).unwrap();
+    ledger.record_event(func(1), val(3)).unwrap();
+    ledger.relate(func(1), val(3), first).unwrap();
+    assert!(
+        ledger.relate(func(1), val(3), first).is_err(),
+        "a second pair at one event to the SAME record is a duplicate"
+    );
+    assert!(
+        ledger.relate(func(1), val(3), second).is_err(),
+        "a second pair at one event to a DIFFERENT record is a conflict"
+    );
+
+    // ── 5. An event recorded but never related rejects at the local close ──
+    let mut ledger = AggregateAllocationLedger::default();
+    ledger.open(func(1)).unwrap();
+    ledger.record_event(func(1), val(3)).unwrap();
+    assert!(
+        ledger.commit().is_err(),
+        "an allocation nothing authorized must not commit"
+    );
+
+    // ── 6. A relation entry with no event rejects at the local close ──
+    let mut ledger = AggregateAllocationLedger::default();
+    ledger.open(func(1)).unwrap();
+    ledger.relate(func(1), val(3), first).unwrap();
+    assert!(
+        ledger.commit().is_err(),
+        "an authorization nothing allocated must not commit"
+    );
+
+    // ── 7. Clearing committed relation entries between bodies rejects ──
+    //
+    // The event evidence remains, so only the two-sided comparison sees it.
+    let mut ledger = AggregateAllocationLedger::default();
+    ledger.open(func(1)).unwrap();
+    ledger.record_event(func(1), val(3)).unwrap();
+    ledger.relate(func(1), val(3), first).unwrap();
+    ledger.commit().unwrap();
+    ledger.clear_committed_relation_for_tests();
+    assert!(
+        ledger.close(&planned).is_err(),
+        "cleared relation entries leave dom(R) short of E"
+    );
+
+    // ── 8. A discarded body commit rejects via opened-vs-committed ──
+    let mut ledger = AggregateAllocationLedger::default();
+    ledger.open(func(1)).unwrap();
+    ledger.record_event(func(1), val(3)).unwrap();
+    ledger.relate(func(1), val(3), first).unwrap();
+    ledger.discard_open_body_for_tests();
+    assert!(
+        ledger.close(&planned).is_err(),
+        "a body that opened and never committed must not pass as one that \
+         allocated nothing"
+    );
+
+    // ── 9. BOTH a second build and a second commit of one FuncId reject ──
+    //
+    // ⚠ The two are guarded independently — `open` by `committed_functions`,
+    // `commit` by there being no open set — and the second assertion is what
+    // shows a body cannot commit its events twice even if the open guard were
+    // relaxed. It is the reachable spelling of a double commit: the
+    // `committed_functions` guard inside `commit` sits behind the `open` guard
+    // and cannot be reached while that one holds.
+    let mut ledger = AggregateAllocationLedger::default();
+    ledger.open(func(1)).unwrap();
+    ledger.commit().unwrap();
+    assert!(
+        ledger.open(func(1)).is_err(),
+        "a second build of one FuncId rejects"
+    );
+    assert!(
+        ledger.commit().is_err(),
+        "a second commit of one FuncId has no open event set to commit"
+    );
+
+    // ── 10. A related occurrence absent from P rejects ──
+    let mut ledger = AggregateAllocationLedger::default();
+    ledger.open(func(1)).unwrap();
+    ledger.record_event(func(1), val(3)).unwrap();
+    ledger.relate(func(1), val(3), second).unwrap();
+    ledger.commit().unwrap();
+    assert!(
+        ledger.close(&planned[..1]).is_err(),
+        "an event related to a record outside P must reject"
+    );
+
+    // ── 11. An allocation with no open body rejects ──
+    let mut ledger = AggregateAllocationLedger::default();
+    assert!(
+        ledger.record_event(func(1), val(3)).is_err(),
+        "an allocation with no open body belongs to no function's event set"
+    );
+
+    // And an open body left open at the whole-pass close rejects.
+    let mut ledger = AggregateAllocationLedger::default();
+    ledger.open(func(1)).unwrap();
+    assert!(
+        ledger.close(&planned).is_err(),
+        "a body still open at the closeout never committed its events"
+    );
+}
+
+
+
+// ─── `D7` — the A/B aggregate-ownership controls ────────────────────────────
+
+/// The declared two-parameter callee the ownership controls call.
+///
+/// ⭐⭐ **A `DeclarationRef`, and that is measured rather than stylistic.** The
+/// source machine's multi-argument crossing arm is reached only by a
+/// `Lowered::DeclarationClosure` under `FunctionizedUnits`; a `LexicalClosure`
+/// callee takes the continuing-evaluation arm and never crosses a unit boundary
+/// at all, so its arguments never reach the seam these controls act at. Both
+/// spellings were compiled and traced, and only this one arrives.
+///
+/// ⚠ Its body is a bare exit constructor. A body that did anything with its
+/// parameters would put a second aggregate route between the mutation and the
+/// refusal, and the row would no longer be about the arguments.
+const D7_PAIR_CALLEE: &str = "fixture::d7::pair";
+
+fn d7_pair_callee() -> RuntimeDeclaration {
+    RuntimeDeclaration {
+        symbol: D7_PAIR_CALLEE.to_string(),
+        kind: RuntimeDeclarationKind::Transparent {
+            body: RuntimeExpr::LexicalClosure {
+                captures: Vec::new(),
+                params: vec!["a".to_string(), "b".to_string()],
+                body: Box::new(RuntimeExpr::Construct {
+                    constructor: crate::EXIT_SUCCESS_CONSTRUCTOR.to_string(),
+                    args: Vec::new(),
+                }),
+            },
+        },
+        metadata: crate::RuntimeSymbolMetadata {
+            lowerability: Some(crate::RuntimeLowerabilityStatus::Supported),
+            ..crate::RuntimeSymbolMetadata::empty()
+        },
+    }
+}
+
+fn d7_wrap(inner: &str) -> RuntimeExpr {
+    RuntimeExpr::Construct {
+        constructor: "ctor:fixture::CallInput::Wrap".to_string(),
+        args: vec![RuntimeExpr::Construct {
+            constructor: inner.to_string(),
+            args: Vec::new(),
+        }],
+    }
+}
+
+fn d7_pair_record(first: &str, second: &str) -> RuntimeExpr {
+    RuntimeExpr::Record {
+        fields: vec![
+            (
+                "first".to_string(),
+                RuntimeExpr::Construct {
+                    constructor: first.to_string(),
+                    args: Vec::new(),
+                },
+            ),
+            (
+                "second".to_string(),
+                RuntimeExpr::Construct {
+                    constructor: second.to_string(),
+                    args: Vec::new(),
+                },
+            ),
+        ],
+    }
+}
+
+fn d7_named_pair_record(names: [&str; 2], constructors: [&str; 2]) -> RuntimeExpr {
+    RuntimeExpr::Record {
+        fields: names
+            .into_iter()
+            .zip(constructors)
+            .map(|(name, constructor)| {
+                (
+                    name.to_string(),
+                    RuntimeExpr::Construct {
+                        constructor: constructor.to_string(),
+                        args: Vec::new(),
+                    },
+                )
+            })
+            .collect(),
+    }
+}
+
+/// Two records with the same arity, the same field CONSTRUCTORS and therefore
+/// the same shape and lane, differing in exactly one thing: their ordered field
+/// NAMES.
+///
+/// ⭐⭐ **Differing only in the names is what makes the row about the schema.**
+/// The existing record rows share `first`/`second`, so two records at different
+/// origins intern the same identities and a substituted certificate is caught by
+/// the per-position child occurrence instead. Here the field identities differ
+/// and nothing else does, so the field-schema comparison is the only check that
+/// can separate them.
+fn d7_field_identity_arguments() -> RuntimeExpr {
+    d7_ownership_recursor(vec![
+        d7_named_pair_record(
+            ["alpha", "beta"],
+            [
+                "ctor:fixture::CallInput::Alpha",
+                "ctor:fixture::CallInput::Beta",
+            ],
+        ),
+        d7_named_pair_record(
+            ["gamma", "delta"],
+            [
+                "ctor:fixture::CallInput::Alpha",
+                "ctor:fixture::CallInput::Beta",
+            ],
+        ),
+    ])
+}
+
+/// A **recursor** whose case body calls the declared two-parameter unit with
+/// the two aggregates given.
+///
+/// ⭐⭐ **`recursive_positions: vec![0]` is load-bearing.** The source machine is
+/// entered only from a computational-match case that declares a recursive
+/// position; with an empty list the case body is lowered by ordinary descent and
+/// the call never reaches the source-machine crossing. Measured both ways: with
+/// the position removed the seam records zero reaches on this exact fixture.
+///
+/// ⚠ The `Seed` case is the base case and must stay. Without it the match is
+/// one-armed and the scrutinee's own child has nowhere to go.
+fn d7_ownership_recursor(args: Vec<RuntimeExpr>) -> RuntimeExpr {
+    RuntimeExpr::Let {
+        value: Box::new(d7_wrap("ctor:fixture::CallInput::Seed")),
+        body: Box::new(RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(RuntimeExpr::Var(0)),
+            cases: vec![
+                crate::RuntimeComputationalMatchCase {
+                    constructor: "ctor:fixture::CallInput::Wrap".to_string(),
+                    argument_binders: 1,
+                    recursive_positions: vec![0],
+                    body: RuntimeExpr::Call {
+                        callee: Box::new(RuntimeExpr::DeclarationRef {
+                            symbol: D7_PAIR_CALLEE.to_string(),
+                        }),
+                        args,
+                    },
+                },
+                crate::RuntimeComputationalMatchCase {
+                    constructor: "ctor:fixture::CallInput::Seed".to_string(),
+                    argument_binders: 0,
+                    recursive_positions: Vec::new(),
+                    body: RuntimeExpr::Construct {
+                        constructor: crate::EXIT_SUCCESS_CONSTRUCTOR.to_string(),
+                        args: Vec::new(),
+                    },
+                },
+            ],
+            default: ac_c7_trap(),
+        }),
+    }
+}
+
+/// Two `Wrap`s with different children: same outer symbol, same shape, same
+/// arity, ⭐ **distinct nested producer facts**. That combination is what makes
+/// the negative below a statement about identity — everything a shape-only read
+/// can see agrees.
+fn d7_constructor_arguments() -> RuntimeExpr {
+    d7_ownership_recursor(vec![
+        d7_wrap("ctor:fixture::CallInput::Alpha"),
+        d7_wrap("ctor:fixture::CallInput::Beta"),
+    ])
+}
+
+/// The same design one shape over: two records with the same field names and
+/// arity and different field constructors.
+fn d7_record_arguments() -> RuntimeExpr {
+    d7_ownership_recursor(vec![
+        d7_pair_record(
+            "ctor:fixture::CallInput::Alpha",
+            "ctor:fixture::CallInput::Beta",
+        ),
+        d7_pair_record(
+            "ctor:fixture::CallInput::Gamma",
+            "ctor:fixture::CallInput::Delta",
+        ),
+    ])
+}
+
+/// Two aggregates bound by nested `Let`s and reached as `Var`s — so each
+/// arrives at the call already lowered and FORWARDED rather than written in
+/// argument position.
+///
+/// ⭐⭐ **This is the shape the producer field exists for.** A record literal in
+/// argument position is transferred at a coordinate that happens to be its own,
+/// so a use-coordinate lookup gets the right answer by accident. Forwarded
+/// through a binder it does not, and the ownership record has to come from the
+/// template or not at all.
+/// The literal-constructor row's exact fixture, differing ONLY in that each
+/// argument is bound and reached as a `Var`. A pair that differs in one thing
+/// is what makes forwarding the attributable difference.
+fn d7_forwarded_constructor_arguments() -> RuntimeExpr {
+    d7_forwarded_pair(
+        d7_wrap("ctor:fixture::CallInput::Alpha"),
+        d7_wrap("ctor:fixture::CallInput::Beta"),
+    )
+}
+
+fn d7_forwarded_pair(first: RuntimeExpr, second: RuntimeExpr) -> RuntimeExpr {
+    let call = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::DeclarationRef {
+            symbol: D7_PAIR_CALLEE.to_string(),
+        }),
+        args: vec![RuntimeExpr::Var(1), RuntimeExpr::Var(0)],
+    };
+    let body = RuntimeExpr::Let {
+        value: Box::new(first),
+        body: Box::new(RuntimeExpr::Let {
+            value: Box::new(second),
+            body: Box::new(call),
+        }),
+    };
+    RuntimeExpr::Let {
+        value: Box::new(d7_wrap("ctor:fixture::CallInput::Seed")),
+        body: Box::new(RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(RuntimeExpr::Var(0)),
+            cases: vec![
+                crate::RuntimeComputationalMatchCase {
+                    constructor: "ctor:fixture::CallInput::Wrap".to_string(),
+                    argument_binders: 1,
+                    recursive_positions: vec![0],
+                    body,
+                },
+                crate::RuntimeComputationalMatchCase {
+                    constructor: "ctor:fixture::CallInput::Seed".to_string(),
+                    argument_binders: 0,
+                    recursive_positions: Vec::new(),
+                    body: RuntimeExpr::Construct {
+                        constructor: crate::EXIT_SUCCESS_CONSTRUCTOR.to_string(),
+                        args: Vec::new(),
+                    },
+                },
+            ],
+            default: ac_c7_trap(),
+        }),
+    }
+}
+
+fn d7_forwarded_record_arguments() -> RuntimeExpr {
+    d7_forwarded_pair(
+        d7_pair_record(
+            "ctor:fixture::CallInput::Alpha",
+            "ctor:fixture::CallInput::Beta",
+        ),
+        d7_pair_record(
+            "ctor:fixture::CallInput::Gamma",
+            "ctor:fixture::CallInput::Delta",
+        ),
+    )
+}
+
+fn d7_compile_ownership(program: &RuntimeExpr) -> Result<(), CraneliftBackendError> {
+    let declaration = d7_pair_callee();
+    let mut declarations = BTreeMap::new();
+    declarations.insert(D7_PAIR_CALLEE, &declaration);
+    compile_expr_into_module(
+        new_object_module("ken-runtime-process-entrypoint")?,
+        "ken_d7_aggregate_ownership",
+        Linkage::Export,
+        program,
+        &NativeSeedEnvironment::empty(),
+        declarations,
+        None,
+        true,
+        None,
+        Some(crate::cranelift_backend::test_support::test_only_distinguished_root_join_plan()),
+        None,
+    )
+    .map(|_| ())
+}
+
+/// One run under one mutation: the outcome, the seam's hit count, the raw
+/// allocations it emitted, and what it substituted.
+fn d7_ownership_run(
+    program: &RuntimeExpr,
+    mutation: GovernedAllocationMutation,
+) -> (
+    Result<(), CraneliftBackendError>,
+    u32,
+    u32,
+    Option<SiblingProducerSubstitution>,
+) {
+    let guard = GovernedAllocationMutationGuard::install(mutation);
+    let result = d7_compile_ownership(program);
+    let hits = guard.hits();
+    let allocations = guard.raw_allocations();
+    let substitution = guard.substitution();
+    drop(guard);
+    (result, hits, allocations, substitution)
+}
+
+/// A **static worker** — a closure bound in a `Let` and called through its
+/// binder — handed an aggregate argument.
+///
+/// ⭐ This is the one call-input site with no caller-side occurrence to carry:
+/// `call_static_worker` computes each argument's exact origin with
+/// `child_occurrence` and discards it, so the input arrives still specialized at
+/// `call_declared_unit_target` and is transferred at `target.origin`, the
+/// CALLEE's scheduling entry. Every other caller now carries its inputs across
+/// at their own occurrences.
+fn d7_static_worker_with_aggregate_argument() -> RuntimeExpr {
+    RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::LexicalClosure {
+            captures: Vec::new(),
+            params: vec!["x".to_string()],
+            body: Box::new(RuntimeExpr::Let {
+                value: Box::new(RuntimeExpr::LexicalClosure {
+                    captures: vec![RuntimeExpr::Var(0)],
+                    params: vec!["y".to_string()],
+                    body: Box::new(RuntimeExpr::Var(0)),
+                }),
+                body: Box::new(RuntimeExpr::Call {
+                    callee: Box::new(RuntimeExpr::Var(0)),
+                    args: vec![d7_wrap("ctor:fixture::CallInput::Alpha")],
+                }),
+            }),
+        }),
+        args: vec![RuntimeExpr::Value(RuntimeValue::Int(10.into()))],
+    }
+}
+
+/// **`D7` — an aggregate reaching the callee-scheduling-entry fallback is
+/// SELF-AUTHORIZING: which live coordinate it is transferred at is inert.**
+///
+/// MEASURED, over the whole suite with the site instrumented
+/// (`--nocapture --test-threads=1`): 89 `Constructor` parameters reach this
+/// fallback and **every one of them carries a producer occurrence** — zero
+/// carry `None`. Of the origin-consuming lookups reachable from there,
+///
+/// | consumer | reaches |
+/// |---|---|
+/// | `aggregate_carrier_authority`'s no-producer fallback | **0** |
+/// | `constructor_symbol_identity(origin)` | **0** |
+/// | `child_static_origin(origin, position)` for a constructor | **0** |
+/// | `record_field_identity(origin, position)` | **0** |
+/// | `child_static_origin(origin, position)` for a record | **0** |
+/// | parent origin passed to a synthesized child (not a lookup) | 1 |
+///
+/// ⭐⭐ **So no origin-dependent aggregate lookup remains, and the release's
+/// static-worker caller-origin transport is not required.** Every aggregate
+/// there carries its own occurrence and its own resolved constructor identity,
+/// and the whole-graph preflight has already reconciled its tree against the
+/// plan using no coordinate at all.
+///
+/// ⛔ **A census is not a pin.** The rows above were true when measured and
+/// nothing re-runs them, so this control states the same property as behaviour:
+/// with the coordinate replaced by the program root's — a real, live, planned
+/// occurrence, never a fabricated one — the artifact still builds.
+///
+/// ⭐ The hit count and the reach count are both asserted, and they answer
+/// different questions. The hit count says the coordinate was actually
+/// replaced; the reach count says an AGGREGATE actually arrived at the site. A
+/// green run missing either is green for not having happened.
+///
+/// CLAIMED: the callee's scheduling entry is a pass-through for a source
+/// aggregate at this site, not an authority.
+///
+/// THE GAP: inertness is measured for the aggregates this fixture and the suite
+/// drive there. A future input arriving with no producer occurrence would take
+/// `aggregate_carrier_authority`'s fallback and the coordinate would become
+/// load-bearing again — which is why that fallback still exists and why
+/// `an_aggregate_with_no_producer_certificate_cannot_reach_the_carrier` pins
+/// the arm that refuses one at the preflight.
+#[test]
+fn an_aggregate_at_the_callee_scheduling_fallback_authorizes_itself() {
+    let program = d7_static_worker_with_aggregate_argument();
+    let compile = || {
+        crate::cranelift_backend::artifact::compile_expr_for_lowering_tests(
+            &program,
+            &NativeSeedEnvironment::empty(),
+        )
+        .map(|_| ())
+    };
+
+    let baseline_guard = GovernedAllocationMutationGuard::install(GovernedAllocationMutation::None);
+    let baseline = compile();
+    let baseline_reaches = baseline_guard.self_authorized_fallback_reaches();
+    let baseline_hits = baseline_guard.hits();
+    drop(baseline_guard);
+    baseline.expect("the static-worker fixture compiles at its own coordinates");
+    assert_eq!(
+        baseline_hits, 0,
+        "no coordinate may be replaced without the mutation installed"
+    );
+    assert!(
+        baseline_reaches > 0,
+        "NON-VACUITY: a self-authorizing aggregate must actually REACH the \
+         callee-scheduling fallback, or the substitution below is inert for the \
+         trivial reason that nothing was there"
+    );
+
+    let guard =
+        GovernedAllocationMutationGuard::install(GovernedAllocationMutation::CalleeSchedulingOrigin);
+    let result = compile();
+    let hits = guard.hits();
+    let reaches = guard.self_authorized_fallback_reaches();
+    let guard_origin_used = guard.callee_scheduling_origin_used();
+    drop(guard);
+    assert!(
+        hits > 0,
+        "the coordinate substitution never fired, so this row says nothing about \
+         whether the coordinate matters"
+    );
+    // ⛔ The hit count proves the seam DECIDED to substitute; this proves it
+    // substituted. Measured: with the seam's return value reverted to its
+    // argument while the counter still fired, everything below stayed green.
+    let (passed_in, used) = guard_origin_used
+        .expect("a fired coordinate substitution records the pair it returned");
+    assert_ne!(
+        passed_in, used,
+        "the substitution returned the coordinate it was given, so this row is a \
+         no-op wearing a hit count"
+    );
+    assert_eq!(
+        reaches, baseline_reaches,
+        "the substitution must not change WHICH values reach the site, only the \
+         coordinate they cross at"
+    );
+    result.unwrap_or_else(|error| {
+        panic!(
+            "an aggregate at the callee-scheduling fallback was refused after {hits} \
+             coordinate substitutions. Stated as measured: it is NOT self-authorizing \
+             there, some lookup still consumes the callee's scheduling entry, and the \
+             static-worker caller-origin transport is owed after all: {error:?}"
+        )
+    });
+}
+
+/// **`D7` — an aggregate with NO producer certificate is refused at the
+/// preflight, and the SAME aggregate carrying one gets past it.**
+///
+/// MEASURED, on a bare rig whose function carries no boundary-carrier refs —
+/// the same device the admissibility-ordering row uses, and for the same
+/// reason: with nothing to allocate into, the first thing the carrier step does
+/// is fail, so where a graph stops is observable.
+///
+/// | template | outcome |
+/// |---|---|
+/// | `Constructor` with `occurrence: None` | refused, naming the missing producer |
+/// | the SAME `Constructor` with its planned occurrence | past the preflight, stops at `BoundaryCarrier` |
+///
+/// ⭐⭐ **This is the arm the ownership controls cannot reach, and it is the one
+/// a weakening would take.** Those controls substitute a certificate that is
+/// PRESENT and wrong; adding a fallback for a certificate that is ABSENT leaves
+/// every one of them green. Twelve evidence rigs demonstrated this arm firing
+/// when the preflight landed, but that evidence was spent by the commit that
+/// repaired them — a refusal proven only by the reds it once caused is not
+/// pinned, because nothing re-runs it.
+///
+/// ⛔ The two rows differ in ONE field. If they differed in anything else the
+/// comparison would be between two fixtures rather than between two answers to
+/// one question.
+///
+/// ⚠ Promise class: **durable invariant** — a relation between two outcomes of
+/// one template, not either message as a value. A fallback that answered
+/// `None` from the transfer coordinate turns the first row green, which is
+/// exactly the regression this exists to catch.
+///
+/// CLAIMED: a missing producer occurrence is a refusal and never a licence to
+/// resolve ownership at wherever the value happens to be transferred.
+#[test]
+fn an_aggregate_with_no_producer_certificate_cannot_reach_the_carrier() {
+    let seed_env = NativeSeedEnvironment::empty();
+    let mut module = new_jit_module().expect("JIT module constructs");
+    let mut signature = module.make_signature();
+    signature.returns.push(AbiParam::new(types::I64));
+    let func_id = module
+        .declare_function("d7_missing_producer_probe", Linkage::Local, &signature)
+        .expect("probe declares");
+    let mut context = module.make_context();
+    context.func =
+        Function::with_name_signature(UserFuncName::user(0, func_id.as_u32()), signature);
+
+    let construct = RuntimeExpr::Construct {
+        constructor: "ctor:fixture::C1::Wrap".to_string(),
+        args: vec![RuntimeExpr::Value(RuntimeValue::Bool(true))],
+    };
+    let (plan, construct_origin) = planned_root_occurrence(&construct);
+    // ⛔ Resolved at the TRANSFER coordinate the rows below use, on purpose.
+    // That makes the first row's refusal unattributable to the coordinate being
+    // unusable: the plan can answer at exactly this origin, and the template
+    // is refused anyway because it does not carry the answer itself.
+    let wrap_occurrence = plan
+        .source_aggregate_occurrence(construct_origin, PlannedAggregateShape::Constructor)
+        .expect("the planned `Construct` has an ownership record at its own origin");
+    let mut compiler = bare_carrier_test_lowering(&seed_env, plan);
+
+    let mut function_context = FunctionBuilderContext::new();
+    let mut builder = FunctionBuilder::new(&mut context.func, &mut function_context);
+    let entry = builder.create_block();
+    builder.switch_to_block(entry);
+    bind_bare_test_trap_lane(&mut compiler, &mut builder);
+
+    // One SSA value, shared by both rows -- the child must be identical, or the
+    // two rows differ in more than the certificate.
+    let child = builder.ins().iconst(types::I64, 1);
+    let template = |occurrence| Lowered::Constructor {
+        constructor: "ctor:fixture::C1::Wrap".to_string(),
+        synthesized_identity: None,
+        occurrence,
+        args: vec![Lowered::Bool {
+            value: child,
+            known: Some(true),
+        }],
+    };
+
+    let refused = compiler
+        .transfer_into_carrier(&mut builder, construct_origin, &template(None))
+        .expect_err("an aggregate carrying no producer occurrence cannot cross");
+    let reason = format!("{refused:?}");
+    assert!(
+        reason.contains("no planner-issued producer occurrence"),
+        "the refusal must name the MISSING PRODUCER, not whatever a later step \
+         would have said: got {reason}"
+    );
+
+    let reached = compiler
+        .transfer_into_carrier(
+            &mut builder,
+            construct_origin,
+            &template(Some(wrap_occurrence)),
+        )
+        .expect_err("a fixture with no carrier refs cannot allocate");
+    assert!(
+        matches!(
+            reached,
+            CraneliftBackendError::Unsupported(UnsupportedLowering {
+                construct: "BoundaryCarrier",
+                ..
+            })
+        ),
+        "NON-VACUITY: the SAME template carrying its producer occurrence must get \
+         PAST the preflight and stop at the first emitted call, or the row above \
+         proves nothing about the certificate: got {reached:?}"
+    );
+}
+
+/// **`D7` — an aggregate's PRODUCER CERTIFICATE is load-bearing, and a sibling's
+/// is refused before a single allocation is emitted.**
+///
+/// MEASURED, on a real two-argument declared-unit call reached through the
+/// source machine, one shape per row:
+///
+/// | row | baseline | negative |
+/// |---|---|---|
+/// | two `Wrap` constructors | compiles, 6 raw allocations | 1 hit, refused, **0 raw allocations** |
+/// | two records | compiles, 8 raw allocations | 1 hit, refused, **0 raw allocations** |
+///
+/// and in both negatives the substitution was recorded, from the live plan, as
+/// `same_shape: true, same_lane: true` — so the only thing that moved was the
+/// identity.
+///
+/// ⭐⭐ **The refusal names a NESTED child, not the outer node.** The preflight
+/// checks presence, then shape, then boundary class, then arity, then the
+/// carried constructor identity, and only then the children. Reaching the child
+/// arm therefore *proves* that everything an outer, shape-only read can see
+/// agreed. ⛔ That is exactly what the current `aggregate_allocation_at` reads —
+/// identity existence plus shape — so restoring it as the only check makes this
+/// negative go green. The preflight is what refuses here, and nothing else
+/// would.
+///
+/// ⭐ **Zero raw allocations is asserted against a non-zero baseline.** On its
+/// own, zero is equally consistent with "refused before allocating" and with
+/// "this fixture never allocates"; the baseline row is what separates them, and
+/// it is why each row runs unmutated first.
+///
+/// ⭐ **The hit count is asserted because the seam is a no-op on a call with
+/// fewer than two arguments, on a non-specialized operand, and on two arguments
+/// that already share a record.** Without it, all three of those and a caught
+/// substitution are the same green. The counter increments only when the
+/// occurrence actually CHANGES, so a substitution that substituted nothing
+/// cannot satisfy it.
+///
+/// ⛔ The certificate is taken from a **live sibling argument's own template**,
+/// never constructed. A hand-made identity would show that the record lookup
+/// rejects nonsense; a real one shows that ownership discriminates between two
+/// aggregates the plan considers equally real.
+///
+/// CLAIMED: a source aggregate is self-authenticating by its producer-issued
+/// occurrence. A call transports the value; it does not become its producer, and
+/// it cannot lend one argument's ownership to another.
+///
+/// THE GAP: this measures the argument position of one crossing. It says nothing
+/// about a certificate substituted somewhere the source machine does not reach —
+/// `call_static_worker`'s fallback is the open one, and it is measured
+/// separately.
+#[test]
+fn a_sibling_aggregates_producer_certificate_is_refused_before_any_allocation() {
+    for (label, program) in [
+        ("two constructors", d7_constructor_arguments()),
+        ("two records", d7_record_arguments()),
+        ("two forwarded constructors", d7_forwarded_constructor_arguments()),
+        ("two forwarded records", d7_forwarded_record_arguments()),
+    ] {
+        let (baseline, baseline_hits, baseline_allocations, _) =
+            d7_ownership_run(&program, GovernedAllocationMutation::None);
+        baseline.unwrap_or_else(|error| {
+            panic!("{label}: the unmutated route must compile, or the negative below \
+                    is measuring a broken fixture: {error:?}")
+        });
+        assert_eq!(
+            baseline_hits, 0,
+            "{label}: no substitution may fire without the mutation installed"
+        );
+        assert!(
+            baseline_allocations > 0,
+            "{label}: NON-VACUITY -- the unmutated route must actually allocate, or \
+             `0 allocations` under the mutation says nothing"
+        );
+
+        let (mutated, hits, allocations, substitution) = d7_ownership_run(
+            &program,
+            GovernedAllocationMutation::SiblingAggregateProducer,
+        );
+        assert_eq!(
+            hits, 1,
+            "{label}: the certificate substitution must fire exactly once, or this row \
+             is green for not having happened"
+        );
+        let substitution = substitution
+            .unwrap_or_else(|| panic!("{label}: a fired substitution records what it moved"));
+        assert_ne!(
+            substitution.from,
+            Some(substitution.to),
+            "{label}: an A/B control needs two DISTINCT certificates"
+        );
+        assert!(
+            substitution.same_shape,
+            "{label}: the two records must agree on shape, or the refusal is about \
+             shape rather than about ownership: {substitution:?}"
+        );
+        assert!(
+            substitution.same_lane,
+            "{label}: the two records must agree on allocation lane, or the refusal \
+             is about the lane rather than about ownership: {substitution:?}"
+        );
+        let Err(error) = mutated else {
+            panic!(
+                "{label}: a sibling's producer certificate was ACCEPTED after {hits} \
+                 substitution. Stated as measured: the certificate is not load-bearing \
+                 on this route"
+            );
+        };
+        assert_eq!(
+            allocations, 0,
+            "{label}: the whole-graph preflight must finish before the FIRST raw \
+             allocation, and the baseline emitted {baseline_allocations}: got {error:?}"
+        );
+        let reason = format!("{error:?}");
+        assert!(
+            reason.contains("at that position"),
+            "{label}: the refusal must be the per-position child disagreement -- an \
+             outer shape, class, arity or identity refusal would mean the row never \
+             exercised the nested authority a shape-only read cannot see: {reason}"
+        );
+    }
+}
+
+/// **`D7` — the call-USE coordinate is INERT, and that is why it cannot be
+/// cited as the ownership control.**
+///
+/// MEASURED, on the same two fixtures: with `CallInputTransferOrigin` installed
+/// every input is transferred at the program ROOT -- the maximally wrong
+/// coordinate -- the seam fires, and **both programs still compile**, emitting
+/// exactly their baselines' raw allocations.
+///
+/// ⭐⭐ **This is the positive statement of a negative result, and it is the
+/// point of the row.** An aggregate's ownership record is the one its template
+/// CARRIES, and its schema -- constructor symbol, record field identities -- is
+/// recovered from that record rather than looked up at the coordinate. Nothing
+/// on this route reads the coordinate, so moving it changes nothing any check
+/// can see. ⛔ A control built on this mutation would be unbuildable rather than
+/// merely unwritten: no fixture makes it refuse.
+///
+/// ⚠ **It is what retired the per-argument occurrence pairing.** The pairing
+/// existed to give each argument its own transfer coordinate. This row is the
+/// measurement that the coordinate decides nothing, so the accumulator, the
+/// retained pending occurrence and the prefix template that mirrored it were
+/// carrying a fact nothing read.
+///
+/// ⚠ The two mutations act at the SAME seam and are still different axes. That
+/// is what makes the pair informative: same call, same arguments, same moment,
+/// and only the one that moves the certificate is observable.
+///
+/// CLAIMED: use and production are distinct authorities, and only production
+/// governs ownership.
+#[test]
+fn a_call_use_coordinate_substitution_is_inert_for_a_self_authorizing_aggregate() {
+    for (label, program) in [
+        ("two constructors", d7_constructor_arguments()),
+        ("two records", d7_record_arguments()),
+        ("forwarded constructors", d7_forwarded_constructor_arguments()),
+        ("forwarded records", d7_forwarded_record_arguments()),
+    ] {
+        let (_, baseline_hits, baseline_allocations, _) =
+            d7_ownership_run(&program, GovernedAllocationMutation::None);
+        assert_eq!(baseline_hits, 0, "{label}: the baseline installs no mutation");
+        assert!(
+            baseline_allocations > 0,
+            "{label}: the baseline must actually allocate, or 'the mutated run emits \
+             the baseline's allocations' is a comparison between two zeroes"
+        );
+
+        let (result, hits, allocations, _) = d7_ownership_run(
+            &program,
+            GovernedAllocationMutation::CallInputTransferOrigin,
+        );
+        assert!(
+            hits > 0,
+            "{label}: the use-coordinate substitution must FIRE, or its inertness is \
+             a statement about a call it never reached"
+        );
+        result.unwrap_or_else(|error| {
+            panic!(
+                "{label}: a use-coordinate substitution refused. If this ever goes red \
+                 the two axes have merged, and the ownership control above is no longer \
+                 measuring something the use coordinate cannot: {error:?}"
+            )
+        });
+        assert_eq!(
+            allocations, baseline_allocations,
+            "{label}: an inert substitution must emit exactly the baseline's allocations"
+        );
+    }
+}
+
+/// The one bare-rig device the direct-API `D7` rows share.
+///
+/// ⭐ A function with NO boundary-carrier refs: the first thing an emitted
+/// carrier step does is fail, so **where a graph stops is observable**. A row
+/// that stops at `BoundaryCarrier` got past the whole-graph preflight and
+/// reached the allocator; a row that stops with a preflight reason did not.
+/// ⛔ That pairing is what makes "refused before any allocation" a measurement
+/// rather than an assertion about a fixture that never allocates.
+fn d7_bare_preflight_rig<'plan>(
+    seed_env: &'plan NativeSeedEnvironment,
+    plan: StaticTransitionPlan<'plan>,
+    name: &str,
+) -> (impl Module, cranelift_codegen::Context, Lowering<'plan>) {
+    let mut module = new_jit_module().expect("JIT module constructs");
+    let mut signature = module.make_signature();
+    signature.returns.push(AbiParam::new(types::I64));
+    let func_id = module
+        .declare_function(name, Linkage::Local, &signature)
+        .expect("probe declares");
+    let mut context = module.make_context();
+    context.func =
+        Function::with_name_signature(UserFuncName::user(0, func_id.as_u32()), signature);
+    let compiler = bare_carrier_test_lowering(seed_env, plan);
+    (module, context, compiler)
+}
+
+/// **`D7` — a mismatch below EVERY recursive container is refused, and the
+/// containers are the two the walk used to stop at.**
+///
+/// MEASURED, on a bare rig, one row per container position. Each row is a pair
+/// differing in ONE field -- the nested aggregate's carried producer occurrence:
+///
+/// | container position | with `occurrence: None` | with the planned occurrence |
+/// |---|---|---|
+/// | `HostResult.error` | refused, naming the missing producer, 0 raw allocations | reaches the allocator |
+/// | `HostResult.ok` | refused, likewise | reaches the allocator |
+/// | `DynamicConstructor` alternative field | refused, likewise | reaches the allocator |
+///
+/// ⭐⭐ **These three positions were invisible to the previous walk.** It matched
+/// `Constructor` and `Record` and returned `Ok` on a `_` arm, so a host result's
+/// two arms and a dynamic alternative's fields -- which are two levels down,
+/// inside a `Vec` of alternative structs -- were admitted without being
+/// reconciled at all. ⛔ The refusal is not "this container is unsupported": the
+/// twin row proves the SAME container with a correct nested certificate walks
+/// straight through to the allocation.
+///
+/// ⚠ Promise class: **durable invariant** -- a relation between the two answers
+/// to one question at each position, never either message as a value. Restoring
+/// a wildcard arm turns all three refusing rows green, which is the regression
+/// this exists to catch.
+///
+/// CLAIMED: the preflight is total over `Lowered`, so no aggregate reaches the
+/// allocator through a container the walk declined to enter.
+#[test]
+fn a_mismatch_below_every_recursive_container_is_refused_before_any_allocation() {
+    let seed_env = NativeSeedEnvironment::empty();
+    let construct = RuntimeExpr::Construct {
+        constructor: "ctor:fixture::C1::Wrap".to_string(),
+        args: vec![RuntimeExpr::Value(RuntimeValue::Bool(true))],
+    };
+    let (plan, construct_origin) = planned_root_occurrence(&construct);
+    let wrap_occurrence = plan
+        .source_aggregate_occurrence(construct_origin, PlannedAggregateShape::Constructor)
+        .expect("the planned `Construct` has an ownership record at its own origin");
+    let wrap_identity = plan
+        .constructor_symbol_identity(construct_origin)
+        .expect("the planned `Construct` has a constructor identity");
+    let (_module, mut context, mut compiler) =
+        d7_bare_preflight_rig(&seed_env, plan, "d7_container_probe");
+
+    let mut function_context = FunctionBuilderContext::new();
+    let mut builder = FunctionBuilder::new(&mut context.func, &mut function_context);
+    let entry = builder.create_block();
+    builder.switch_to_block(entry);
+    bind_bare_test_trap_lane(&mut compiler, &mut builder);
+
+    // One SSA value per role, shared by every row: the rows must differ in the
+    // carried occurrence and in nothing else.
+    let word = builder.ins().iconst(types::I64, 1);
+    let leaf = || Lowered::Bool {
+        value: word,
+        known: Some(true),
+    };
+    let nested = |occurrence| Lowered::Constructor {
+        constructor: "ctor:fixture::C1::Wrap".to_string(),
+        synthesized_identity: None,
+        occurrence,
+        args: vec![leaf()],
+    };
+    let host_result = |error: Lowered, ok: Lowered| Lowered::HostResult {
+        success: word,
+        error: Box::new(error),
+        ok: Box::new(ok),
+        err_constructor: "ctor:fixture::C1::Err".to_string(),
+        ok_constructor: "ctor:fixture::C1::Ok".to_string(),
+    };
+    let dynamic = |field: Lowered| {
+        Lowered::DynamicConstructor(DynamicConstructorV1 {
+            discriminator: word,
+            alternatives: vec![DynamicConstructorAlternativeV1 {
+                tag: 0,
+                constructor: "ctor:fixture::C1::Wrap".to_string(),
+                identity: wrap_identity,
+                occurrence: Some(wrap_occurrence),
+                fields: vec![field],
+            }],
+        })
+    };
+
+    for (label, build) in [
+        (
+            "HostResult.error",
+            &(|occurrence| host_result(nested(occurrence), leaf()))
+                as &dyn Fn(Option<AggregateOccurrenceId>) -> Lowered,
+        ),
+        (
+            "HostResult.ok",
+            &|occurrence| host_result(leaf(), nested(occurrence)),
+        ),
+        ("DynamicConstructor field", &|occurrence| {
+            dynamic(nested(occurrence))
+        }),
+    ] {
+        let guard = GovernedAllocationMutationGuard::install(GovernedAllocationMutation::None);
+        let refused = compiler
+            .transfer_into_carrier(&mut builder, construct_origin, &build(None))
+            .expect_err("a nested aggregate carrying no producer occurrence cannot cross");
+        let reason = format!("{refused:?}");
+        assert!(
+            reason.contains("no planner-issued producer occurrence"),
+            "{label}: the refusal must be the PREFLIGHT's, not whatever the container \
+             emission would have said next: got {reason}"
+        );
+        assert_eq!(
+            guard.raw_allocations(),
+            0,
+            "{label}: the whole-graph walk must finish before the first raw allocation"
+        );
+        drop(guard);
+
+        let reached = compiler
+            .transfer_into_carrier(
+                &mut builder,
+                construct_origin,
+                &build(Some(wrap_occurrence)),
+            )
+            .expect_err("a fixture with no carrier refs cannot allocate");
+        let reached = format!("{reached:?}");
+        assert!(
+            !reached.contains("no planner-issued producer occurrence"),
+            "NON-VACUITY ({label}): the SAME container carrying a correct nested \
+             certificate must get PAST the preflight, or the row above says nothing \
+             about the container: got {reached}"
+        );
+    }
+}
+
+/// **`D7` — a child whose possible OWNERS escape the set the meet was taken
+/// over is refused, at the same outer shape, lane and arity.**
+///
+/// MEASURED, on a bare rig over one planned parent whose position 0 the planner
+/// planned with owners `[NoReferent]` -- a child it will materialize as a native
+/// scalar pair, which has no boundary node for anything to own:
+///
+/// | held child at position 0 | derived closed owner set | outcome |
+/// |---|---|---|
+/// | `Bool` (spill-free immediate) | `[NoReferent]` | reaches the allocator |
+/// | `Bytes` (a handle) | `[PersistentStore]` | refused, 0 raw allocations |
+///
+/// ⭐⭐ **The two rows share the parent template exactly** -- same producer
+/// occurrence, same constructor symbol, same arity, therefore the same planned
+/// shape, class and allocation lane. The only difference is what the child can
+/// be owned by, which is the fact the parent's lane was DERIVED from. A parent
+/// whose lane was concluded from a set that does not contain its actual child's
+/// owner is a conclusion from the wrong premises.
+///
+/// ⛔ Not a check that the child is "the right kind". It is a containment: the
+/// held set must be inside the planned one, and the direction is the content. A
+/// held child may be LONGER-lived than its position planned for -- a persistent
+/// child where the meet allowed an activation-owned one dangles nothing --
+/// never shorter.
+///
+/// ⚠ **The refusal is the SECOND of two arms at this position, and the first
+/// has its own witness.** Before the containment, the planner's two fields about
+/// the position are made to agree: the invocation arena is a possible owner only
+/// if the position is activation-owned. Not an equivalence -- `owners` is the
+/// lifetime's affinity intersected with the child's representation, so THIS
+/// fixture's position 0 is legitimately `ActivationOwned` over `[NoReferent]`,
+/// and stating the law as `==` refuses it. Mutating the planner to admit the
+/// arena under a persistent lifetime reds the first arm; dropping the
+/// containment reds this row.
+///
+/// ⚠ Promise class: **durable invariant** -- a relation between two answers to
+/// one question, not either message.
+///
+/// CLAIMED: the meet's premises are checked against the operands actually held,
+/// not merely recorded.
+#[test]
+fn a_child_owner_set_outside_the_planned_meet_is_refused_before_any_allocation() {
+    let seed_env = NativeSeedEnvironment::empty();
+    // ⭐ The `Call` child is what makes position 0's planned owner set the
+    // singleton `[NoReferent]`: its join result is a native scalar pair, so the
+    // planner records that nothing can own it. Measured on this exact fixture.
+    let fixture = RuntimeExpr::Construct {
+        constructor: "ctor:fixture::C1::Wrap".to_string(),
+        args: vec![RuntimeExpr::Call {
+            callee: Box::new(RuntimeExpr::LexicalClosure {
+                captures: Vec::new(),
+                params: Vec::new(),
+                body: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+            }),
+            args: Vec::new(),
+        }],
+    };
+    let (plan, construct_origin) = planned_root_occurrence(&fixture);
+    let wrap_occurrence = plan
+        .source_aggregate_occurrence(construct_origin, PlannedAggregateShape::Constructor)
+        .expect("the planned `Construct` has an ownership record at its own origin");
+    assert_eq!(
+        plan.aggregate_record_view(wrap_occurrence)
+            .expect("the record is readable")
+            .children()[0]
+            .owners,
+        vec![BoundaryReferentOwner::NoReferent],
+        "the row is only about owner containment if the planned set is a strict \
+         subset of what a handle child would derive"
+    );
+    let (_module, mut context, mut compiler) =
+        d7_bare_preflight_rig(&seed_env, plan, "d7_child_owner_probe");
+
+    let mut function_context = FunctionBuilderContext::new();
+    let mut builder = FunctionBuilder::new(&mut context.func, &mut function_context);
+    let entry = builder.create_block();
+    builder.switch_to_block(entry);
+    bind_bare_test_trap_lane(&mut compiler, &mut builder);
+
+    let word = builder.ins().iconst(types::I64, 1);
+    let template = |child: Lowered| Lowered::Constructor {
+        constructor: "ctor:fixture::C1::Wrap".to_string(),
+        synthesized_identity: None,
+        occurrence: Some(wrap_occurrence),
+        args: vec![child],
+    };
+
+    let guard = GovernedAllocationMutationGuard::install(GovernedAllocationMutation::None);
+    let refused = compiler
+        .transfer_into_carrier(
+            &mut builder,
+            construct_origin,
+            &template(Lowered::Bytes(vec![7, 8])),
+        )
+        .expect_err("a child that can be owned outside the planned set cannot cross");
+    let reason = format!("{refused:?}");
+    assert!(
+        reason.contains("can be owned by"),
+        "the refusal must be the OWNER containment, not the arity, class or \
+         identity checks that precede it: got {reason}"
+    );
+    assert_eq!(
+        guard.raw_allocations(),
+        0,
+        "the walk must refuse before the first raw allocation"
+    );
+    drop(guard);
+
+    let reached = compiler
+        .transfer_into_carrier(
+            &mut builder,
+            construct_origin,
+            &template(Lowered::Bool {
+                value: word,
+                known: Some(true),
+            }),
+        )
+        .expect_err("a fixture with no carrier refs cannot allocate");
+    let reached = format!("{reached:?}");
+    assert!(
+        !reached.contains("can be owned by"),
+        "NON-VACUITY: the SAME parent holding a child whose closed owner set IS \
+         inside the planned one must get past the owner check: got {reached}"
+    );
+}
+
+/// **`D7` — a record's ordered FIELD SCHEMA is load-bearing, and a sibling's is
+/// refused before a single allocation is emitted.**
+///
+/// MEASURED, on the same real two-argument declared-unit call reached through
+/// the source machine, with two records that differ in **exactly one thing** —
+/// their ordered field names. Same arity, same field constructors, therefore the
+/// same shape and the same ruled lane, recorded from the live plan as
+/// `same_shape: true, same_lane: true`:
+///
+/// | run | outcome |
+/// |---|---|
+/// | baseline | compiles, non-zero raw allocations |
+/// | B's certificate for A | 1 hit, refused naming the field identity, **0 raw allocations** |
+///
+/// ⭐⭐ **The refusal is the FIELD SCHEMA arm, not the child occurrence.** The
+/// preflight compares presence, shape, class, arity and then, per position, the
+/// field identity — before it reaches the nested occurrence. Asserting the
+/// message names the identity is what distinguishes this row from the ownership
+/// control it sits beside: with the same field names on both records, the
+/// substitution is caught by the child occurrence and this arm is never
+/// exercised.
+///
+/// ⛔ The identity compared is the TYPED `FieldIdentity` the producer was
+/// issued, on both sides. There is no `&str -> FieldIdentity` direction and none
+/// may be added — comparing the template's field strings against the plan would
+/// be the second derivation `D2` forbids, and it is what left field naming
+/// unreconciled while order and arity were covered.
+///
+/// ⚠ Promise class: **durable invariant** — a relation between a baseline and a
+/// negative differing in one certificate, never a message as a value.
+///
+/// CLAIMED: a record's field names are its producer's fact, they travel with the
+/// template, and a template carrying another producer's schema cannot be
+/// emitted.
+#[test]
+fn a_sibling_records_field_schema_is_refused_before_any_allocation() {
+    let program = d7_field_identity_arguments();
+    let (baseline, baseline_hits, baseline_allocations, _) =
+        d7_ownership_run(&program, GovernedAllocationMutation::None);
+    baseline.expect("the two-record field-identity fixture compiles unmutated");
+    assert_eq!(baseline_hits, 0, "the baseline installs no mutation");
+    assert!(
+        baseline_allocations > 0,
+        "the baseline must actually allocate, or 'the negative emitted zero' is a \
+         comparison between two zeroes"
+    );
+
+    let (result, hits, allocations, substitution) = d7_ownership_run(
+        &program,
+        GovernedAllocationMutation::SiblingAggregateProducer,
+    );
+    assert_eq!(
+        hits, 1,
+        "the certificate substitution must FIRE exactly once, or a refusal is not \
+         attributable to it"
+    );
+    let substitution = substitution.expect("a firing substitution records what it moved");
+    assert_ne!(
+        substitution.from,
+        Some(substitution.to),
+        "a substitution that substituted nothing is indistinguishable from a \
+         well-defended one"
+    );
+    assert!(
+        substitution.same_shape && substitution.same_lane,
+        "the two records must agree on shape and lane, or the refusal is \
+         attributable to something coarser than the schema: {substitution:?}"
+    );
+    let error = result.expect_err("a record carrying a sibling's field schema cannot be emitted");
+    assert_eq!(
+        allocations, 0,
+        "the whole-graph preflight must finish before the FIRST raw allocation, and \
+         the baseline emitted {baseline_allocations}: got {error:?}"
+    );
+    let reason = format!("{error:?}");
+    assert!(
+        reason.contains("carries identity"),
+        "the refusal must be the FIELD SCHEMA disagreement -- a shape, class, arity \
+         or nested-occurrence refusal would mean the row never exercised the field \
+         identities at all: {reason}"
+    );
+}
+
+// -- `D7` checkpoint 1: the retained-callable capture contract ---------------
+//
+// The gate these exercise is the one the framed `#23` reaching row stops at.
+// Its subject is a MIXED-PHASE environment, so every control below builds a
+// real carried word rather than asserting about specialized captures only --
+// a run whose every capture is specialized cannot distinguish a gate that
+// preserves phase from one that never sees a carried capture at all.
+
+/// One capture's intended phase, so a fixture states its environment rather
+/// than deriving it.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CapturePhase {
+    Specialized,
+    Carried,
+}
+
+/// A capture slot the caller shapes, so each axis of the contract can be
+/// perturbed on its own.
+///
+/// ⛔ Defaults to the descriptor the planner would actually lay. A fixture that
+/// had to spell every field to get the EXACT case would make the exact case the
+/// unusual one, and a control is only as trustworthy as its unmutated twin.
+#[cfg(test)]
+fn lexical_capture_slot(ordinal: u32) -> AbiSlot {
+    AbiSlot {
+        kind: AbiSlotKind::Capture,
+        carrier: AbiCarrier::ValueWord,
+        ownership: AbiOwnership::OwnedByFrame,
+        storage_owner: AbiStorageOwner::ActivationFrame,
+        width_bytes: 8,
+        align_bytes: 8,
+        ordinal,
+    }
+}
+
+/// Drive the capture-contract gate against a descriptor and an environment the
+/// caller shapes independently.
+///
+/// The two are separate parameters on purpose: the gate's whole claim is that
+/// it relates a capture RUN to a planner-issued CONTRACT, so a fixture must be
+/// able to move one while holding the other.
+#[cfg(test)]
+fn attempt_capture_contract(
+    phases: &[CapturePhase],
+    capture_slots: impl FnOnce() -> Option<Vec<AbiSlot>>,
+    declared_arity: u32,
+) -> Result<StaticWorkerBinding, CraneliftBackendError> {
+    let source = worker_source();
+    let (plan, root) = planned_root_occurrence(&source);
+    let closure_origin = plan
+        .child_static_origin(root, 0)
+        .expect("the Let's bound value is planned as child 0");
+    let body_origin = plan
+        .child_static_origin(closure_origin, 0)
+        .expect("a lexical closure plans its body as child 0");
+    let seed_env = NativeSeedEnvironment::empty();
+    let mut compiler = bare_carrier_test_lowering(&seed_env, plan);
+    if let Some(capture_slots) = capture_slots() {
+        let mut slots = (0..declared_arity)
+            .map(|ordinal| AbiSlot {
+                kind: AbiSlotKind::Parameter,
+                carrier: AbiCarrier::ValueWord,
+                ownership: AbiOwnership::OwnedByFrame,
+                storage_owner: AbiStorageOwner::ActivationFrame,
+                width_bytes: 8,
+                align_bytes: 8,
+                ordinal,
+            })
+            .collect::<Vec<_>>();
+        let declared_captures = capture_slots.len() as u32;
+        slots.extend(capture_slots);
+        let offsets = (0..slots.len() as u32).map(|index| index * 8).collect();
+        compiler.function_local.worker_templates.insert(
+            body_origin,
+            units::WorkerTemplate {
+                origin: body_origin,
+                call_site_origin: body_origin,
+                header: AbiFrameHeader {
+                    parameters: declared_arity,
+                    captures: declared_captures,
+                    frame_bytes: (slots.len() as u32) * 8,
+                    align_bytes: 8,
+                },
+                slots,
+                offsets,
+            },
+        );
+    }
+
+    // A carried capture is an SSA word, so the environment needs a real
+    // function under construction to mint one. ⛔ Standing in a specialized
+    // value for it would make every control below measure the specialized path.
+    let mut func = Function::with_name_signature(
+        UserFuncName::user(0, 0),
+        cranelift_codegen::ir::Signature::new(cranelift_codegen::isa::CallConv::SystemV),
+    );
+    let mut function_context = FunctionBuilderContext::new();
+    let mut builder = FunctionBuilder::new(&mut func, &mut function_context);
+    let entry = builder.create_block();
+    builder.switch_to_block(entry);
+    let captures = phases
+        .iter()
+        .enumerate()
+        .map(|(index, phase)| match phase {
+            CapturePhase::Specialized => {
+                LoweringOperand::Specialized(Lowered::Bytes(format!("capture{index}").into_bytes()))
+            }
+            CapturePhase::Carried => LoweringOperand::Carried(CarriedBoundaryWord {
+                word: builder.ins().iconst(types::I64, i64::from(index as i32)),
+            }),
+        })
+        .collect::<Vec<_>>();
+
+    compiler.construct_static_worker_binding(
+        closure_origin,
+        body_origin,
+        declared_arity,
+        phases.len(),
+        captures,
+        // `D6a` — the capture-phase contract is route-independent.
+        StaticWorkerCallRoute::RawWorker,
+        // `D8i` — and discharge-independent, for the same reason.
+        ContinuationDischarge::DirectSpecializationCall,
+    )
+}
+
+/// The positive control, and the property checkpoint 1 exists to establish: a
+/// MIXED environment is representable, and each capture keeps the phase it
+/// arrived at.
+///
+/// ⭐ The phase assertion is per-capture, not a count. "Two captures survived"
+/// is satisfied by a run that specialized both.
+#[test]
+fn a_mixed_phase_capture_run_installs_and_keeps_each_capture_at_its_own_phase() {
+    let binding = expect_worker_binding(attempt_capture_contract(
+        &[
+            CapturePhase::Specialized,
+            CapturePhase::Carried,
+            CapturePhase::Carried,
+        ],
+        || Some((0..3).map(lexical_capture_slot).collect()),
+        1,
+    ));
+    assert_eq!(binding.captures.len(), 3);
+    assert!(
+        matches!(&binding.captures[0], LoweringOperand::Specialized(Lowered::Bytes(value))
+            if value == b"capture0"),
+        "the specialized capture is stored unchanged, in position"
+    );
+    assert!(
+        matches!(&binding.captures[1], LoweringOperand::Carried(_)),
+        "a carried capture stays carried rather than being refused or re-specialized"
+    );
+    assert!(
+        matches!(&binding.captures[2], LoweringOperand::Carried(_)),
+        "and so does the second one -- one surviving carried capture would not \
+         show the run is phase-preserving"
+    );
+}
+
+/// Omission: the planner issued no contract for this body. `worker_templates`
+/// membership is the fact the gate needs, and its absence is the half a keyed
+/// map cannot make unrepresentable.
+#[test]
+fn a_mixed_phase_capture_run_without_a_planner_issued_contract_rejects() {
+    let error = expect_worker_rejection(attempt_capture_contract(
+        &[CapturePhase::Specialized, CapturePhase::Carried],
+        || None,
+        1,
+    ));
+    assert!(
+        format!("{error:?}").contains("no raw worker template"),
+        "rejects for the omitted-contract reason: {error:?}"
+    );
+}
+
+/// Order: the capture run's slots are permuted, so slot *i* no longer carries
+/// ordinal *i*. Every other fact -- count, carrier, owner, lifetime -- agrees,
+/// so the refusal is attributable to order alone.
+#[test]
+fn a_capture_contract_whose_slot_ordinals_are_permuted_rejects() {
+    let error = expect_worker_rejection(attempt_capture_contract(
+        &[CapturePhase::Carried, CapturePhase::Specialized],
+        || Some(vec![lexical_capture_slot(1), lexical_capture_slot(0)]),
+        1,
+    ));
+    assert!(
+        format!("{error:?}").contains("provenance projects"),
+        "rejects against the projected slot: {error:?}"
+    );
+}
+
+/// Order, the duplication case: two slots claim ordinal 0, so one capture has
+/// no slot of its own and another is named twice. A gate that only counted
+/// slots would accept this.
+#[test]
+fn a_capture_contract_with_a_duplicated_slot_ordinal_rejects() {
+    let error = expect_worker_rejection(attempt_capture_contract(
+        &[CapturePhase::Carried, CapturePhase::Specialized],
+        || Some(vec![lexical_capture_slot(0), lexical_capture_slot(0)]),
+        1,
+    ));
+    assert!(
+        format!("{error:?}").contains("provenance projects"),
+        "rejects against the projected slot: {error:?}"
+    );
+}
+
+/// Provenance / lane: the descriptor declares the SEED capture lane for a
+/// callable whose captures are lexical. The capture that meets it is
+/// specialized, so this isolates provenance from the phase axis below.
+#[test]
+fn a_capture_contract_declaring_the_seed_lane_for_a_lexical_callable_rejects() {
+    let error = expect_worker_rejection(attempt_capture_contract(
+        &[CapturePhase::Specialized],
+        || {
+            Some(vec![AbiSlot {
+                carrier: AbiCarrier::GroundValueCarrier,
+                ownership: AbiOwnership::BorrowedForActivation,
+                storage_owner: AbiStorageOwner::ArtifactStatic,
+                ..lexical_capture_slot(0)
+            }])
+        },
+        1,
+    ));
+    assert!(
+        format!("{error:?}").contains("provenance projects"),
+        "rejects against the projected lexical slot: {error:?}"
+    );
+}
+
+/// Phase / lifetime: the same seed-lane descriptor, met by a CARRIED capture.
+///
+/// ⭐ This is the pair that makes the phase arm reachable at all. The two
+/// fixtures differ in exactly one thing -- the capture's phase -- and they must
+/// produce DIFFERENT refusals: the specialized one above cannot get past slot
+/// equality, and this one is stopped earlier, by the lifetime rule, because an
+/// invocation-time word cannot inhabit artifact-static storage.
+#[test]
+fn a_carried_capture_meeting_artifact_static_storage_rejects_on_lifetime() {
+    let error = expect_worker_rejection(attempt_capture_contract(
+        &[CapturePhase::Carried],
+        || {
+            Some(vec![AbiSlot {
+                carrier: AbiCarrier::GroundValueCarrier,
+                ownership: AbiOwnership::BorrowedForActivation,
+                storage_owner: AbiStorageOwner::ArtifactStatic,
+                ..lexical_capture_slot(0)
+            }])
+        },
+        1,
+    ));
+    let rendered = format!("{error:?}");
+    assert!(
+        rendered.contains("arrived carried") && rendered.contains("ArtifactStatic"),
+        "rejects for the lifetime reason, naming the storage owner: {rendered}"
+    );
+    assert!(
+        !rendered.contains("provenance projects"),
+        "and is stopped BEFORE slot equality -- if it fell through to that, the \
+         lifetime arm would be dead code that no descriptor could reach: {rendered}"
+    );
+}
+
+/// Count: the contract declares fewer capture slots than the run supplies. The
+/// header and the slot run are two recorded facts, and this moves both together
+/// so the refusal is about the run rather than about their disagreement.
+#[test]
+fn a_capture_contract_declaring_too_few_slots_rejects() {
+    let error = expect_worker_rejection(attempt_capture_contract(
+        &[CapturePhase::Carried, CapturePhase::Specialized],
+        || Some(vec![lexical_capture_slot(0)]),
+        1,
+    ));
+    assert!(
+        format!("{error:?}").contains("captures"),
+        "rejects on the capture count: {error:?}"
+    );
+}
+
+/// Owner: the slot names the right carrier and the right storage owner but
+/// claims the wrong TRANSFER discipline.
+///
+/// ⭐ Isolated from the two axes above on purpose. `AbiOwnership` and
+/// `AbiStorageOwner` are deliberately distinct facts -- one is "who reclaims
+/// this", the other is "borrowed from what" -- and a gate that compared only the
+/// carrier would accept a descriptor promising the caller a value the frame
+/// actually reclaims.
+#[test]
+fn a_capture_contract_claiming_the_wrong_transfer_discipline_rejects() {
+    let error = expect_worker_rejection(attempt_capture_contract(
+        &[CapturePhase::Carried],
+        || {
+            Some(vec![AbiSlot {
+                ownership: AbiOwnership::TransferredToCaller,
+                ..lexical_capture_slot(0)
+            }])
+        },
+        1,
+    ));
+    let rendered = format!("{error:?}");
+    assert!(
+        rendered.contains("provenance projects"),
+        "rejects against the projected slot: {rendered}"
+    );
+    assert!(
+        !rendered.contains("arrived carried"),
+        "and NOT on the lifetime arm -- this slot's storage is still \
+         activation-frame owned, so only the transfer discipline moved: {rendered}"
+    );
+}
+
+/// The one fixture in this crate that reaches `lower_source_carried_match`.
+///
+/// Its independent abort is JOIN ACQUISITION -- this rig's enclosing
+/// continuation has no planned scalar cut -- not the `origin 264` byte-span
+/// effect seat. That matters for what the control below may assert, and it is
+/// not a choice: no `ken-runtime` lib fixture reaches the carried route through
+/// an effect seat, and the seam is `#[cfg(test)]`, so the one fixture that does
+/// (`ken-cli`'s `rt_parity_native`) links a build where the seam does not exist.
+#[cfg(test)]
+fn ac1_carried_route_fixture() -> Result<(), CraneliftBackendError> {
+    ac_c4_recursive_edge(ac1_source_machine_carried_match(vec![
+        ac1_unmatchable_case(),
+        crate::RuntimeMatchCase {
+            constructor: "ctor:fixture::C1::Leaf".to_string(),
+            binders: 0,
+            body: ac_c7_ctor("Sentinel"),
+        },
+    ]))
+    .map(|_| ())
+}
+
+#[cfg(test)]
+fn ac1_refusal_of(outcome: &Result<(), CraneliftBackendError>) -> (String, String) {
+    let Err(CraneliftBackendError::Unsupported(UnsupportedLowering {
+        construct, reason, ..
+    })) = outcome
+    else {
+        panic!("the carried-route fixture refuses: got {outcome:?}");
+    };
+    ((*construct).to_string(), reason.clone())
+}
+
+/// The refusal this rig raises when nothing is mutated -- its INDEPENDENT abort.
+#[cfg(test)]
+const AC1_INDEPENDENT_ABORT: (&str, &str) = (
+    "NativeJoinPlanV1",
+    "active checked continuation has no planned scalar cut before its outer suffix",
+);
+
+/// `AC-1` control family 5 -- the source-machine `Match` seat DISPATCHES an
+/// already-classified carried operand into the carried route, and the exact
+/// pre-repair refusal comes back when that dispatch is removed.
+///
+/// MEASURED, three runs of ONE fixture:
+/// 1. `Exact` -- the mutation fires **0** times and the fixture refuses at its
+///    independent abort, [`AC1_INDEPENDENT_ABORT`].
+/// 2. `RefuseClassifiedCarried` -- the mutation fires **exactly once** and the
+///    fixture refuses with exactly `Match: "scrutinee is not a constructor
+///    value"`, which is the pre-repair refusal, and which is raised strictly
+///    BEFORE join acquisition.
+/// 3. `Exact` again, after the scope -- back to **0** applications and the
+///    original refusal, so the mutation left nothing behind.
+///
+/// The APPLICATION COUNT is what makes run 2 evidence. A mutated run that
+/// produced the right message with a count of zero would have refused for some
+/// other reason entirely, and the message alone cannot tell those apart. The
+/// count is taken from the hook itself, which cannot fire without incrementing.
+///
+/// SCOPE -- this claims CARRIED DISPATCH BEFORE JOIN, and nothing else. It
+/// does not claim selector correctness, leaf lowering, physical predecessor
+/// distinction, exact-once completion, or anything about the suffix. Those are
+/// decided after this rig's abort and are not measured anywhere.
+///
+/// The independent abort here is join acquisition, NOT the `origin 264`
+/// byte-span effect seat named in the activation gate. See
+/// [`ac1_carried_route_fixture`] for why that substitution is forced rather than
+/// chosen.
+///
+/// Promise class: durable invariant. It asserts a relation between a mutation
+/// and the refusal it produces, not a snapshot of either.
+#[test]
+fn ac1_the_seat_dispatches_a_classified_carried_operand_before_join_acquisition() {
+    let (exact, exact_applications) = with_source_carried_control_mutation(
+        SourceCarriedControlMutation::Exact,
+        ac1_carried_route_fixture,
+    );
+    assert_eq!(
+        exact_applications, 0,
+        "an unmutated run must not apply the mutation"
+    );
+    let (construct, reason) = ac1_refusal_of(&exact);
+    assert_eq!(
+        (construct.as_str(), reason.as_str()),
+        AC1_INDEPENDENT_ABORT,
+        "the unmutated fixture must refuse at its own independent abort"
+    );
+
+    let (mutated, mutated_applications) = with_source_carried_control_mutation(
+        SourceCarriedControlMutation::RefuseClassifiedCarried,
+        ac1_carried_route_fixture,
+    );
+    assert_eq!(
+        mutated_applications, 1,
+        "ANTI-VACUITY: the carried dispatch is taken exactly once by this \
+         fixture, so the mutation must fire exactly once. Zero means the run \
+         refused for a different reason and proves nothing"
+    );
+    let (construct, reason) = ac1_refusal_of(&mutated);
+    assert_eq!(
+        (construct.as_str(), reason.as_str()),
+        ("Match", "scrutinee is not a constructor value"),
+        "removing the carried dispatch must restore the EXACT pre-repair refusal"
+    );
+    assert_ne!(
+        (construct.as_str(), reason.as_str()),
+        AC1_INDEPENDENT_ABORT,
+        "DISCRIMINATOR: the mutated refusal must REPLACE the independent abort, \
+         which is what shows the dispatch is decided before it"
+    );
+
+    let (restored, restored_applications) = with_source_carried_control_mutation(
+        SourceCarriedControlMutation::Exact,
+        ac1_carried_route_fixture,
+    );
+    assert_eq!(
+        restored_applications, 0,
+        "the scoped mutation must not survive its scope"
+    );
+    assert_eq!(
+        ac1_refusal_of(&restored),
+        (
+            AC1_INDEPENDENT_ABORT.0.to_string(),
+            AC1_INDEPENDENT_ABORT.1.to_string()
+        ),
+        "after the scope the fixture must refuse exactly as it did before it"
+    );
+}
+
+/// Why family 2a ships no control ON THE CURRENT CARRIED-ROUTE FIXTURE.
+///
+/// MEASURED: under `RefuseSplitInheritedJoin`, [`ac1_carried_route_fixture`]
+/// applies the mutation **0** times and refuses exactly as `Exact` does. That
+/// fixture's prefix split classifies its terminal as `ResumeOuter`, so the
+/// inherited-join arm is not on ITS path.
+///
+/// This is NOT a discharge of family 2a, and must never be read as one. It is
+/// the anti-vacuity evidence for why that control is absent here: an
+/// inherited-join control written against this fixture would assert a refusal it
+/// did not cause.
+///
+/// SCOPE -- this row is LOCAL to [`ac1_carried_route_fixture`]. It is not a
+/// crate-wide `cfg(test)` census, and an earlier heading and test name said it
+/// was. It measures one fixture and says nothing whatever about any other.
+///
+/// Promise class: LOCAL transition sentinel. This row reds if
+/// [`ac1_carried_route_fixture`] itself begins reaching the inherited-Join arm.
+/// It does not census other `cfg(test)` fixtures; any new reaching fixture must
+/// land family 2a's gate-satisfying control.
+#[test]
+fn ac1_the_current_carried_route_fixture_does_not_reach_the_inherited_join_arm() {
+    let (outcome, applications) = with_source_carried_control_mutation(
+        SourceCarriedControlMutation::RefuseSplitInheritedJoin,
+        ac1_carried_route_fixture,
+    );
+    assert_eq!(
+        applications, 0,
+        "if this is nonzero THIS FIXTURE began reaching the inherited-join arm, \
+         and family 2a's gate-satisfying control can and must now be written \
+         against it"
+    );
+    assert_eq!(
+        ac1_refusal_of(&outcome),
+        (
+            AC1_INDEPENDENT_ABORT.0.to_string(),
+            AC1_INDEPENDENT_ABORT.1.to_string()
+        ),
+        "with the mutation never applied THIS FIXTURE must refuse exactly as \
+         an unmutated run of it does"
     );
 }

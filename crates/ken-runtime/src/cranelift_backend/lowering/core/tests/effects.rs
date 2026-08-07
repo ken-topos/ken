@@ -77,7 +77,12 @@ fn run_checked_bounded_nat_fixture(
         unsupported: Vec::new(),
         body_emission_authority: BodyEmissionAuthority::FunctionizedUnits,
         continuation_claims: None,
+        checked_call_ledger: None,
         defining_unit: None,
+        defining_emission_owner: None,
+        defining_function_id: None,
+        aggregate_allocations: None,
+        host_effect_seats: None,
         process_object: false,
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
         // ⛔ `None` — a bare `Lowering` fixture emits into no module, so it has
@@ -86,6 +91,11 @@ fn run_checked_bounded_nat_fixture(
         native_int_mutation: NativeIntLoweringMutation::Exact,
         bounded_nat_mutation: mutation,
         function_local: FunctionLocalRefs {
+            defining_abi_operands: Vec::new(),
+            defining_abi_slot_kinds: Vec::new(),
+            context_calls: BTreeMap::new(),
+            worker_templates: BTreeMap::new(),
+            generated_context_captures: None,
             seed_material: crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(),
             host_dispatch: None,
             host_dispatch_context: None,
@@ -102,8 +112,11 @@ fn run_checked_bounded_nat_fixture(
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
             worker_calls: BTreeMap::new(),
+            raw_worker_calls: BTreeMap::new(),
             continuation_calls: BTreeMap::new(),
             continuation_emissions: BTreeMap::new(),
+            pending_composed_discharges: Vec::new(),
+            composed_discharges: BTreeMap::new(),
             declaration_calls: BTreeMap::new(),
             trap_exit: None,
             terminal_result_origins: BTreeSet::new(),
@@ -300,6 +313,7 @@ fn run_checked_bounded_nat_fixture(
                             checked_invocation_id: None,
                             checked_invocation_source: None,
                             checked_invocation_depth: 0,
+                            answer_route: SourceComputationalAnswerRoute::DirectScrutinee,
                         },
                     )];
                     compiler.lower_bounded_nat_computational(&mut builder, nat, false, &frames)?
@@ -1260,6 +1274,33 @@ fn match_selected_call_returned_host_result_keeps_established_dynamic_lane() {
         "ken_px7o_match_selected_call_returned_host_result",
     )
     .expect("match-selected HostResult remains owned by ordinary dynamic matching");
+    // ⭐ `D7` — the UNREACHED control lives here because this fixture is its
+    // only witness in the suite: it plans four host-effect seats and reaches
+    // two, because the occurrence carrying the other two sits in a body this
+    // compilation never emits. Extracting the fixture to give the control its
+    // own home would leave the witness and the assertion free to drift apart.
+    //
+    // MEASURED: the compile SUCCEEDS with a nonzero unreached count.
+    //
+    // CLAIMED: `P` is an authorization population, not an execution obligation
+    // -- the same law the aggregate relation carries. This is the row that would
+    // red if `image(claims) = P` were ever reimposed; whole-population equality
+    // was written first and reddened exactly this test.
+    //
+    // THE GAP: it says nothing about a HALF-read occurrence, which is refused by
+    // the group-local completeness equality and not by anything here.
+    let closure = crate::cranelift_backend::lowering::units::last_effect_seat_closure()
+        .expect("the seat ledger closed");
+    assert!(
+        closure.unreached > 0,
+        "this fixture no longer witnesses an unreached planned seat, so the lawfulness of one \
+         is untested: {closure:?}"
+    );
+    assert_eq!(
+        closure.image + closure.unreached,
+        closure.population,
+        "the reported unreached count is not P minus the image: {closure:?}"
+    );
 }
 #[test]
 fn recursive_computational_host_result_keeps_established_dynamic_lane() {
@@ -1638,19 +1679,19 @@ fn px8n_read_arm_fixture_with_start(
 
 #[cfg(test)]
 #[repr(C)]
-struct BorrowedFixtureValue {
-    kind: u64,
-    tag: u64,
-    data: *const std::ffi::c_void,
-    len: usize,
+pub(super) struct BorrowedFixtureValue {
+    pub(super) kind: u64,
+    pub(super) tag: u64,
+    pub(super) data: *const std::ffi::c_void,
+    pub(super) len: usize,
 }
 
 #[cfg(test)]
 #[repr(C)]
-struct RootIngressFixture {
-    process_input: *const BorrowedFixtureValue,
-    host_context: *mut std::ffi::c_void,
-    capability: u64,
+pub(super) struct RootIngressFixture {
+    pub(super) process_input: *const BorrowedFixtureValue,
+    pub(super) host_context: *mut std::ffi::c_void,
+    pub(super) capability: u64,
 }
 
 #[cfg(test)]
@@ -2087,3 +2128,1082 @@ const PX8N_OVER_BOUND_READ: u64 = 5;
 
 #[cfg(test)]
 const PX8I_BIG_READ_START: u64 = 7;
+
+/// `RT-DECL-CLOSURE-PORT` `D7` — a REACHING fixture: drive a non-`Unit` fixed
+/// synthesized role through the ORDINARY aggregate allocation arm.
+///
+/// This is not a new semantic route. It is the `FsWriteAt` analogue of the
+/// existing `host_result_closure_match` carrier fixtures, which reach the arm
+/// with `ConsoleWrite` — whose success value is `Unit`, and which is why the
+/// whole measured population of that arm was three `Unit` events.
+///
+/// `FsWriteAt`'s success value is `Wrote(PrivateTransferCount(nat, nat))`, so
+/// the same shape drives a nested non-`Unit` fixed role instead.
+///
+/// **Why the closure call is load-bearing:** matching a host result directly
+/// keeps it specialized and it never crosses into the carrier. Passing it as a
+/// call argument forces it across a generated-unit boundary, so it is CARRIED —
+/// and `emit_carrier_transfer`'s `HostResult` arm then transfers its `ok`
+/// value, which is the `Lowered::Constructor` allocation this row exists to
+/// reach.
+#[cfg(test)]
+fn d7_fs_write_at_carrier_fixture(symbols: &crate::NativeProcessSymbols) -> RuntimeExpr {
+    let exit_success = || RuntimeExpr::Construct {
+        constructor: crate::EXIT_SUCCESS_CONSTRUCTOR.to_string(),
+        args: Vec::new(),
+    };
+    let trap = || RuntimeTrap {
+        code: RuntimeTrapCode::PatternMatchFailure,
+        message: "D7 reaching fixture default".to_string(),
+    };
+    let allocate = || RuntimeExpr::Effect {
+        family: "FS".to_string(),
+        operation: ken_host::HostOpV1::BufferAllocate,
+        capability: None,
+        args: vec![RuntimeExpr::Value(RuntimeValue::Int((8).into()))],
+    };
+    // Same operand shape as the established `FsWriteAt` fixture: a span-origin
+    // resource distinct from the target buffer.
+    let write = RuntimeExpr::Effect {
+        family: "FS".to_string(),
+        operation: ken_host::HostOpV1::FsWriteAt,
+        capability: None,
+        args: vec![
+            RuntimeExpr::Var(1),
+            RuntimeExpr::Value(RuntimeValue::Int((0).into())),
+            RuntimeExpr::Var(0),
+            RuntimeExpr::Value(RuntimeValue::Int((0).into())),
+            RuntimeExpr::Value(RuntimeValue::Int((4).into())),
+            RuntimeExpr::Var(1),
+        ],
+    };
+    let bind = |body: RuntimeExpr| RuntimeExpr::Match {
+        scrutinee: Box::new(allocate()),
+        cases: vec![
+            crate::RuntimeMatchCase {
+                constructor: symbols.result_err.clone(),
+                binders: 1,
+                body: exit_success(),
+            },
+            crate::RuntimeMatchCase {
+                constructor: symbols.result_ok.clone(),
+                binders: 1,
+                body,
+            },
+        ],
+        default: trap(),
+    };
+    bind(bind(host_result_closure_match(write)))
+}
+
+/// MEASURED: this fixture compiles, and its compile consults the planner's
+/// aggregate record for the `Wrote` role at the ordinary allocation arm.
+///
+/// CLAIMED: a non-`Unit` fixed synthesized role actually reaches that arm, so
+/// the arm's coverage is no longer the three `Unit` events I measured.
+///
+/// THE GAP: greenness alone does not prove reachability — a fixture that never
+/// reached the arm would also compile. The reachability proof is the MUTATION:
+/// withdrawing the `Wrote` schema from `synthesized_aggregate_recipe` must
+/// redden **this** row. That is recorded in the commit rather than asserted
+/// here, because a test cannot withdraw its own production schema.
+#[test]
+fn d7_non_unit_fixed_role_reaches_ordinary_aggregate_allocation() {
+    let symbols = crate::NativeProcessSymbols::legacy_prelude();
+    emit_process_entrypoint_object_with_cranelift(
+        &d7_fs_write_at_carrier_fixture(&symbols),
+        "ken_d7_non_unit_fixed_role_ordinary_allocation",
+    )
+    .expect("the FsWriteAt carrier fixture compiles and reaches the aggregate arm");
+}
+
+/// **`RT-DECL-CLOSURE-PORT` `D7` — the seat contract is total over the admitted
+/// set, and it is derived from the operation and the slot alone.**
+///
+/// ⛔ **Nothing here compiles or runs a program.** The point of the seat
+/// authority is that the population is STATIC: it is a fact about the 13
+/// admitted operations, not about the arms some execution happened to take. A
+/// control that established it by compiling a fixture would prove the property
+/// only for the seats that fixture reaches, which is the row-driven discovery
+/// the frame forbids.
+///
+/// MEASURED: for each admitted operation the ordinals carrying a contract are
+/// exactly `0..n` for some `n >= 1`, the capability slot carries one for
+/// exactly the four FS-path operations, and no unadmitted lane carries one at
+/// any slot.
+///
+/// CLAIMED: the table has no hole and no wildcard, so an operation cannot be
+/// admitted while some seat of it silently has no contract.
+///
+/// THE GAP: this says nothing about whether `n` is the arity the emitter reads
+/// -- that is the ledger's per-body occurrence completeness law, which is a
+/// statement about a compilation and cannot be made here.
+#[test]
+fn every_admitted_host_operation_has_a_gapless_seat_contract_derived_from_its_key() {
+    // The admitted set itself comes from `ken_host`, not from this backend.
+    assert_eq!(
+        CRANELIFT_HOST_EFFECT_CONSUMERS_V1,
+        ken_host::NATIVE_TESTED_TARGETS_V1
+    );
+    let capability_bearing = [
+        ken_host::HostOpV1::FsReadFile,
+        ken_host::HostOpV1::FsWriteFile,
+        ken_host::HostOpV1::FsChangeMode,
+        ken_host::HostOpV1::FsOpen,
+    ];
+    for operation in CRANELIFT_HOST_EFFECT_CONSUMERS_V1 {
+        assert_eq!(
+            host_effect_seat_contract_of(operation, EffectSeatSlot::Capability).is_some(),
+            capability_bearing.contains(&operation),
+            "{operation:?} capability seat"
+        );
+        // Search well past any real arity, so a contract stranded beyond a hole
+        // is found rather than assumed absent.
+        let carried = (0..16u32)
+            .filter(|ordinal| {
+                host_effect_seat_contract_of(operation, EffectSeatSlot::Argument(*ordinal))
+                    .is_some()
+            })
+            .collect::<Vec<_>>();
+        assert!(
+            !carried.is_empty(),
+            "{operation:?} is admitted but has no argument seat at all"
+        );
+        assert_eq!(
+            carried,
+            (0..carried.len() as u32).collect::<Vec<_>>(),
+            "{operation:?} argument seats are not a gapless 0..n range"
+        );
+    }
+    for operation in [
+        ken_host::HostOpV1::ConsoleRead,
+        ken_host::HostOpV1::ClockWallNow,
+        ken_host::HostOpV1::ClockMonotonicNow,
+        ken_host::HostOpV1::ClockSleepUntil,
+        ken_host::HostOpV1::FsAppendFile,
+        ken_host::HostOpV1::FsMetadata,
+        ken_host::HostOpV1::FsReadDirectory,
+        ken_host::HostOpV1::FsCreateDirectory,
+        ken_host::HostOpV1::FsRemoveFile,
+        ken_host::HostOpV1::FsRemoveDirectory,
+        ken_host::HostOpV1::FsRename,
+        ken_host::HostOpV1::EntropyRandomBytes,
+    ] {
+        assert!(
+            !CRANELIFT_HOST_EFFECT_CONSUMERS_V1.contains(&operation),
+            "{operation:?} is not an unadmitted lane"
+        );
+        assert!(
+            host_effect_seat_contract_of(operation, EffectSeatSlot::Capability).is_none(),
+            "{operation:?} is unadmitted but carries a capability contract"
+        );
+        for ordinal in 0..16u32 {
+            assert!(
+                host_effect_seat_contract_of(operation, EffectSeatSlot::Argument(ordinal))
+                    .is_none(),
+                "{operation:?} is unadmitted but carries a contract at argument {ordinal}"
+            );
+        }
+    }
+}
+
+/// **`D7` — the full seat is the key, so equal structural kinds with different
+/// operations, ordinals or needs stay distinct records.**
+///
+/// ⭐ The four pairs below are chosen so that each ISOLATES one axis. Every one
+/// of them is a structurally identical seat -- an operand at a position of a
+/// host effect -- and the only reason each pair must not collapse is the axis
+/// under test. A pair differing on two axes at once would be discriminated by
+/// either, and would prove nothing about the one it was chosen for.
+#[test]
+fn seats_of_equal_structural_kind_stay_distinct_on_operation_ordinal_and_need() {
+    let contract = |operation, slot| {
+        host_effect_seat_contract_of(operation, slot)
+            .unwrap_or_else(|| panic!("{operation:?} {slot:?} has no contract"))
+    };
+    // OPERATION alone. Same slot, same structural kind, same `Int`-shaped
+    // operand; different operations, and the availabilities differ because
+    // only one of them has a carrier route.
+    let allocate = contract(
+        ken_host::HostOpV1::BufferAllocate,
+        EffectSeatSlot::Argument(0),
+    );
+    let freeze_length = contract(ken_host::HostOpV1::BufferFreeze, EffectSeatSlot::Argument(1));
+    assert_eq!(allocate.1, EffectSeatNeed::ExactIntU64);
+    assert_eq!(freeze_length.1, EffectSeatNeed::ExactIntU64);
+    assert_ne!(
+        allocate, freeze_length,
+        "two exact-Int seats at the same ordinal of different operations collapsed"
+    );
+    // ORDINAL alone. One operation, two argument seats, different needs.
+    let write_tag = contract(ken_host::HostOpV1::FsWriteFile, EffectSeatSlot::Argument(1));
+    let write_bytes = contract(ken_host::HostOpV1::FsWriteFile, EffectSeatSlot::Argument(2));
+    assert_ne!(
+        write_tag, write_bytes,
+        "two argument seats of one operation collapsed across the ordinal"
+    );
+    // CAPABILITY versus ARGUMENT 0. The seat the post-capability offset exists
+    // to keep apart: both are FsOpen slots and neither is the other.
+    let open_capability = contract(ken_host::HostOpV1::FsOpen, EffectSeatSlot::Capability);
+    let open_argument = contract(ken_host::HostOpV1::FsOpen, EffectSeatSlot::Argument(0));
+    assert_ne!(
+        open_capability, open_argument,
+        "FsOpen's capability collapsed onto its first semantic argument"
+    );
+    // NEED alone, at equal semantic operations. Both observe an opaque scalar
+    // through the same emitted read; a single need spanning them would let a
+    // capability seat be satisfied by a resource handle.
+    assert_eq!(
+        open_capability.0,
+        EffectSeatOperation::ObserveCapabilityToken
+    );
+    assert_eq!(
+        contract(ken_host::HostOpV1::ResourceRelease, EffectSeatSlot::Argument(0)).0,
+        EffectSeatOperation::ObserveResourceHandle
+    );
+    assert_ne!(
+        open_capability.1,
+        contract(ken_host::HostOpV1::ResourceRelease, EffectSeatSlot::Argument(0)).1,
+        "a capability token and a resource handle share one need"
+    );
+}
+
+/// **`RT-DECL-CLOSURE-PORT` `D7` — repeating a complete visit is lawful.**
+///
+/// ⭐ Together with the unreached control above, this is what makes `P` an
+/// AUTHORIZATION population rather than an execution obligation. Asserting only
+/// the unreached half would leave "each planned seat is claimed exactly once"
+/// available as a plausible reading of the close; this excludes it.
+///
+/// MEASURED on the process-pair fixture: two groups close complete over one
+/// occurrence's two seats — four claims against an image of two. The visits
+/// repeat because recursive-descent emission lowers one static occurrence more
+/// than once.
+///
+/// CLAIMED: a second complete visit is not a duplicate. The group is the unit
+/// of completeness, so two of them covering the same seats is lawful, while a
+/// second claim of one seat INSIDE a group is not.
+///
+/// THE GAP: `claims > image` shows repetition happened. It does not by itself
+/// show the two groups covered the SAME occurrence — the equality against
+/// `population` below is what pins that here, and it holds only because this
+/// fixture has exactly one effect occurrence.
+#[test]
+fn repeating_a_complete_visit_is_lawful() {
+    use crate::cranelift_backend::lowering::units::last_effect_seat_closure;
+    compile_b2f_process_pair_fixture().expect("the process-pair fixture compiles");
+    let closure = last_effect_seat_closure().expect("the seat ledger closed");
+    assert!(
+        closure.groups > 1,
+        "only one visit closed, so repetition is untested here: {closure:?}"
+    );
+    assert!(
+        closure.claims > closure.image,
+        "no seat was claimed by more than one visit: {closure:?}"
+    );
+    assert_eq!(
+        closure.image, closure.population,
+        "the repeated visits did not cover the whole planned population: {closure:?}"
+    );
+}
+
+/// **`RT-DECL-CLOSURE-PORT` `D7` — THE MASKING DISCRIMINATOR. Two visits with
+/// complementary omissions both reject, even though their union is the complete
+/// planned population.**
+///
+/// ⭐⭐ **This control runs on the process-pair fixture and not on the governed
+/// bracket, and that is the whole difficulty of writing it.** The bracket visits
+/// each effect occurrence exactly once (measured: six groups, fifteen claims,
+/// fifteen distinct seats), so complementary omissions there land on *different*
+/// occurrences and no union is ever formed — the row rejects, but it would
+/// reject under the accumulating design too, so it discriminates nothing. This
+/// fixture visits ONE occurrence TWICE (measured: two groups, four claims, image
+/// of two), so visit 1 dropping the capability and visit 2 dropping argument 0
+/// leaves a union that is exactly complete.
+///
+/// MEASURED: with the omissions active the compile is refused, and the refusal
+/// names an incomplete visit.
+///
+/// CLAIMED: completeness is asked per visit, at the visit's own close. Both
+/// counterfactuals were run, and only one of them masks:
+///
+/// | design | this control |
+/// |---|---|
+/// | completeness deferred to the whole-pass close over the per-`(body, occurrence)` union — what `6a09ed68` did | **green: the omissions are accepted** |
+/// | per-visit close, but unioning with prior visits to the same occurrence | red |
+/// | per-visit close over the visit's own claims (this) | red |
+///
+/// ⚠ The middle row is the one worth knowing, because it is the repair a reader
+/// would reach for first and it is NOT the one that matters: visit 1 closes
+/// before any prior visit exists, so its union is its own claims and it refuses
+/// on its own. What masks is deferring the check, not unioning it.
+///
+/// THE GAP: this shows the union is not accepted. It does not show every other
+/// way of splitting a read across visits is caught, only the two-visit
+/// complementary one.
+#[test]
+fn complementary_omissions_across_two_visits_both_reject_though_their_union_is_complete() {
+    use crate::cranelift_backend::lowering::{
+        set_effect_seat_visit_mutation, units::last_effect_seat_closure, EffectSeatVisitMutation,
+    };
+    set_effect_seat_visit_mutation(EffectSeatVisitMutation::Exact);
+    compile_b2f_process_pair_fixture().expect("the unmutated fixture compiles");
+    // ⛔ The premise the discriminator rests on, asserted rather than assumed:
+    // this fixture really does visit one occurrence more than once, over more
+    // than one slot. Without both, the omissions cannot be complementary and a
+    // green row below would mean nothing.
+    let closure = last_effect_seat_closure().expect("the seat ledger closed");
+    assert!(
+        closure.groups > 1 && closure.population > 1 && closure.image == closure.population,
+        "the fixture no longer repeats a multi-slot visit, so complementary omissions are \
+         impossible and this control is vacuous: {closure:?}"
+    );
+    set_effect_seat_visit_mutation(EffectSeatVisitMutation::OmitComplementary);
+    let refusal = compile_b2f_process_pair_fixture();
+    set_effect_seat_visit_mutation(EffectSeatVisitMutation::Exact);
+    let error = match refusal {
+        Ok(_) => panic!(
+            "two visits with complementary omissions were accepted, so completeness is being \
+             taken over their union rather than over each visit"
+        ),
+        Err(error) => error.to_string(),
+    };
+    assert!(
+        error.contains("read incompletely"),
+        "the refusal is not the incomplete-visit one: {error}"
+    );
+    set_effect_seat_visit_mutation(EffectSeatVisitMutation::Exact);
+    compile_b2f_process_pair_fixture().expect("the fixture compiles again once the mutation clears");
+}
+
+
+// ---------------------------------------------------------------------------
+// `RT-DECL-CLOSURE-PORT` `D7` — the carried exact-`Int` capacity route
+// ---------------------------------------------------------------------------
+
+/// What the scripted host saw at the `BufferAllocate` seat.
+///
+/// ⭐ **`capacity` is the load-bearing field, not `calls`.** A control that
+/// asserted only "the program returned Ok" would pass on a narrowing that
+/// produced the wrong `u64`, and the two carried representations decode
+/// magnitudes in genuinely different ways — the immediate through the scalar
+/// helper, the persistent through a limb table. The number that reached the
+/// wire is the only thing that separates "the range rule said valid" from "the
+/// value crossed intact".
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+struct CapacityWireProbe {
+    calls: usize,
+    capacity: u64,
+}
+
+#[cfg(test)]
+extern "C" fn capacity_probe_dispatch(
+    host_context: *const std::ffi::c_void,
+    operation: i64,
+    request: *const std::ffi::c_void,
+    request_size: i64,
+    reply: *mut std::ffi::c_void,
+) -> i64 {
+    // SAFETY: the direct context points at the live probe for the duration of
+    // the compiled call and is never retained by the dispatcher.
+    let probe = unsafe { &mut *(host_context.cast_mut().cast::<CapacityWireProbe>()) };
+    if operation != ken_host::HostOpV1::BufferAllocate as i64 {
+        return -1;
+    }
+    let wire = ken_host::host_effect_wire_layout_v1(ken_host::HostOpV1::BufferAllocate)
+        .expect("BufferAllocate has a generated wire layout");
+    if request_size != i64::from(wire.request_size) {
+        return -1;
+    }
+    probe.calls += 1;
+    // SAFETY: the offset is generated from the target-C layout for this exact
+    // request record, whose size the lowering supplied and which was checked
+    // above.
+    probe.capacity = unsafe {
+        *(request
+            .cast::<u8>()
+            .add(wire.request_offsets[0] as usize)
+            .cast::<u64>())
+    };
+    // SAFETY: the reply pointer names the target-C-sized stack record the
+    // compiled caller supplied for this operation.
+    unsafe { std::ptr::write_bytes(reply.cast::<u8>(), 0, wire.reply_size as usize) };
+    let store = |offset: u32, value: u64| {
+        // SAFETY: generated offsets are aligned u64 fields within the zeroed
+        // reply record above.
+        unsafe { *(reply.cast::<u8>().add(offset as usize).cast::<u64>()) = value };
+    };
+    store(wire.reply_tag_offset, wire.reply_resource_tag);
+    store(wire.reply_detail_offset, 11);
+    0
+}
+
+/// `Err(InvalidBounds) -> 71`, `Ok(_) -> 41`, anything else traps.
+///
+/// ⛔ Both outcomes are *values*, not one value and one trap. A fixture that
+/// trapped on success could not tell "narrowed to invalid" from "narrowed to
+/// valid and then failed later", and those are exactly the two the phase pair
+/// has to distinguish.
+fn capacity_outcome_fixture(
+    symbols: &crate::NativeProcessSymbols,
+    capacity: RuntimeExpr,
+) -> RuntimeExpr {
+    RuntimeExpr::Match {
+        scrutinee: Box::new(RuntimeExpr::Effect {
+            family: "FS".to_string(),
+            operation: ken_host::HostOpV1::BufferAllocate,
+            capability: None,
+            args: vec![capacity],
+        }),
+        cases: vec![
+            crate::RuntimeMatchCase {
+                constructor: symbols.result_err.clone(),
+                binders: 1,
+                body: RuntimeExpr::Match {
+                    scrutinee: Box::new(RuntimeExpr::Var(0)),
+                    cases: vec![crate::RuntimeMatchCase {
+                        constructor: symbols.resource_invalid_bounds.clone(),
+                        binders: 0,
+                        body: px8n_failure(
+                            symbols,
+                            RuntimeExpr::Value(RuntimeValue::Int(71.into())),
+                        ),
+                    }],
+                    default: RuntimeTrap {
+                        code: RuntimeTrapCode::PatternMatchFailure,
+                        message: "capacity error was not InvalidBounds".to_string(),
+                    },
+                },
+            },
+            crate::RuntimeMatchCase {
+                constructor: symbols.result_ok.clone(),
+                binders: 1,
+                body: px8n_failure(
+                    symbols,
+                    RuntimeExpr::Value(RuntimeValue::Int(41.into())),
+                ),
+            },
+        ],
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "capacity result default".to_string(),
+        },
+    }
+}
+
+/// The same fixture with the capacity delivered through a closure PARAMETER.
+///
+/// ⭐ **This is what makes the operand carried, and it is the whole reason the
+/// control exists.** The value crosses a declared ABI slot to reach the body,
+/// and a value that arrives that way is a boundary word rather than a
+/// compile-time template — a fact about the enclosing unit's parameters, not
+/// about the value.
+fn carried_capacity_fixture(
+    symbols: &crate::NativeProcessSymbols,
+    capacity: RuntimeExpr,
+) -> RuntimeExpr {
+    RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::LexicalClosure {
+            captures: Vec::new(),
+            params: vec!["capacity".to_string()],
+            body: Box::new(capacity_outcome_fixture(symbols, RuntimeExpr::Var(0))),
+        }),
+        args: vec![capacity],
+    }
+}
+
+fn run_capacity_fixture(
+    build: &dyn Fn(&crate::NativeProcessSymbols) -> RuntimeExpr,
+) -> Result<(i64, CapacityWireProbe), CraneliftBackendError> {
+    let isa = native_isa().unwrap();
+    let mut builder = JITBuilder::with_isa(isa, default_libcall_names());
+    builder.symbol("ken_host_dispatch_v1", capacity_probe_dispatch as *const u8);
+    let symbols = crate::NativeProcessSymbols::legacy_prelude();
+    let compiled = compile_expr_into_module(
+        JITModule::new(builder),
+        "d7_carried_capacity",
+        Linkage::Local,
+        &build(&symbols),
+        &NativeSeedEnvironment::empty(),
+        BTreeMap::new(),
+        None,
+        true,
+        Some(&symbols),
+        Some(crate::cranelift_backend::test_support::test_only_distinguished_root_join_plan()),
+        None,
+    )?;
+    let input = BorrowedFixtureValue {
+        kind: 1,
+        tag: 0,
+        data: std::ptr::null(),
+        len: 0,
+    };
+    let mut probe = CapacityWireProbe::default();
+    let invocation = RootIngressFixture {
+        process_input: &input,
+        host_context: (&mut probe as *mut CapacityWireProbe).cast(),
+        capability: 0,
+    };
+    let (_, result) = compiled
+        .run(Some((&invocation as *const RootIngressFixture).cast()))
+        .unwrap();
+    Ok((result.unwrap(), probe))
+}
+
+/// The framed capacity values, each with the outcome the range rule gives it.
+///
+/// ⛔ `u64::MAX` is IN range and `u64::MAX + 1` is not, so the pair straddles
+/// the exact boundary rather than sampling either side of it. `-1` and the
+/// negative wide magnitude are the two ways to be negative — one limb and
+/// several — because `sign` is a bit and a rule that read it as a signed number
+/// would accept both.
+fn framed_capacity_rows() -> Vec<(&'static str, RuntimeExpr, i64, u64)> {
+    vec![
+        (
+            "-1",
+            RuntimeExpr::Value(RuntimeValue::Int((-1).into())),
+            71,
+            0,
+        ),
+        ("0", RuntimeExpr::Value(RuntimeValue::Int(0.into())), 41, 0),
+        ("1", RuntimeExpr::Value(RuntimeValue::Int(1.into())), 41, 1),
+        (
+            "u64::MAX",
+            big(crate::Sign::NonNegative, &[u64::MAX]),
+            41,
+            u64::MAX,
+        ),
+        (
+            "u64::MAX + 1",
+            big(crate::Sign::NonNegative, &[0, 1]),
+            71,
+            0,
+        ),
+        (
+            "negative wide",
+            big(crate::Sign::Negative, &[0, 1]),
+            71,
+            0,
+        ),
+        // ⭐ **The row that isolates the VIEWED decoder's sign bit, and none of
+        // the six framed values does.** `-1` is negative but within the
+        // immediate range, so it exercises the immediate arm's sign test; both
+        // two-limb rows are refused on LENGTH before their sign is consulted.
+        // Without this row a rule that dropped `sign == 0` from the viewed arm
+        // stays green on the whole framed set -- and `sign` there is a BIT, so
+        // the natural wrong spelling of the test is one that always passes.
+        //
+        // A one-limb magnitude past the immediate range is the only shape that
+        // reaches the viewed decoder with `len == 1` and `sign == 1`.
+        (
+            "negative one-limb past the immediate range",
+            big(crate::Sign::Negative, &[1 << 62]),
+            71,
+            0,
+        ),
+    ]
+}
+
+/// **The framed exact-`Int` phase pair.** A specialized capacity and a carried
+/// one narrow identically, over both carried representations.
+///
+/// MEASURED: for each of the six framed values, the specialized fixture and
+/// the carried fixture return the same code, dispatch the same number of times,
+/// and put the same `u64` on the wire — and the dispatch census confirms the
+/// two fixtures really did compile different arms.
+///
+/// CLAIMED: the carried route implements the same range rule as the specialized
+/// one, over both `ImmediateInt` and the sealed persistent `Int` view.
+///
+/// THE GAP: identical outcomes do not prove identical *implementations* — two
+/// routes could agree on these six values and diverge on a seventh. What closes
+/// it as far as six values can is that the values are chosen at the rule's own
+/// discontinuities (the sign bit, the one-limb boundary, and the immediate
+/// range's edge), not sampled from the middle.
+#[test]
+fn a_carried_capacity_narrows_exactly_as_a_specialized_one_over_both_representations() {
+    // The premise that the wide rows exercise the VIEWED decoder rather than
+    // the immediate one, grounded on the ABI's own range predicate instead of
+    // on belief about how a fixture lowers.
+    assert!(
+        crate::boundary_value::BoundaryWord::int_fits_immediate(-1)
+            && crate::boundary_value::BoundaryWord::int_fits_immediate(0)
+            && crate::boundary_value::BoundaryWord::int_fits_immediate(1),
+        "the three small rows must be representable as ImmediateInt"
+    );
+    assert!(
+        !crate::boundary_value::BoundaryWord::int_fits_immediate(-(1i64 << 62)),
+        "the negative one-limb row must be past the immediate range, or it \
+         exercises the immediate decoder's sign test rather than the view's"
+    );
+    assert!(
+        !crate::boundary_value::BoundaryWord::int_fits_immediate(i64::MAX),
+        "the immediate range must stop below i64::MAX, so a magnitude at or \
+         above u64::MAX cannot be an ImmediateInt and the wide rows must reach \
+         the sealed-view decoder"
+    );
+
+    for (name, capacity, expected_code, expected_capacity) in framed_capacity_rows() {
+        let specialized_capacity = capacity.clone();
+        crate::cranelift_backend::lowering::units::reset_capacity_phase_dispatch();
+        let (specialized_code, specialized_probe) =
+            run_capacity_fixture(&move |symbols| {
+                capacity_outcome_fixture(symbols, specialized_capacity.clone())
+            })
+            .unwrap_or_else(|error| panic!("{name}: specialized capacity compiles: {error:?}"));
+        let specialized_census =
+            crate::cranelift_backend::lowering::units::capacity_phase_dispatch();
+
+        let carried_capacity = capacity.clone();
+        crate::cranelift_backend::lowering::units::reset_capacity_phase_dispatch();
+        let (carried_code, carried_probe) = run_capacity_fixture(&move |symbols| {
+            carried_capacity_fixture(symbols, carried_capacity.clone())
+        })
+        .unwrap_or_else(|error| panic!("{name}: carried capacity compiles: {error:?}"));
+        let carried_census = crate::cranelift_backend::lowering::units::capacity_phase_dispatch();
+
+        // ⛔ The premise, asserted before the equality. Without it "the two
+        // fixtures agree" is satisfied by two fixtures that both took the
+        // specialized arm, and the carried route would be untested while every
+        // assertion below still passed.
+        assert_eq!(
+            specialized_census,
+            (1, 0),
+            "{name}: the specialized fixture must emit the specialized arm and only it"
+        );
+        assert_eq!(
+            carried_census,
+            (0, 1),
+            "{name}: the carried fixture must emit the carried arm and only it"
+        );
+
+        assert_eq!(
+            specialized_code, expected_code,
+            "{name}: the specialized narrowing's outcome"
+        );
+        assert_eq!(
+            carried_code, specialized_code,
+            "{name}: the carried narrowing must reach the same outcome as the specialized one"
+        );
+        assert_eq!(
+            carried_probe, specialized_probe,
+            "{name}: the carried narrowing must put the same value on the wire, \
+             the same number of times"
+        );
+        if expected_code == 41 {
+            assert_eq!(
+                carried_probe,
+                CapacityWireProbe {
+                    calls: 1,
+                    capacity: expected_capacity,
+                },
+                "{name}: a valid capacity dispatches exactly once, carrying its own magnitude"
+            );
+        } else {
+            assert_eq!(
+                carried_probe.calls, 0,
+                "{name}: an out-of-range capacity performs ZERO host dispatches"
+            );
+        }
+    }
+}
+
+/// **The framed failure taxonomy.** An out-of-range *`Int`* is `InvalidBounds`;
+/// a word that is not an exact `Int` at all is a carrier error, and is never
+/// relabelled.
+///
+/// MEASURED: on one fixture shape, three carried capacities produce three
+/// distinct outcomes — a valid `Int` returns 41 and dispatches once; an
+/// out-of-range `Int` returns 71 and dispatches zero times; a `Bool`, `Bytes`
+/// or `String` returns the emitted fail-closed `-1` and dispatches zero times.
+///
+/// CLAIMED: `valid == 0` is reachable only from a well-formed exact `Int`, so
+/// `InvalidBounds` cannot be read off a word that never denoted a number.
+///
+/// THE GAP: this reaches the wrong-tag guard (a `Bool` is an immediate whose
+/// tag is not `ImmediateInt`) and the wrong-class guard (`Bytes`/`String`
+/// resolve to nodes the `int_view` class guard refuses). It does **not** reach
+/// an unsealed magnitude or a wrong referent owner from checked source — those
+/// are `int_view`'s own guards, proven at their own layer by
+/// `boundary_value_clif`'s `AC-4` unsealed-readability control. What this
+/// control adds for them is that their status leaves through the same
+/// `require_i64(.., BOUNDARY_OK)` as the two reached here, which is why the
+/// third outcome is a distinct value rather than a shared one.
+///
+/// ⛔ The `-1` rows need the other two rows to mean anything. `-1` is the
+/// generic emitted refusal and is reached for any fail-closed reason, so a
+/// control asserting only "a `Bool` capacity fails" would pass on a lowering
+/// that failed for every capacity. The positive rows are what make it a
+/// taxonomy rather than three assertions that something went wrong.
+#[test]
+fn a_capacity_that_is_not_an_exact_int_fails_closed_and_is_never_invalid_bounds() {
+    const CARRIER_ERROR: i64 = -1;
+    const INVALID_BOUNDS: i64 = 71;
+    const ALLOCATED: i64 = 41;
+
+    let row = |what: &str, value: RuntimeExpr| {
+        crate::cranelift_backend::lowering::units::reset_capacity_phase_dispatch();
+        let outcome = run_capacity_fixture(&move |symbols| {
+            carried_capacity_fixture(symbols, value.clone())
+        })
+        .unwrap_or_else(|error| panic!("{what}: the fixture compiles: {error:?}"));
+        assert_eq!(
+            crate::cranelift_backend::lowering::units::capacity_phase_dispatch(),
+            (0, 1),
+            "{what}: the row must reach the CARRIED arm, or it says nothing about it"
+        );
+        outcome
+    };
+
+    // The two positive rows. Without them the refusals below are unanchored.
+    let (allocated, allocated_probe) = row("a valid Int", RuntimeExpr::Value(RuntimeValue::Int(8.into())));
+    assert_eq!(allocated, ALLOCATED, "a valid carried capacity allocates");
+    assert_eq!(
+        allocated_probe,
+        CapacityWireProbe { calls: 1, capacity: 8 },
+        "a valid carried capacity dispatches exactly once with its own magnitude"
+    );
+
+    let (bounded, bounded_probe) = row("an out-of-range Int", big(crate::Sign::NonNegative, &[0, 1]));
+    assert_eq!(
+        bounded, INVALID_BOUNDS,
+        "a well-formed Int that does not fit u64 takes the semantic InvalidBounds lane"
+    );
+    assert_eq!(bounded_probe.calls, 0, "and dispatches zero times");
+
+    // The taxonomy rows.
+    for (what, value) in [
+        ("a Bool", RuntimeExpr::Value(RuntimeValue::Bool(true))),
+        ("Bytes", RuntimeExpr::Value(RuntimeValue::Bytes(vec![1, 2, 3]))),
+        (
+            "a String",
+            RuntimeExpr::Value(RuntimeValue::String("not a number".to_string())),
+        ),
+    ] {
+        let (code, probe) = row(what, value);
+        assert_ne!(
+            code, INVALID_BOUNDS,
+            "{what} is not an exact Int, so it must NEVER be reported as InvalidBounds"
+        );
+        assert_ne!(code, ALLOCATED, "{what} must not allocate");
+        assert_eq!(
+            code, CARRIER_ERROR,
+            "{what} must fail closed through the carrier's own status check"
+        );
+        assert_eq!(probe.calls, 0, "{what} must perform zero host dispatches");
+    }
+}
+
+/// **The framed disposition discriminator.** The carried phase is admitted at
+/// the seat whose `Need` an emitted helper can satisfy, and still refused at a
+/// seat that genuinely needs a compile-time template.
+///
+/// MEASURED: one program shape, one closure boundary, two seats. A carried
+/// capacity at `BufferAllocate.capacity` compiles and allocates; a carried
+/// `Bytes` at `ConsoleWrite`'s byte-span seat refuses, and the refusal names
+/// that exact seat, operation and need.
+///
+/// CLAIMED: `Avail` is per seat rather than per phase — admitting `Carried`
+/// somewhere is not admitting it everywhere.
+///
+/// THE GAP: this shows the two seats disagree, not that the boundary sits at
+/// exactly the right place for every one of the thirteen operations. The
+/// population control is what covers the rest; this covers the pair the frame
+/// names, which is the pair a shared contract arm would have collapsed.
+#[test]
+fn the_carried_phase_is_admitted_at_the_capacity_seat_and_still_refused_at_a_template_seat() {
+    // The admitting side. Same closure boundary as the refusing side below, so
+    // the two differ in the SEAT and nothing else.
+    crate::cranelift_backend::lowering::units::reset_capacity_phase_dispatch();
+    let (allocated, probe) = run_capacity_fixture(&|symbols| {
+        carried_capacity_fixture(symbols, RuntimeExpr::Value(RuntimeValue::Int(8.into())))
+    })
+    .expect("a carried capacity is admitted at its seat");
+    assert_eq!(
+        crate::cranelift_backend::lowering::units::capacity_phase_dispatch(),
+        (0, 1),
+        "the admitting side must be the carried arm"
+    );
+    assert_eq!(allocated, 41);
+    assert_eq!(probe, CapacityWireProbe { calls: 1, capacity: 8 });
+
+    // The refusing side. `ConsoleWrite`'s byte-span seat needs a pointer and a
+    // length off a compile-time template; no emitted helper in this release
+    // satisfies that from a boundary word.
+    let error = run_capacity_fixture(&|_symbols| RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::LexicalClosure {
+            captures: Vec::new(),
+            params: vec!["payload".to_string()],
+            body: Box::new(RuntimeExpr::Effect {
+                family: "Console".to_string(),
+                operation: ken_host::HostOpV1::ConsoleWrite,
+                capability: None,
+                args: vec![
+                    RuntimeExpr::Construct {
+                        constructor: "ctor:prelude::Stream::Stdout".to_string(),
+                        args: Vec::new(),
+                    },
+                    RuntimeExpr::Var(0),
+                ],
+            }),
+        }),
+        args: vec![RuntimeExpr::Value(RuntimeValue::Bytes(b"probe".to_vec()))],
+    })
+    .expect_err("a carried byte span is refused at its seat");
+
+    let reason = format!("{error:?}");
+    // ⛔ The discriminating pair, not a substring list. The refusal must be the
+    // SEAT's -- naming which seat of which operation needs what -- and must not
+    // be the generic specialized-only surface's, which is the diagnostic the
+    // removed bulk conversion produced for every seat alike.
+    assert!(
+        reason.contains("Argument(1)")
+            && reason.contains("ConsoleWrite")
+            && reason.contains("BytesPointerLength"),
+        "the refusal must name the exact seat, operation and need; got {reason}"
+    );
+    assert!(
+        !reason.contains("is a specialized-only surface"),
+        "the refusal must not be the generic specialized-only surface's; got {reason}"
+    );
+}
+
+/// **The framed lowering closure.** Each of the two things this release did is
+/// removed in turn, and the exact refusal the frame names comes back.
+///
+/// MEASURED: with the carried capacity arm deleted, a carried capacity refuses
+/// at its own seat naming `BufferAllocate`, `Argument(0)` and `ExactIntU64`.
+/// With the eager all-argument projection restored, the same fixture refuses
+/// again — at the same seat, from reply synthesis, because the capacity is
+/// demanded as a template by a consumer that has no site-bound child for it.
+/// Neither refusal is the generic specialized-only surface's, and the unmutated
+/// fixture allocates.
+///
+/// CLAIMED: both halves of the release are load-bearing for the carried
+/// capacity row.
+///
+/// THE GAP: a mutation proves the row depends on the code it removes; it does
+/// not prove the code is *correct*. The phase pair is what carries correctness.
+/// What this adds is that a future edit reverting either half cannot pass
+/// quietly.
+#[test]
+fn removing_the_carried_capacity_arm_or_restoring_the_bulk_conversion_refuses_at_the_seat() {
+    let carried = || {
+        run_capacity_fixture(&|symbols| {
+            carried_capacity_fixture(symbols, RuntimeExpr::Value(RuntimeValue::Int(8.into())))
+        })
+    };
+
+    // ⛔ The positive control. Without it both refusals below are satisfied by
+    // a fixture that never compiled at all.
+    set_effect_seat_dispatch_mutation(EffectSeatDispatchMutation::Exact);
+    let (allocated, probe) = carried().expect("the unmutated carried capacity allocates");
+    assert_eq!(allocated, 41);
+    assert_eq!(probe, CapacityWireProbe { calls: 1, capacity: 8 });
+
+    for (mutation, what) in [
+        (
+            EffectSeatDispatchMutation::RemoveCarriedCapacityArm,
+            "deleting the carried capacity arm",
+        ),
+        (
+            EffectSeatDispatchMutation::RestoreBulkConversion,
+            "restoring the eager all-argument projection",
+        ),
+    ] {
+        set_effect_seat_dispatch_mutation(mutation);
+        let error = carried()
+            .map(|outcome| format!("{outcome:?}"))
+            .expect_err(&format!("{what} must refuse the carried capacity"));
+        let reason = format!("{error:?}");
+        assert!(
+            reason.contains("Argument(0)")
+                && reason.contains("BufferAllocate")
+                && reason.contains("ExactIntU64"),
+            "{what}: the refusal must name the exact seat, operation and need; got {reason}"
+        );
+        assert!(
+            !reason.contains("is a specialized-only surface"),
+            "{what}: the refusal must not be the generic specialized-only surface's; got {reason}"
+        );
+    }
+
+    set_effect_seat_dispatch_mutation(EffectSeatDispatchMutation::Exact);
+    carried().expect("the fixture allocates again once the mutation clears");
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// RT-CONTSRC-PRODUCER-LOCAL AC-1, control family 4 -- the SPECIALIZED SIBLING.
+//
+// The carried source-machine `Match` repair added an arm to the seat's operand
+// dispatch. This control is the other side of that change: it holds the
+// SPECIALIZED selection path still selecting the right case and delivering its
+// value, so the repair is measurably not a regression of the path it sits
+// beside.
+// ──────────────────────────────────────────────────────────────────────────
+
+/// The selecting constructor, and the one the mutation swaps in.
+///
+/// Same arity and same field, differing ONLY in identity. A mutation that
+/// also changed the shape would be red for a second reason and could not
+/// isolate selection.
+#[cfg(test)]
+const AC1_SIBLING_SELECTED: &str = "ctor:fixture::AC1Sibling::One";
+#[cfg(test)]
+const AC1_SIBLING_UNSELECTED: &str = "ctor:fixture::AC1Sibling::Other";
+
+/// The payload the selected arm binds and returns. Arbitrary, but it must not
+/// collide with [`AC1_SIBLING_DEFAULT_STATUS`] or the pair below could not tell
+/// "selected and delivered" from "fell to the default".
+#[cfg(test)]
+const AC1_SIBLING_PAYLOAD: i64 = 21;
+
+/// The status the match's closed default returns, spelled by
+/// `Lowering::seal_source_trap_branch`.
+#[cfg(test)]
+const AC1_SIBLING_DEFAULT_STATUS: i64 = -4;
+
+#[cfg(test)]
+const AC1_SIBLING_CALLEE: &str = "fixture::ac1_sibling::sel";
+
+/// `sel = \w -> match w { One x -> x }`, as a declared unit.
+#[cfg(test)]
+fn ac1_sibling_declaration() -> RuntimeDeclaration {
+    RuntimeDeclaration {
+        symbol: AC1_SIBLING_CALLEE.to_string(),
+        kind: RuntimeDeclarationKind::Transparent {
+            body: RuntimeExpr::LexicalClosure {
+                captures: Vec::new(),
+                params: vec!["w".to_string()],
+                body: Box::new(RuntimeExpr::Match {
+                    scrutinee: Box::new(RuntimeExpr::Var(0)),
+                    cases: vec![RuntimeMatchCase {
+                        constructor: AC1_SIBLING_SELECTED.to_string(),
+                        binders: 1,
+                        // The BOUND child, not a constant: a body returning a
+                        // literal would be green even if the projection were
+                        // wrong.
+                        body: RuntimeExpr::Var(0),
+                    }],
+                    default: RuntimeTrap {
+                        code: RuntimeTrapCode::PatternMatchFailure,
+                        message: "ac1 specialized sibling default".to_string(),
+                    },
+                }),
+            },
+        },
+        metadata: crate::RuntimeSymbolMetadata {
+            lowerability: Some(crate::RuntimeLowerabilityStatus::Supported),
+            ..crate::RuntimeSymbolMetadata::empty()
+        },
+    }
+}
+
+/// `ExitFailure(Call(DeclarationRef(sel), [<producer>(21)]))`, run as a whole
+/// process, returning its exit code.
+#[cfg(test)]
+fn run_ac1_specialized_sibling(producer: &str) -> i64 {
+    let declaration = ac1_sibling_declaration();
+    let mut declarations = BTreeMap::new();
+    declarations.insert(AC1_SIBLING_CALLEE, &declaration);
+    let program = RuntimeExpr::Construct {
+        constructor: crate::EXIT_FAILURE_CONSTRUCTOR.to_string(),
+        args: vec![RuntimeExpr::Call {
+            callee: Box::new(RuntimeExpr::DeclarationRef {
+                symbol: AC1_SIBLING_CALLEE.to_string(),
+            }),
+            args: vec![RuntimeExpr::Construct {
+                constructor: producer.to_string(),
+                args: vec![RuntimeExpr::Value(RuntimeValue::Int(
+                    AC1_SIBLING_PAYLOAD.into(),
+                ))],
+            }],
+        }],
+    };
+    let compiled = compile_expr_into_module(
+        new_jit_module().expect("JIT module"),
+        "ac1_specialized_sibling",
+        Linkage::Local,
+        &program,
+        &NativeSeedEnvironment::empty(),
+        declarations,
+        None,
+        true,
+        None,
+        Some(test_only_distinguished_root_join_plan()),
+        None,
+    )
+    .expect("the specialized sibling fixture lowers");
+    let input = BorrowedFixtureValue {
+        kind: 1,
+        tag: 0,
+        data: std::ptr::null(),
+        len: 0,
+    };
+    let mut host_context = ();
+    let invocation = RootIngressFixture {
+        process_input: &input,
+        host_context: (&mut host_context as *mut ()).cast(),
+        capability: 0,
+    };
+    compiled
+        .run(Some((&invocation as *const RootIngressFixture).cast()))
+        .expect("the specialized sibling fixture runs")
+        .1
+        .expect("the specialized sibling fixture returns an exit code")
+}
+
+/// `AC-1` control family 4 -- a SPECIALIZED constructor scrutinee still selects
+/// its case and delivers the bound child, end to end.
+///
+/// MEASURED: a whole-process fixture compiles and RUNS. With the selecting
+/// producer the process exits `21` -- the payload the case body bound and
+/// returned. With the producer swapped for a same-arity constructor the case
+/// list does not name, it exits `-4`, the match's closed default.
+///
+/// CLAIMED: the carried arm added to the source-machine `Match` operand
+/// dispatch did not disturb specialized selection, projection, or delivery of
+/// the selected value to the process boundary.
+///
+/// The pair is the control, and neither half is sufficient. `21` alone is
+/// green under an implementation that ignores the case list and always takes
+/// arm 0; `-4` alone is green under one that never selects anything. Only two
+/// producers differing in NOTHING but constructor identity, landing on two
+/// different outcomes, discriminate selection from both.
+///
+/// SCOPE -- what this does NOT establish, stated because the name invites
+/// the stronger reading. This fixture is measured NOT to reach
+/// `SourceContinuation::MatchScrutinee`: a closure or unit parameter bound to a
+/// compile-time `Construct` template stays `Specialized(Lowered::Constructor)`
+/// and its case is selected at COMPILE time, before the source machine's
+/// operand dispatch runs. So this row must never be read as covering that
+/// seat's `Specialized` arm -- it covers the specialized SELECTION PATH only.
+/// The seat's arms are reached by a cross-unit carried producer, which no rig
+/// in this crate supplies.
+///
+/// Promise class: durable invariant. It asserts a relation between two
+/// producers and their outcomes, not a snapshot: any change preserving
+/// select-and-deliver keeps both halves green, and any change breaking
+/// selection reddens one.
+#[test]
+fn ac1_a_specialized_constructor_scrutinee_still_selects_and_delivers() {
+    let selected = run_ac1_specialized_sibling(AC1_SIBLING_SELECTED);
+    assert_eq!(
+        selected, AC1_SIBLING_PAYLOAD,
+        "the selecting producer must reach the case body and deliver the child \
+         it bound"
+    );
+
+    let unselected = run_ac1_specialized_sibling(AC1_SIBLING_UNSELECTED);
+    assert_ne!(
+        unselected, AC1_SIBLING_PAYLOAD,
+        "DISCRIMINATOR: a producer the case list does not name must not reach \
+         the selected arm's body. Equal here means selection is not keyed on \
+         constructor identity at all"
+    );
+    assert_eq!(
+        unselected, AC1_SIBLING_DEFAULT_STATUS,
+        "the unselected producer must take the match's CLOSED DEFAULT, not a \
+         trap, a neighbouring case, or a representation refusal"
+    );
+}

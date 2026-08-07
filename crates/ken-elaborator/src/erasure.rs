@@ -590,7 +590,136 @@ struct NativeLoweringPlanCollector {
     consumed_computational_ih_slots: BTreeSet<u64>,
     consumed_computational_ih_calls: BTreeSet<u64>,
     pending_computational_ih_slots: Vec<(CheckedComputationalIHSlotSeed, Vec<u64>, u64)>,
-    pending_computational_ih_calls: Vec<(CheckedComputationalIHCallSeed, Vec<u64>, Option<u64>)>,
+    pending_computational_ih_calls: Vec<(
+        CheckedComputationalIHCallSeed,
+        Vec<u64>,
+        Option<u64>,
+        ComputationalIHConsumptionRoute,
+    )>,
+}
+
+/// **`D7` checkpoint `1b` -- the CLOSED set of erasure routes that can consume
+/// a checked computational IH application, and the SOLE authority for how many
+/// operands each of them injects.**
+///
+/// ⭐⭐ **Two distinct lawful coordinates meet here, and collapsing them into
+/// one number is the defect `1b` removes.**
+///
+/// | coordinate | what it counts | who owns it |
+/// |---|---|---|
+/// | source occurrence arity | the operands the checked application actually wrote | the checked seed, `CheckedComputationalIHCallSeed::arity` |
+/// | complete emitted arity | the operands the emitted `RuntimeExpr::Call` carries | the consuming route |
+///
+/// The two differ exactly when a route **appends** an operand the source never
+/// wrote. Precisely one route does: the Host-`Vis` continuation, which pushes
+/// the host result as `RuntimeExpr::Var(0)`.
+///
+/// ⛔ **The delta is not a number a caller may supply.** An unconstrained
+/// `usize` parameter is the same defect facing the other way: it happens to be
+/// `1` on the measured path and nothing makes it wrong anywhere else. The delta
+/// is a *property of the route*, so the route is what travels, and adding a
+/// fourth route is a compile error in [`Self::injected_operands`] rather than a
+/// silent zero.
+///
+/// ⛔ **The seed's own `arity` may NOT absorb the injected operand.** A nullary
+/// force reaches the non-injecting routes too, where the source count and the
+/// head's Pi telescope legitimately differ; moving the correction into the
+/// producer therefore shifts applications that inject nothing. Measured: it
+/// takes the five `fs_*` parity rows off their exact framed base refusal and
+/// onto a stale-binding error.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ComputationalIHConsumptionRoute {
+    /// `lower_body_term_with_plans` -- an ordinary erased application, which
+    /// emits exactly the operands the source wrote.
+    OrdinaryApplication,
+    /// The head of `lower_checked_host_computation` -- a checked IH application
+    /// standing as the whole host computation. It completes no `Vis`
+    /// continuation, so it injects nothing either.
+    CheckedHostComputationTail,
+    /// The `Vis` continuation in `lower_checked_host_computation` -- the one
+    /// route that appends the host result.
+    CheckedHostVisContinuation,
+}
+
+impl ComputationalIHConsumptionRoute {
+    /// How many operands this route APPENDS that the source application never
+    /// wrote.
+    ///
+    /// ⭐ The three arms are spelled separately rather than folded into one
+    /// `0 => ..` pattern: each route's answer is its own decision, and a future
+    /// injecting route must be able to change exactly one of them.
+    fn injected_operands(self) -> u64 {
+        // The `cfg(test)` mutation below corrupts ONLY the number the template
+        // is built from. The Host-`Vis` emitter still appends exactly one
+        // `Var(0)`, so under either mutation the template and the emitted call
+        // disagree -- which is the condition the Runtime marker gate exists to
+        // refuse, and the condition the controls drive it with.
+        #[cfg(test)]
+        if matches!(self, Self::CheckedHostVisContinuation) {
+            match HOST_VIS_INJECTION_MUTATION.with(std::cell::Cell::get) {
+                HostVisInjectionMutation::None => {}
+                HostVisInjectionMutation::OmitInjectedResult => return 0,
+                HostVisInjectionMutation::DoubleCountInjectedResult => return 2,
+            }
+        }
+        match self {
+            Self::OrdinaryApplication => 0,
+            Self::CheckedHostComputationTail => 0,
+            Self::CheckedHostVisContinuation => 1,
+        }
+    }
+}
+
+/// The COMPLETE emitted application's operand count: the source occurrence's
+/// own binding count plus exactly what its consuming route injects.
+///
+/// ⛔ Both steps are checked. No target Ken builds for has a `usize` wider than
+/// `u64`, but the conversion is exactly where that assumption would live, so it
+/// is stated rather than left implicit; and the addition cannot wrap into a
+/// small arity that the marker gate would then happily accept.
+fn complete_emitted_arity(
+    source_arity: usize,
+    route: ComputationalIHConsumptionRoute,
+) -> Option<u64> {
+    u64::try_from(source_arity)
+        .ok()?
+        .checked_add(route.injected_operands())
+}
+
+/// **`cfg(test)`-only corruption of the Host-`Vis` route's injected-operand
+/// count.** Its whole purpose is to make the template disagree with the
+/// application the same route emits, so that the disagreement can be driven
+/// into the real Runtime marker gate rather than asserted arithmetically here.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum HostVisInjectionMutation {
+    None,
+    OmitInjectedResult,
+    DoubleCountInjectedResult,
+}
+
+#[cfg(test)]
+thread_local! {
+    static HOST_VIS_INJECTION_MUTATION: std::cell::Cell<HostVisInjectionMutation> =
+        const { std::cell::Cell::new(HostVisInjectionMutation::None) };
+}
+
+/// Run `body` with the Host-`Vis` injected-operand count mutated, then clear it.
+///
+/// ⛔ There is deliberately no restore-on-unwind guard. A panic inside the scope
+/// means the fixture itself failed, and the test binary is going down with it;
+/// catching the unwind here would only let a broken fixture look tidy. Rust runs
+/// each test in its own thread, and the cell is thread-local, so a panicking row
+/// cannot leak the mutation into a sibling row.
+#[cfg(test)]
+fn with_host_vis_injection_mutation<R>(
+    mutation: HostVisInjectionMutation,
+    body: impl FnOnce() -> R,
+) -> R {
+    HOST_VIS_INJECTION_MUTATION.with(|cell| cell.set(mutation));
+    let result = body();
+    HOST_VIS_INJECTION_MUTATION.with(|cell| cell.set(HostVisInjectionMutation::None));
+    result
 }
 
 impl NativeLoweringPlanCollector {
@@ -835,11 +964,21 @@ impl NativeLoweringPlanCollector {
         Ok(result)
     }
 
+    /// **`D7` checkpoint `1b` — bind this occurrence at its SOURCE arity, and
+    /// record the ROUTE that will complete its emitted application.**
+    ///
+    /// ⭐ `arity` is the source application's own argument count, and it is what
+    /// binds this occurrence to its seed -- that binding stays exactly as it
+    /// was, because it is how a stale or mis-ordered seed is caught. `route` is
+    /// the separate, closed authority for the operands the emitter appends; see
+    /// [`ComputationalIHConsumptionRoute`] for why the delta travels as a route
+    /// rather than as a number.
     fn consume_computational_ih_call(
         &mut self,
         owner: &StableSymbol,
         slot_template_id: u64,
         arity: usize,
+        route: ComputationalIHConsumptionRoute,
         occurrence_path: &[u64],
         parent_frame: Option<u64>,
     ) -> Result<u64, ErasureError> {
@@ -881,10 +1020,22 @@ impl NativeLoweringPlanCollector {
                 "computational IH call template was consumed more than once",
             ));
         }
+        // The checked conversion and addition are performed HERE, where a
+        // refusal is a real diagnostic rather than a panic in the finisher.
+        // `finish` re-derives the same value from the same closed route, so its
+        // own expect is unreachable by construction.
+        if complete_emitted_arity(arity, route).is_none() {
+            return Err(expression_lowering_error(
+                owner,
+                "checked_computational_ih_call_arity_overflow",
+                "complete emitted computational IH application arity does not fit runtime IR",
+            ));
+        }
         self.pending_computational_ih_calls.push((
             seed.clone(),
             occurrence_path.to_vec(),
             parent_frame,
+            route,
         ));
         Ok(seed.call_template_id)
     }
@@ -1111,6 +1262,7 @@ impl OrientedSubcontinuationPlanCollector {
             CheckedComputationalIHCallSeed,
             Vec<u64>,
             Option<u64>,
+            ComputationalIHConsumptionRoute,
         )>,
     ) -> ken_runtime::OrientedSubcontinuationPlanV1 {
         assert_eq!(
@@ -1245,7 +1397,7 @@ impl OrientedSubcontinuationPlanCollector {
             computational_ih_slots.push(slot);
         }
         let mut computational_ih_calls = Vec::with_capacity(pending_computational_ih_calls.len());
-        for (seed, occurrence_path, parent_frame) in pending_computational_ih_calls {
+        for (seed, occurrence_path, parent_frame, route) in pending_computational_ih_calls {
             let slot = computational_ih_slots
                 .iter()
                 .find(|slot| slot.slot_template_id == seed.slot_template_id)
@@ -1271,7 +1423,17 @@ impl OrientedSubcontinuationPlanCollector {
                 declaration: seed.owner.to_string(),
                 checked_occurrence_path: occurrence_path,
                 slot_template_id: seed.slot_template_id,
-                arity: seed.arity as u64,
+                // ⭐ **THE `1b` CORRECTION.** The template names the COMPLETE
+                // erased Runtime application -- the checked arguments plus
+                // exactly what the emitting route injects -- so the marker's
+                // entry and its static-worker consumption compare a complete
+                // `Call`'s argument count against an arity describing the same
+                // application. ⛔ The marker law itself is untouched: both still
+                // compare a complete count against an immutable arity.
+                arity: complete_emitted_arity(seed.arity, route).expect(
+                    "consume_computational_ih_call already refused an unrepresentable \
+                     complete emitted arity",
+                ),
                 local_telescope: seed.local_telescope,
                 result_interface: seed.result_interface.clone(),
                 callee_segment_site_id: slot.segment_site_id,
@@ -2037,6 +2199,7 @@ fn lower_body_term_with_plans(
             &owner,
             slot_template_id,
             arguments.len(),
+            ComputationalIHConsumptionRoute::OrdinaryApplication,
             path,
             parent_oriented_frame,
         )?;
@@ -2553,6 +2716,7 @@ fn lower_checked_host_computation(
             &owner,
             slot_template_id,
             arguments.len(),
+            ComputationalIHConsumptionRoute::CheckedHostComputationTail,
             path,
             parent_oriented_frame,
         )?;
@@ -2952,10 +3116,15 @@ fn lower_checked_host_computation(
                 })?;
                 let mut continuation_path = path.to_vec();
                 continuation_path.push(3);
+                // ⭐ The Host-`Vis` route appends the host result below, so the
+                // application it emits is one operand longer than the one the
+                // source wrote. ⛔ The seed binding still uses the source count;
+                // the extra operand travels as the ROUTE, never as a number.
                 let call_template_id = plans.consume_computational_ih_call(
                     &owner,
                     slot_template_id,
                     arguments.len(),
+                    ComputationalIHConsumptionRoute::CheckedHostVisContinuation,
                     &continuation_path,
                     parent_oriented_frame,
                 )?;
@@ -3005,6 +3174,19 @@ fn lower_checked_host_computation(
                         0,
                     ));
                 }
+                // **The injected host result** -- the one operand
+                // [`ComputationalIHConsumptionRoute::CheckedHostVisContinuation`]
+                // declares, and the reason this route's template arity exceeds
+                // its source binding count by exactly one.
+                //
+                // ⛔ **No local assertion is written here on purpose.** A check
+                // that the emitted length equals `arguments.len() + 1` would
+                // compare this route's arithmetic against itself, and would go
+                // on passing if the template were built from a different number
+                // entirely. The independent oracle is the Runtime marker gate,
+                // which compares this `Call`'s length against the arity in the
+                // plan -- a value produced by the other side of the seam, and
+                // one that refuses before a function is defined.
                 args.push(RuntimeExpr::Var(0));
                 RuntimeExpr::CheckedComputationalIHInvocation {
                     call_template_id,
@@ -6022,6 +6204,571 @@ mod px7l_tests {
             ),
             "checked_computational_ih_call_unconsumed"
         );
+    }
+
+    // -- `D7` checkpoint `1b`: one complete application, one arity ----------
+    //
+    // The defect these pin is a template describing an application ONE OPERAND
+    // SHORTER than the one the emitter produces, because the Host-`Vis` route
+    // appends the host result and the template counted only what the source
+    // wrote.
+    //
+    // ⭐⭐ **Every row below drives a REAL erasure route.** The predecessor
+    // controls hand-built the slot, the seed, the frame and the injected count,
+    // never traversed the Host-`Vis` producer, and compared the resulting number
+    // against a separately computed `source + 1` -- arithmetic against itself.
+    // Here the fixture supplies only the checked inputs a route consumes; the
+    // route decides its own injected count, emits its own application, and both
+    // sides of the relation are then READ OFF that one traversal.
+    //
+    // ⭐ And the two mutation rows do not assert a number at all: they feed the
+    // real route's disagreeing template and marker into the EXISTING Runtime
+    // marker gate, which is the independent oracle -- a different crate, reading
+    // the plan rather than the emitter's arithmetic, refusing before a function
+    // is defined. Delete that gate and those rows go red.
+
+    /// Install the checked SLOT side of one IH occurrence, so the fixtures below
+    /// vary exactly one thing: the route that consumes the CALL.
+    ///
+    /// ⛔ The slot and its enclosing frame are installed directly. They are not
+    /// what is under test, and driving a whole match view through the slot
+    /// consumer would add moving parts to a one-variable measurement.
+    fn ih_call_plans(owner: &StableSymbol, source_arguments: usize) -> NativeLoweringPlanCollector {
+        let constructor = StableSymbol::constructor(
+            &StableSymbol::declaration("d7-1b-arity", &[], "Tree"),
+            "Step",
+        );
+        let slot = CheckedComputationalIHSlotSeed {
+            slot_template_id: 7,
+            owner: owner.clone(),
+            match_ordinal: 0,
+            branch_ordinal: 0,
+            constructor,
+            recursive_position: 0,
+            method_binder_ordinal: 0,
+            local_telescope: Vec::new(),
+            ih_interface: test_answer_interface(),
+        };
+        let call = CheckedComputationalIHCallSeed {
+            call_template_id: 11,
+            owner: owner.clone(),
+            slot_template_id: 7,
+            occurrence_ordinal: 0,
+            // The SOURCE application's argument count, which is what binds this
+            // occurrence to its seed and which `1b` deliberately leaves alone.
+            arity: source_arguments,
+            local_telescope: Vec::new(),
+            result_interface: test_answer_interface(),
+        };
+        let mut collector = NativeLoweringPlanCollector::new(
+            test_answer_symbols(),
+            Vec::new(),
+            vec![slot.clone()],
+            vec![call],
+        );
+        collector
+            .oriented
+            .frames
+            .push(ken_runtime::OrientedSubcontinuationFramePlanV1 {
+                frame_id: 0,
+                segment_site_id: 0,
+                declaration: owner.to_string(),
+                checked_occurrence_path: vec![0],
+                semantic_position: 0,
+                input_interface: test_answer_interface(),
+                output_interface: test_answer_interface(),
+                runtime_frame_fingerprint: 0,
+                occurrence_binding_fingerprint: 0,
+                control_witness: ken_runtime::OrientedControlWitnessV1::DistinguishedRoot,
+            });
+        collector
+            .pending_computational_ih_slots
+            .push((slot, vec![0], 0));
+        collector.consumed_computational_ih_slots.insert(7);
+        collector
+    }
+
+    /// The checked IH application the routes consume: the slot-`7` binder at
+    /// de Bruijn `0`, applied to `source_arguments` ordinary operands.
+    fn ih_application(source_arguments: usize) -> CheckedCoreBodyTerm {
+        (0..source_arguments).fold(
+            CheckedCoreBodyTerm::Variable { de_bruijn_index: 0 },
+            |function, _| CheckedCoreBodyTerm::Application {
+                function: Box::new(function),
+                argument: Box::new(CheckedCoreBodyTerm::Variable { de_bruijn_index: 1 }),
+            },
+        )
+    }
+
+    /// The binder run the routes see: one live computational IH at slot `7`,
+    /// then two ordinary binders.
+    fn ih_remap() -> BranchBinderRemap {
+        BranchBinderRemap::default().enter_match(2, 1, true, vec![7])
+    }
+
+    /// How many operands the marker's application ACTUALLY carries.
+    ///
+    /// ⛔ A nullary ordinary IH emits its bare callee rather than a `Call`, so
+    /// "no application" is `0` operands and not a fixture error. That shape is
+    /// itself refused by the Runtime marker gate, on a different clause.
+    fn emitted_operand_count(marker: &RuntimeExpr) -> usize {
+        let RuntimeExpr::CheckedComputationalIHInvocation { body, .. } = marker else {
+            panic!("the route must emit a checked computational IH marker, got {marker:?}")
+        };
+        match body.as_ref() {
+            RuntimeExpr::Call { args, .. } => args.len(),
+            _ => 0,
+        }
+    }
+
+    /// A static `FSOp.ReadFile` operation reading the two ORDINARY binders.
+    ///
+    /// ⛔ Deliberately not the IH binder at `0`: the operation is scenery here,
+    /// and reusing the induction hypothesis as a capability would make the
+    /// fixture say something it does not mean.
+    fn host_vis_operation(spine: &CheckedHostSpineV1) -> CheckedCoreBodyTerm {
+        let leaf = apply_constructor(
+            constructor_view(&spine.fs_family, "ReadFile", 1, 2),
+            vec![
+                erased(),
+                CheckedCoreBodyTerm::Variable { de_bruijn_index: 1 },
+                CheckedCoreBodyTerm::Variable { de_bruijn_index: 2 },
+            ],
+        );
+        apply_constructor(
+            checked_core::CheckedCoreConstructorView {
+                symbol: spine.in_l.clone(),
+                ..constructor_view(&family("Coproduct"), "InL", 2, 1)
+            },
+            vec![erased(), erased(), leaf],
+        )
+    }
+
+    /// Drive the REAL Host-`Vis` continuation route on `Vis op k`, where `k` is
+    /// the checked IH application. Returns the marker the route emitted and the
+    /// plan the same traversal produced.
+    fn host_vis_route(
+        source_arguments: usize,
+    ) -> (RuntimeExpr, ken_runtime::OrientedSubcontinuationPlanV1) {
+        let owner = StableSymbol::declaration("d7-1b-arity", &[], "main");
+        let spine = spine();
+        let mut plans = ih_call_plans(&owner, source_arguments);
+        let term = apply_constructor(
+            checked_core::CheckedCoreConstructorView {
+                symbol: spine.vis.clone(),
+                ..constructor_view(&family("ITree"), "Vis", 2, 2)
+            },
+            vec![
+                erased(),
+                erased(),
+                host_vis_operation(&spine),
+                ih_application(source_arguments),
+            ],
+        );
+        let remap = ih_remap();
+        let mut stack = vec![owner.clone()];
+        let lowered = lower_checked_host_computation(
+            &term,
+            &BTreeMap::new(),
+            &checked_core::CheckedCoreSemanticInputs::default(),
+            &mut stack,
+            &owner,
+            3,
+            &spine,
+            Some(&remap),
+            &[0],
+            Some(&mut plans),
+            Some(0),
+        )
+        .expect("the Vis continuation lowers through the real Host-Vis producer");
+        // `Vis` becomes the host effect bound around its continuation; the
+        // continuation is the marker this checkpoint is about.
+        let RuntimeExpr::Let { body, .. } = lowered else {
+            panic!("a static Host-Vis lowers to its effect bound around the continuation")
+        };
+        let (_, plan) = plans.finish();
+        (*body, plan)
+    }
+
+    /// Drive the REAL ordinary application route on the same checked IH.
+    fn ordinary_route(
+        source_arguments: usize,
+    ) -> (RuntimeExpr, ken_runtime::OrientedSubcontinuationPlanV1) {
+        let owner = StableSymbol::declaration("d7-1b-arity", &[], "main");
+        let mut plans = ih_call_plans(&owner, source_arguments);
+        let remap = ih_remap();
+        let mut stack = vec![owner.clone()];
+        let lowered = lower_body_term_with_plans(
+            &ih_application(source_arguments),
+            &BTreeMap::new(),
+            &checked_core::CheckedCoreSemanticInputs::default(),
+            &mut stack,
+            &owner,
+            3,
+            Some(&remap),
+            &[0],
+            &mut plans,
+            Some(0),
+        )
+        .expect("the ordinary application lowers through the real marker consumer");
+        let (_, plan) = plans.finish();
+        (lowered, plan)
+    }
+
+    /// The one template a route produced.
+    fn only_template_arity(plan: &ken_runtime::OrientedSubcontinuationPlanV1) -> u64 {
+        assert_eq!(plan.computational_ih_calls.len(), 1);
+        plan.computational_ih_calls[0].arity
+    }
+
+    /// **Feed a route's own marker and its own plan into the EXISTING Runtime
+    /// marker gate**, and report the refusal that gate produced.
+    ///
+    /// ⭐⭐ This is the independent oracle. The elaborator does not get to say
+    /// whether its template and its emission agree: `ken-runtime` decodes the
+    /// arity out of the encoded plan, counts the operands in the emitted `Call`,
+    /// and refuses at marker ENTRY -- before any function is defined or any
+    /// instruction emitted for it.
+    ///
+    /// ⛔ **Everything below the marker is transport scaffolding, and none of it
+    /// is what the rows measure.** `ken-runtime` refuses to lower a checked
+    /// marker that is not seated in the declaration shape its transport
+    /// preflight recognises -- a frame marker over a computational match, the
+    /// slot marker in the selected case, the call marker inside that -- so the
+    /// fixture supplies exactly that seat. The MARKER and the PLAN's call
+    /// template are the real route's output and are inserted unchanged.
+    fn runtime_marker_gate_refusal(
+        marker: RuntimeExpr,
+        mut plan: ken_runtime::OrientedSubcontinuationPlanV1,
+    ) -> Option<(&'static str, String)> {
+        let owner = StableSymbol::declaration("d7-1b-arity", &[], "main");
+        let symbol = owner.to_string();
+        let constructor =
+            StableSymbol::constructor(&StableSymbol::declaration("d7-1b-arity", &[], "Tree"), "Step")
+                .to_string();
+        let cases = vec![RuntimeComputationalMatchCase {
+            constructor: constructor.clone(),
+            argument_binders: 1,
+            recursive_positions: vec![0],
+            body: RuntimeExpr::CheckedComputationalIHSlots {
+                slot_template_ids: vec![7],
+                checked_occurrence_paths: vec![vec![0]],
+                body: Box::new(marker),
+            },
+        }];
+        let default = RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "d7-1b marker-gate fixture".to_string(),
+        };
+        // The frame marker's fingerprint is a fact about the match it wraps, so
+        // it can only be settled once the match exists. The plan row it lands on
+        // is the frame this fixture installed itself.
+        let frame_fingerprint =
+            ken_runtime::compiler_private_computational_match_frame_fingerprint(&cases, &default);
+        let body = RuntimeExpr::Closure {
+            captures: Vec::new(),
+            params: vec!["scrutinee".to_string()],
+            body: Box::new(RuntimeExpr::CheckedSubcontinuationFrame {
+                frame_id: 0,
+                body: Box::new(RuntimeExpr::ComputationalMatch {
+                    scrutinee: Box::new(RuntimeExpr::Construct {
+                        constructor,
+                        args: vec![RuntimeExpr::Value(RuntimeValue::Int(0.into()))],
+                    }),
+                    cases,
+                    default,
+                }),
+            }),
+        };
+        let declaration = RuntimeDeclaration {
+            symbol: symbol.clone(),
+            kind: RuntimeDeclarationKind::Transparent { body },
+            metadata: RuntimeSymbolMetadata {
+                lowerability: Some(RuntimeLowerabilityStatus::Supported),
+                ..RuntimeSymbolMetadata::empty()
+            },
+        };
+        let frame = plan
+            .frames
+            .iter_mut()
+            .find(|frame| frame.frame_id == 0)
+            .expect("the fixture installed exactly one frame");
+        frame.runtime_frame_fingerprint = frame_fingerprint;
+        frame.occurrence_binding_fingerprint =
+            ken_runtime::compiler_private_oriented_occurrence_binding_fingerprint(frame);
+        let mut program = RuntimeProgram {
+            package_identity: "d7-1b-marker-gate".to_string(),
+            core_semantic_hash: 0,
+            artifact_hash: 0,
+            erased_core: ErasedExecutableCore {
+                symbols: BTreeSet::new(),
+                metadata: RuntimeMetadata::default(),
+            },
+            declarations: vec![declaration],
+            examples: Vec::new(),
+        };
+        // ⭐ The marker LOCATIONS are bound by the same production function the
+        // driver uses, not transcribed by hand: a fixture that authored them
+        // would be free to author them consistently with a template it also
+        // authored, and the preflight would then be measuring nothing.
+        bind_oriented_runtime_marker_locations(&owner, &program, &mut plan)
+            .expect("the fixture's declaration seats every marker the plan names");
+        program
+            .erased_core
+            .metadata
+            .checked_core
+            .metadata
+            .insert("oriented-plan".to_string(), plan.canonical_bytes());
+        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Bool(true));
+        let example = RuntimeExample {
+            name: "d7-1b-marker-gate".to_string(),
+            checked_core_shape: "CheckedComputationalIHInvocation".to_string(),
+            ir: RuntimeExpr::Call {
+                callee: Box::new(RuntimeExpr::DeclarationRef { symbol }),
+                args: vec![RuntimeExpr::Value(RuntimeValue::Int(0.into()))],
+            },
+            observation: observation.clone(),
+        };
+        program.examples.push(example.clone());
+        // ⛔ **The OBJECT-emitting entry, deliberately.** It is the entry that
+        // carries the checked plan into lowering at all -- the differential
+        // entry drops it, and a marker with no plan is refused by a different
+        // clause that would make every row below vacuous. It is also what makes
+        // "before definition or emission" observable: an `Err` here is an object
+        // that was never produced.
+        let artifact = RuntimeArtifactIdentity {
+            package_identity: program.package_identity.clone(),
+            core_semantic_hash: program.core_semantic_hash,
+            artifact_hash: program.artifact_hash,
+        };
+        let target = RuntimeIrTargetIdentity::from_example(&example);
+        let unavailable_fact = |reason: &str| RuntimeIrEvidenceFact::Unavailable {
+            reason: reason.to_string(),
+        };
+        let run_report = RuntimeIrRunReport {
+            evaluator: RuntimeIrEvaluator::DirectRuntimeIrEvaluatorV1,
+            target: target.clone(),
+            artifact: artifact.clone(),
+            observation: RuntimeIrObservation {
+                artifact,
+                target: target.clone(),
+                observation,
+                evidence_source: "D7 1b marker-gate control".to_string(),
+            },
+            evidence: RuntimeIrRunEvidence {
+                package_identity: program.package_identity.clone(),
+                core_semantic_hash: program.core_semantic_hash,
+                runtime_artifact_hash: program.artifact_hash,
+                target_example: target.example.clone(),
+                checked_core_shape: target.checked_core_shape.clone(),
+                evidence_sources: BTreeMap::new(),
+                unavailable: BTreeSet::new(),
+            },
+            trust: RuntimeIrTrustReport {
+                tier: RuntimeIrTrustTier::RuntimeIrObservation,
+                evaluator: unavailable_fact("D7 1b marker-gate control does not run the example"),
+                interpreter_oracle: unavailable_fact("no interpreter oracle in this control"),
+                native_backend: unavailable_fact("the control measures lowering admission only"),
+                object_artifact: unavailable_fact("the control measures lowering admission only"),
+                linker: unavailable_fact("no linker in this control"),
+                source_level_proof: unavailable_fact("not a source-level semantics proof"),
+            },
+        };
+        match emit_runtime_ir_object_with_cranelift(
+            &program,
+            &run_report,
+            &NativeSeedEnvironment::empty(),
+            "ken_d7_1b_marker_gate",
+        ) {
+            Ok(_) => None,
+            Err(CraneliftBackendError::Unsupported(UnsupportedLowering { construct, reason })) => {
+                Some((construct, reason))
+            }
+            Err(other) => Some(("BackendFailure", format!("{other:?}"))),
+        }
+    }
+
+    /// The exact substring of the Runtime marker gate's arity refusal.
+    const MARKER_ARITY_REFUSAL: &str = "checked template names arity";
+
+    /// The construct every plan-, transport- and marker-level refusal in
+    /// `ken-runtime` is raised under.
+    ///
+    /// ⭐⭐ **This is the complete positive control, and it is why the unmutated
+    /// row is evidence rather than a coincidence.** A fixture that never reached
+    /// the arity comparison would also fail to produce the arity refusal -- so
+    /// "no arity refusal" alone proves nothing. Refusing under a DIFFERENT
+    /// construct proves more: the transport preflight accepted the marker
+    /// ledger, the marker resolved its template, it wrapped a complete
+    /// application, and the arity comparison ran and passed. Every one of those
+    /// failures would have named this construct.
+    ///
+    /// Measured: the unmutated fixture refuses at `Call` / `callee is not a
+    /// closure` -- a refusal from lowering the marker's BODY, downstream of the
+    /// gate. The exact downstream text is not asserted; it belongs to the
+    /// fixture's scaffolding rather than to this property, and pinning it would
+    /// red this row on unrelated lowering work.
+    const CHECKED_PLAN_CONSTRUCT: &str = "OrientedSubcontinuationPlanV1";
+
+    /// A real nullary Host-`Vis` continuation is ONE operand at both
+    /// coordinates: the route injects the host result, the emitted application
+    /// carries it, and the template names it.
+    ///
+    /// ⭐ The assertion is the RELATION -- template arity against the operand
+    /// count this same traversal emitted. The literal `1` is asserted separately
+    /// so the row also pins which shape was exercised.
+    #[test]
+    fn a_real_nullary_host_vis_continuation_is_one_operand_throughout() {
+        let (marker, plan) = host_vis_route(0);
+        assert_eq!(
+            emitted_operand_count(&marker),
+            1,
+            "the source wrote nothing, so the emitted application is the injected host result alone"
+        );
+        assert_eq!(
+            only_template_arity(&plan),
+            emitted_operand_count(&marker) as u64,
+            "the template names the application the route actually emitted"
+        );
+    }
+
+    /// A real n-argument Host-`Vis` continuation is `n + 1` at both coordinates.
+    ///
+    /// ⭐ Two values of n, because one row cannot distinguish "adds the injected
+    /// operand" from "returns a constant".
+    #[test]
+    fn a_real_n_argument_host_vis_continuation_is_n_plus_one_throughout() {
+        for source_arguments in [1usize, 3] {
+            let (marker, plan) = host_vis_route(source_arguments);
+            assert_eq!(
+                emitted_operand_count(&marker),
+                source_arguments + 1,
+                "the Host-Vis route emits the checked arguments plus the injected host result"
+            );
+            assert_eq!(
+                only_template_arity(&plan),
+                emitted_operand_count(&marker) as u64,
+                "the template names the application the route actually emitted"
+            );
+        }
+    }
+
+    /// A real ordinary non-Host application injects nothing and stays at `n`.
+    ///
+    /// ⭐⭐ **This is the scoping half, and without it every row above is
+    /// equally consistent with a global `+1`** that would shift every
+    /// application in the program -- which is exactly the defect the first
+    /// attempt at this checkpoint shipped, and exactly what took the five `fs_*`
+    /// parity rows off their framed base refusal.
+    #[test]
+    fn a_real_ordinary_application_injects_nothing_and_keeps_its_own_arity() {
+        for source_arguments in [0usize, 1, 2] {
+            let (marker, plan) = ordinary_route(source_arguments);
+            assert_eq!(
+                emitted_operand_count(&marker),
+                source_arguments,
+                "an ordinary application emits exactly what the source wrote"
+            );
+            assert_eq!(
+                only_template_arity(&plan),
+                source_arguments as u64,
+                "and its template names exactly that, with no injected operand"
+            );
+        }
+    }
+
+    /// **The unmutated Host-`Vis` route gets PAST the Runtime marker gate's
+    /// arity comparison.**
+    ///
+    /// ⭐⭐ This is the positive control for the two mutation rows, and it is
+    /// what makes their refusals evidence rather than coincidence. A fixture
+    /// that never reached the comparison would also produce "no arity refusal"
+    /// here -- so the row additionally asserts that none of the gate's EARLIER
+    /// clauses fired, which is only possible if the marker, its `Call` and its
+    /// template were all present and well-formed at the comparison.
+    #[test]
+    fn the_unmutated_host_vis_marker_passes_the_runtime_marker_gate() {
+        for source_arguments in [0usize, 2] {
+            let (marker, plan) = host_vis_route(source_arguments);
+            let Some((construct, reason)) = runtime_marker_gate_refusal(marker, plan) else {
+                continue;
+            };
+            assert!(
+                !reason.contains(MARKER_ARITY_REFUSAL),
+                "the correct template agrees with the emitted call, got {reason:?}"
+            );
+            assert_ne!(
+                construct, CHECKED_PLAN_CONSTRUCT,
+                "the fixture must get past the checked-plan gates entirely, not stop inside \
+                 them: {reason:?}"
+            );
+        }
+    }
+
+    /// **Omitting the injected result at the Host-`Vis` route is refused by the
+    /// Runtime marker gate, before definition or emission.**
+    ///
+    /// The mutation changes only the count the TEMPLATE is built from; the route
+    /// still appends exactly one `Var(0)`. So the emitted application carries one
+    /// operand more than the template names, and the gate says so.
+    #[test]
+    fn omitting_the_injected_result_is_refused_by_the_runtime_marker_gate() {
+        for source_arguments in [0usize, 2] {
+            let (marker, plan) = with_host_vis_injection_mutation(
+                HostVisInjectionMutation::OmitInjectedResult,
+                || host_vis_route(source_arguments),
+            );
+            assert_eq!(
+                emitted_operand_count(&marker),
+                source_arguments + 1,
+                "the mutation must leave the EMISSION alone; only the template moves"
+            );
+            assert_eq!(
+                only_template_arity(&plan),
+                source_arguments as u64,
+                "omitting the injected result names one operand too few"
+            );
+            let (construct, reason) = runtime_marker_gate_refusal(marker, plan)
+                .expect("a template that disagrees with its emission is refused");
+            assert_eq!(construct, CHECKED_PLAN_CONSTRUCT, "{reason:?}");
+            assert!(
+                reason.contains(MARKER_ARITY_REFUSAL),
+                "the Runtime marker gate must be the one that refuses, got {reason:?}"
+            );
+        }
+    }
+
+    /// **Double-counting the injected result is refused the same way.**
+    ///
+    /// ⭐⭐ **Both directions, because a correction that can only be wrong one
+    /// way is half-measured.** The route emits `source + 1`, so exactly one
+    /// injected count agrees; one too few and one too many are each caught by
+    /// the same gate.
+    #[test]
+    fn double_counting_the_injected_result_is_refused_by_the_runtime_marker_gate() {
+        for source_arguments in [0usize, 2] {
+            let (marker, plan) = with_host_vis_injection_mutation(
+                HostVisInjectionMutation::DoubleCountInjectedResult,
+                || host_vis_route(source_arguments),
+            );
+            assert_eq!(
+                emitted_operand_count(&marker),
+                source_arguments + 1,
+                "the mutation must leave the EMISSION alone; only the template moves"
+            );
+            assert_eq!(
+                only_template_arity(&plan),
+                source_arguments as u64 + 2,
+                "double-counting it names one operand too many"
+            );
+            let (construct, reason) = runtime_marker_gate_refusal(marker, plan)
+                .expect("a template that disagrees with its emission is refused");
+            assert_eq!(construct, CHECKED_PLAN_CONSTRUCT, "{reason:?}");
+            assert!(
+                reason.contains(MARKER_ARITY_REFUSAL),
+                "the Runtime marker gate must be the one that refuses, got {reason:?}"
+            );
+        }
     }
 
     #[test]

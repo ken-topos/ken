@@ -17,15 +17,19 @@
 //! `RT-FNSPLIT-B2F` performs the atomic switch-over; this node only makes the
 //! contract expressible and checkable before it does.
 
+use std::collections::BTreeSet;
+
 use super::semantic_ir::{
     positioned_sources, DenseRange, PredeclaredFunctionId, RuntimeExprShape, SemanticAtomKind,
     SemanticOperandElement, SemanticOwner,
 };
 use super::{
     planner_capacity_error, planner_error, unsupported, BoundaryReferentOwner,
-    ContinuationSpecializationId, CraneliftBackendError, EdgeKind,
-    PlannedContinuationSpecialization, SemanticPlane, SemanticSourceKind, SemanticSourceSeed,
-    StaticEdge, StaticEdgeId, StaticNode, StaticNodeId, StaticOriginId, TransitionKind,
+    ContinuationContextId, ContinuationSourceCoordinate, ContinuationSpecializationId,
+    CraneliftBackendError, EdgeKind,
+    PlannedContinuationContext, PlannedContinuationSpecialization, SemanticPlane,
+    SemanticSourceKind, SemanticSourceSeed, StaticEdge, StaticEdgeId, StaticNode, StaticNodeId,
+    StaticOriginId, TransitionKind,
 };
 
 /// The exclusive end of a dense range, with its overflow named.
@@ -132,7 +136,7 @@ impl AbiCarrier {
     /// ⚠ A **borrow is only meaningful against an owner that outlives the
     /// borrower**, so this answer is incomplete on its own: read it together
     /// with `storage_owner`, which names who that owner is.
-    const fn ownership(self) -> AbiOwnership {
+    pub(super) const fn ownership(self) -> AbiOwnership {
         match self {
             // A parameter or lexical capture arrives owned by the frame for the
             // activation's extent and is reclaimed when the activation ends.
@@ -178,7 +182,7 @@ impl AbiCarrier {
     /// absent here**: this node declares the durable owner, it does not
     /// materialize anything. No encoder, no decoder, no second emission
     /// authority.
-    const fn storage_owner(self) -> AbiStorageOwner {
+    pub(super) const fn storage_owner(self) -> AbiStorageOwner {
         match self {
             // Parameters and lexical captures live in the activation's own frame
             // once the boundary transfer completes.
@@ -280,10 +284,15 @@ impl AbiCaptureProvenance {
 
 /// How a function unit came to be a function unit.
 ///
-/// ⛔ Closed, and **derived from the graph**: the two arms are exactly `B2O`'s
-/// two seed classes, which that node already validated to be disjoint and
-/// exhaustive over the partition. A unit that is neither, or both, is a planner
-/// error rather than a defaulted arm.
+/// ⛔ Closed, and **derived from the graph**: the seed classes are `B2O`'s two,
+/// which that node already validated to be disjoint and exhaustive over the
+/// partition, plus the planner-interned arms below. A unit that is neither, or
+/// both, is a planner error rather than a defaulted arm.
+///
+/// ⚠ **The "two arms are exhaustive" claim this comment used to make was already
+/// false before `RT-DECL-CLOSURE-PORT` touched it** — `ContinuationSpecialization`
+/// is a third, planner-interned arm — and `RT-DECL-CLOSURE-PORT` §4 row #24
+/// names that stale claim as the thing a new arm must not be smuggled past.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(C)]
 pub(in crate::cranelift_backend) enum AbiUnitDefinition {
@@ -301,6 +310,34 @@ pub(in crate::cranelift_backend) enum AbiUnitDefinition {
         defining_origin: StaticOriginId,
         provenance: AbiCaptureProvenance,
     },
+    /// **`RT-DECL-CLOSURE-PORT` `D2` — a planner-owned callable declaration
+    /// unit.**
+    ///
+    /// The body of a transparent declaration whose own body is a closure seed.
+    /// Such a declaration is *callable*: it has the closure's parameters and
+    /// captures. Before this arm existed the same node was classified
+    /// [`AbiUnitDefinition::ClosureBody`], owned by the anonymous closure
+    /// occurrence, and the declaration's own entry was a zero-arity
+    /// [`AbiUnitDefinition::SchedulingEntry`] — so **no unit was owned by the
+    /// declaration**, and `DeclarationRef` had to produce a compiler-only
+    /// `Lowered::DeclarationClosure` capsule whose body was then recursively
+    /// lowered into the generated root.
+    ///
+    /// ⛔ **Separately owned, and that is the whole point of the arm.** The
+    /// identity is the **declaration's** planned occurrence, not the anonymous
+    /// closure occurrence a `ClosureBody` records. ⛔ It is deliberately not
+    /// smuggled through `SchedulingEntry` or `ClosureBody`
+    /// (`RT-DECL-CLOSURE-PORT` §4, row #24).
+    ///
+    /// ⚠ `D2` establishes the unit and its ownership **only**. It mints no call
+    /// edge (`D4`) and no typed capture/parameter/result transport across the
+    /// boundary (`D3`), and it does not retire the selector residual (`D6`).
+    CallableDeclaration {
+        /// The transparent declaration's planned occurrence — the closure
+        /// occurrence that is the source of this unit's `StaticBody` edge.
+        declaration_origin: StaticOriginId,
+        provenance: AbiCaptureProvenance,
+    },
     /// A planner-interned continuation specialization.
     ///
     /// The identity is compiler-only and resolves to the immutable Slice 1
@@ -310,6 +347,32 @@ pub(in crate::cranelift_backend) enum AbiUnitDefinition {
     ContinuationSpecialization {
         specialization: ContinuationSpecializationId,
     },
+}
+
+impl AbiUnitDefinition {
+    /// The defining closure occurrence and capture provenance of the arms that
+    /// **declare captures off a closure occurrence**, if this is one.
+    ///
+    /// ⭐ **`RT-DECL-CLOSURE-PORT` `D2` — one predicate, so the two arms cannot
+    /// drift apart.** `ClosureBody` and `CallableDeclaration` sit at the same
+    /// graph position and differ only in who owns them, so every rule keyed on
+    /// "declares captures off a closure occurrence" must reach both. Each such
+    /// site asking `match … ClosureBody` separately is precisely how a new arm
+    /// inherits none of the invariants the old one carried — a check that then
+    /// still passes, on a quietly smaller population.
+    const fn closure_shaped_captures(self) -> Option<(StaticOriginId, AbiCaptureProvenance)> {
+        match self {
+            Self::ClosureBody {
+                defining_origin,
+                provenance,
+            }
+            | Self::CallableDeclaration {
+                declaration_origin: defining_origin,
+                provenance,
+            } => Some((defining_origin, provenance)),
+            Self::SchedulingEntry { .. } | Self::ContinuationSpecialization { .. } => None,
+        }
+    }
 }
 
 /// Static compilation mode for the explicitly recorded root scheduling entry.
@@ -442,8 +505,81 @@ pub(super) struct AbiContinuationDescriptor {
 #[repr(C)]
 pub(super) struct AbiContinuationInputAuthority {
     pub(super) ordinal: u32,
-    pub(super) source_owner: PredeclaredFunctionId,
+    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D3a`** — the provenance owner *with its
+    /// coordinate domain retained*. See [`AbiContinuationInputProvenance`];
+    /// this replaces a bare `source_owner`, which could not tell the two
+    /// domains apart.
+    pub(super) provenance: AbiContinuationInputProvenance,
     pub(super) referent_affinity: DenseRange,
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D3a` — this plane's provenance-owner axis,
+/// with the coordinate domain PRESERVED.**
+///
+/// ⛔ **Not a bare `PredeclaredFunctionId`.** Both coordinate domains name an
+/// owner, so projecting them onto one raw id makes `EntryAbi { source_owner: X }`
+/// and `ProducerLocal { binding_owner: X }` the *same value* at this consumer —
+/// and an ABI authority would then accept a substitution of either for the
+/// other whenever ordinal, owner and affinity happen to agree. That contradicts
+/// `D1`'s accepted closed-domain boundary, and the domain being retained by the
+/// validator and by the exhaustive coordinate matches elsewhere does not repair
+/// this plane's own projection.
+///
+/// ⛔ **Exactly one field per arm, and it is the owner.** Not an owner beside an
+/// independent boolean or tag: that shape can encode a combination no
+/// coordinate can produce, so the invalid state would be representable here and
+/// nowhere else.
+///
+/// ⭐ This plane owns *only* the provenance-owner axis. Structural binding
+/// identity and immediate availability stay in their accepted planner
+/// representations; nothing duplicates the full source coordinate here, and no
+/// arm invents an ABI position for a producer-local value.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(C, u32)]
+pub(super) enum AbiContinuationInputProvenance {
+    EntryAbi { source_owner: PredeclaredFunctionId },
+    ProducerLocal { binding_owner: PredeclaredFunctionId },
+}
+
+impl AbiContinuationInputProvenance {
+    /// The provenance one source coordinate names.
+    ///
+    /// ⛔ Exhaustive over the coordinate domain with no wildcard, default or
+    /// fallback: a domain added later must be assigned an arm here before it
+    /// compiles, which is the whole point of routing every consumer through one
+    /// constructor rather than each reading an owner field it likes.
+    pub(super) fn of(coordinate: ContinuationSourceCoordinate) -> Self {
+        match coordinate {
+            ContinuationSourceCoordinate::EntryAbi { source_owner, .. } => {
+                Self::EntryAbi { source_owner }
+            }
+            ContinuationSourceCoordinate::ProducerLocal { binding, .. } => Self::ProducerLocal {
+                binding_owner: binding.binding_owner,
+            },
+        }
+    }
+}
+
+/// **`RT-DECL-CLOSURE-PORT` `D5a` — one generated producer execution context's
+/// ABI contract.**
+///
+/// Kept in its own arena rather than beside [`AbiContinuationDescriptor`]:
+/// that population is exactly the continuation **callee** partition, and a
+/// context is the **caller** side. Sharing the arena would make one identity
+/// domain indexable as the other, which is the aliasing `evt_609am4v7cdt5b`
+/// forbids.
+///
+/// ⛔ There is deliberately no `AbiUnitDefinition` field. A context is not a
+/// `PredeclaredFunction` partition member under any of that enum's classes, and
+/// giving it one would let a reader recover a predeclared-unit answer from a
+/// context descriptor. Its identity is the `ContinuationContextId`, full stop.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(C)]
+pub(super) struct AbiContinuationContextDescriptor {
+    pub(super) context: ContinuationContextId,
+    pub(super) header: AbiFrameHeader,
+    pub(super) slots: DenseRange,
+    pub(super) inputs: DenseRange,
 }
 
 /// The ABI plane: one descriptor per `PredeclaredFunction`, and their slots.
@@ -457,6 +593,11 @@ pub(super) struct AbiPlane {
     pub(super) continuation_slots: Vec<AbiSlot>,
     pub(super) continuation_inputs: Vec<AbiContinuationInputAuthority>,
     pub(super) continuation_affinities: Vec<BoundaryReferentOwner>,
+    /// `D5a`'s generated-context population, in its own arenas.
+    pub(super) context_descriptors: Vec<AbiContinuationContextDescriptor>,
+    pub(super) context_slots: Vec<AbiSlot>,
+    pub(super) context_inputs: Vec<AbiContinuationInputAuthority>,
+    pub(super) context_affinities: Vec<BoundaryReferentOwner>,
 }
 
 /// The fixed per-unit convention slots every activation carries, in layout
@@ -485,6 +626,10 @@ impl AbiPlane {
         let (definition_is_closure_body, provenance) = match descriptor.definition {
             AbiUnitDefinition::SchedulingEntry { .. } => (false, None),
             AbiUnitDefinition::ClosureBody { provenance, .. } => (true, Some(provenance)),
+            // `D2`: a callable declaration unit has a closure body's frame
+            // shape, so the `AC-2`/`AC-4` invariance controls must see the same
+            // provenance they would have seen before the port reclassified it.
+            AbiUnitDefinition::CallableDeclaration { provenance, .. } => (true, Some(provenance)),
             AbiUnitDefinition::ContinuationSpecialization { .. } => (false, None),
         };
         Ok(AbiDescriptorShape {
@@ -524,6 +669,7 @@ pub(super) fn build_abi_plane(
     sources_in: &[SemanticSourceSeed],
     edges: &[StaticEdge],
     entries: &[StaticNodeId],
+    declaration_origins: &BTreeSet<StaticOriginId>,
     root_entry: StaticNodeId,
     root_ingress: AbiRootIngress,
 ) -> Result<AbiPlane, CraneliftBackendError> {
@@ -534,8 +680,15 @@ pub(super) fn build_abi_plane(
     let sources = positioned_sources(nodes, sources_in)?;
     let sources = sources.as_slice();
 
-    let definitions =
-        unit_definitions(plane, sources, edges, entries, root_entry, root_ingress)?;
+    let definitions = unit_definitions(
+        plane,
+        sources,
+        edges,
+        entries,
+        declaration_origins,
+        root_entry,
+        root_ingress,
+    )?;
 
     // `C4`, and deliberately before any descriptor is minted: an imported edge
     // must receive **no** callable descriptor at all, so the exclusion runs
@@ -580,6 +733,7 @@ pub(super) fn build_abi_plane(
         sources_in,
         edges,
         entries,
+        declaration_origins,
         root_entry,
         root_ingress,
     )?;
@@ -588,6 +742,34 @@ pub(super) fn build_abi_plane(
 
 #[cfg(test)]
 thread_local! {
+    /// **`RT-DECL-CLOSURE-PORT` `D2` causal control — the PRE-PORT defect.**
+    ///
+    /// Ignore the declaration-owner discriminator, so every `StaticBody` target
+    /// classifies as an anonymous `ClosureBody` exactly as it did before `D2`.
+    /// The positive owner assertion must go red under this.
+    pub(super) static D2_IGNORE_DECLARATION_OWNERSHIP: std::cell::Cell<bool> =
+        const { std::cell::Cell::new(false) };
+    /// **`RT-DECL-CLOSURE-PORT` `D2` causal control — the OPPOSITE defect.**
+    ///
+    /// Claim every `StaticBody` target is declaration-owned. ⭐ This is the
+    /// control the positive assertion alone cannot catch: a derivation that
+    /// simply answers `CallableDeclaration` for everything satisfies "the
+    /// declaration's body is declaration-owned" and is still wrong. Only the
+    /// anonymous-closure discriminator reds under it.
+    pub(super) static D2_CLAIM_ALL_BODIES_DECLARATION_OWNED: std::cell::Cell<bool> =
+        const { std::cell::Cell::new(false) };
+    /// **`RT-DECL-CLOSURE-PORT` `D3` causal control — the SILENT population
+    /// shrink.**
+    ///
+    /// Restore `C4`'s pre-`D2` matching, where `reject_imported_capture_edges`
+    /// recognised `ClosureBody` alone. ⭐ This is the defect no green run can
+    /// reveal: the exclusion keeps returning "no violation" for a population
+    /// that no longer contains the declaration-owned units, so **every test
+    /// stays green while `C4` is simply not enforced for them.** The only
+    /// instrument that can see it is a program whose imported capture sits on a
+    /// declaration-owned unit, asserted to be REFUSED.
+    pub(super) static D3_C4_MATCHES_CLOSURE_BODY_ONLY: std::cell::Cell<bool> =
+        const { std::cell::Cell::new(false) };
     /// Compile-preserving D4 mutation: construction begins without the exact
     /// capacity preflight, so the first descriptor grows boundary storage.
     pub(super) static SKIP_CONTINUATION_ABI_PREFLIGHT: std::cell::Cell<bool> =
@@ -728,9 +910,12 @@ fn append_continuation_descriptor(
             len: u32::try_from(projection.referent_affinity.len())
                 .map_err(|_| planner_capacity_error("continuation ABI affinity range exhausted"))?,
         };
+        // `RT-CONTSRC-PRODUCER-LOCAL` `D3a` — this plane records the provenance
+        // owner WITH its coordinate domain, so both domains are recordable and
+        // neither is expressible as the other.
         abi.continuation_inputs.push(AbiContinuationInputAuthority {
             ordinal,
-            source_owner: projection.source_owner,
+            provenance: AbiContinuationInputProvenance::of(projection.coordinate),
             referent_affinity,
         });
         abi.continuation_slots.push(AbiSlot {
@@ -778,6 +963,199 @@ fn append_continuation_descriptor(
     Ok(())
 }
 
+/// **`RT-DECL-CLOSURE-PORT` `D5a` — install the generated contexts' ABI.**
+///
+/// Same discipline as [`install_continuation_specialization_abi`]: the arenas
+/// are reserved to their exact closed populations before the first descriptor is
+/// built, and any capacity growth while appending is refused rather than
+/// tolerated, so descriptor construction stays allocation-free.
+///
+/// The slot run per context is `[Parameter x parameters]
+/// ++ [Capture x enclosing continuation inputs] ++ CONVENTION_SLOTS` — the same
+/// layout order every other frame in the plane uses, which is what lets the
+/// context's body walk its slots with the identical
+/// "parameters then captures, in order" rule an ordinary unit body uses.
+pub(super) fn install_continuation_context_abi(
+    abi: &mut AbiPlane,
+    contexts: &[PlannedContinuationContext],
+) -> Result<(), CraneliftBackendError> {
+    if !abi.context_descriptors.is_empty()
+        || !abi.context_slots.is_empty()
+        || !abi.context_inputs.is_empty()
+        || !abi.context_affinities.is_empty()
+    {
+        return Err(planner_error(
+            "generated context ABI may be installed exactly once",
+        ));
+    }
+
+    let mut slot_count = 0usize;
+    let mut input_count = 0usize;
+    let mut affinity_count = 0usize;
+    for context in contexts {
+        let parameters = usize::try_from(context.parameters()).map_err(|_| {
+            planner_capacity_error("generated context ABI parameter count exhausted")
+        })?;
+        slot_count = slot_count
+            .checked_add(parameters)
+            .and_then(|count| count.checked_add(context.captures().len()))
+            .and_then(|count| count.checked_add(CONVENTION_SLOTS.len()))
+            .ok_or_else(|| {
+                planner_capacity_error("generated context ABI slot population exhausted")
+            })?;
+        input_count = input_count
+            .checked_add(context.captures().len())
+            .ok_or_else(|| {
+                planner_capacity_error("generated context ABI input population exhausted")
+            })?;
+        for projection in context.captures() {
+            affinity_count = affinity_count
+                .checked_add(projection.referent_affinity.len())
+                .ok_or_else(|| {
+                    planner_capacity_error(
+                        "generated context ABI affinity population exhausted",
+                    )
+                })?;
+        }
+    }
+
+    abi.context_descriptors
+        .try_reserve_exact(contexts.len())
+        .map_err(|_| planner_capacity_error("generated context ABI descriptor allocation failed"))?;
+    abi.context_slots
+        .try_reserve_exact(slot_count)
+        .map_err(|_| planner_capacity_error("generated context ABI slot allocation failed"))?;
+    abi.context_inputs
+        .try_reserve_exact(input_count)
+        .map_err(|_| planner_capacity_error("generated context ABI input allocation failed"))?;
+    abi.context_affinities
+        .try_reserve_exact(affinity_count)
+        .map_err(|_| planner_capacity_error("generated context ABI affinity allocation failed"))?;
+
+    for context in contexts {
+        let capacities = (
+            abi.context_descriptors.capacity(),
+            abi.context_slots.capacity(),
+            abi.context_inputs.capacity(),
+            abi.context_affinities.capacity(),
+        );
+        append_continuation_context_descriptor(abi, context)?;
+        if capacities
+            != (
+                abi.context_descriptors.capacity(),
+                abi.context_slots.capacity(),
+                abi.context_inputs.capacity(),
+                abi.context_affinities.capacity(),
+            )
+        {
+            return Err(planner_error(
+                "generated context ABI descriptor construction allocated after preflight",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn append_continuation_context_descriptor(
+    abi: &mut AbiPlane,
+    context: &PlannedContinuationContext,
+) -> Result<(), CraneliftBackendError> {
+    let expected_id = ContinuationContextId::from_position(abi.context_descriptors.len())?;
+    if context.id() != expected_id {
+        return Err(planner_error(
+            "generated context ABI descriptor identity is not positional",
+        ));
+    }
+
+    let slot_start = abi.context_slots.len();
+    for ordinal in 0..context.parameters() {
+        abi.context_slots
+            .push(slot(AbiSlotKind::Parameter, AbiCarrier::ValueWord, ordinal));
+    }
+
+    let input_start = abi.context_inputs.len();
+    for (position, projection) in context.captures().iter().enumerate() {
+        let ordinal = u32::try_from(position).map_err(|_| {
+            planner_capacity_error("generated context ABI input ordinal exhausted")
+        })?;
+        // The context's capture run IS the enclosing specialization's ordered
+        // continuation-input projection, so a projection that is not dense in
+        // its own ordinal would silently reorder the values this context exists
+        // to keep live.
+        if projection.ordinal != ordinal {
+            return Err(planner_error(
+                "a generated context capture is not positional in the enclosing specialization's \
+                 input projection",
+            ));
+        }
+        let affinity_start = abi.context_affinities.len();
+        abi.context_affinities
+            .extend_from_slice(&projection.referent_affinity);
+        let referent_affinity = DenseRange {
+            start: u32::try_from(affinity_start).map_err(|_| {
+                planner_capacity_error("generated context ABI affinity identity exhausted")
+            })?,
+            len: u32::try_from(projection.referent_affinity.len()).map_err(|_| {
+                planner_capacity_error("generated context ABI affinity range exhausted")
+            })?,
+        };
+        // `RT-CONTSRC-PRODUCER-LOCAL` `D3a` — same domain-preserving provenance
+        // as the specialization plane above.
+        abi.context_inputs.push(AbiContinuationInputAuthority {
+            ordinal,
+            // ⚠ ROOT provenance, retained unchanged. The context makes the value
+            // *available*; it does not become its origin. That is why this is
+            // the coordinate's own provenance and never this context's id.
+            provenance: AbiContinuationInputProvenance::of(projection.coordinate),
+            referent_affinity,
+        });
+        abi.context_slots.push(AbiSlot {
+            kind: AbiSlotKind::Capture,
+            carrier: projection.carrier,
+            ownership: projection.ownership,
+            storage_owner: projection.storage_owner,
+            width_bytes: projection.carrier.width_bytes(),
+            align_bytes: projection.carrier.align_bytes(),
+            ordinal,
+        });
+    }
+    for (kind, carrier) in CONVENTION_SLOTS {
+        abi.context_slots.push(slot(kind, carrier, 0));
+    }
+
+    let slots = DenseRange {
+        start: u32::try_from(slot_start).map_err(|_| {
+            planner_capacity_error("generated context ABI slot identity exhausted")
+        })?,
+        len: u32::try_from(abi.context_slots.len() - slot_start).map_err(|_| {
+            planner_capacity_error("generated context ABI slot range exhausted")
+        })?,
+    };
+    let inputs = DenseRange {
+        start: u32::try_from(input_start).map_err(|_| {
+            planner_capacity_error("generated context ABI input identity exhausted")
+        })?,
+        len: u32::try_from(abi.context_inputs.len() - input_start).map_err(|_| {
+            planner_capacity_error("generated context ABI input range exhausted")
+        })?,
+    };
+    let captures = u32::try_from(context.captures().len())
+        .map_err(|_| planner_capacity_error("generated context ABI capture count exhausted"))?;
+    let header = frame_header(
+        &abi.context_slots[slot_start..],
+        context.parameters(),
+        captures,
+    )?;
+    abi.context_descriptors
+        .push(AbiContinuationContextDescriptor {
+            context: context.id(),
+            header,
+            slots,
+            inputs,
+        });
+    Ok(())
+}
+
 /// **`C4`/`AC-5` — cross-module linking is a CHECKED exclusion.**
 ///
 /// An imported declaration receives **no callable descriptor** and fails here,
@@ -810,11 +1188,25 @@ fn reject_imported_capture_edges(
     definitions: &[AbiUnitDefinition],
 ) -> Result<(), CraneliftBackendError> {
     for definition in definitions {
-        let AbiUnitDefinition::ClosureBody {
-            defining_origin,
-            provenance,
-        } = *definition
-        else {
+        // ⛔ `D2`: a callable declaration unit captures exactly as a closure body
+        // does, so it is in this exclusion's population too. Matching only
+        // `ClosureBody` here would have silently exempted every ported
+        // declaration from `C4` — the check would still pass, on a smaller set.
+        #[cfg(test)]
+        let recognised = if D3_C4_MATCHES_CLOSURE_BODY_ONLY.with(std::cell::Cell::get) {
+            match *definition {
+                AbiUnitDefinition::ClosureBody {
+                    defining_origin,
+                    provenance,
+                } => Some((defining_origin, provenance)),
+                _ => None,
+            }
+        } else {
+            definition.closure_shaped_captures()
+        };
+        #[cfg(not(test))]
+        let recognised = definition.closure_shaped_captures();
+        let Some((defining_origin, provenance)) = recognised else {
             continue;
         };
         if provenance != AbiCaptureProvenance::Lexical {
@@ -872,7 +1264,9 @@ fn lexical_capture_origins(
 /// `RuntimeExprShape` or `TransitionKind` must state its carrier explicitly; it
 /// cannot inherit `ValueWord` by omission, which is how an unrepresentable
 /// construct would otherwise acquire a representation silently.
-fn result_carrier(source: SemanticSourceKind) -> Result<AbiCarrier, CraneliftBackendError> {
+pub(super) fn result_carrier(
+    source: SemanticSourceKind,
+) -> Result<AbiCarrier, CraneliftBackendError> {
     Ok(match source {
         SemanticSourceKind::Expression(shape) => match shape {
             RuntimeExprShape::ImportedDeclarationRef => {
@@ -930,11 +1324,23 @@ fn result_carrier(source: SemanticSourceKind) -> Result<AbiCarrier, CraneliftBac
 /// the partition; this function re-derives the classification rather than
 /// trusting it, and a seed that is **neither** or **both** is a named planner
 /// error instead of a defaulted arm.
+///
+/// **`RT-DECL-CLOSURE-PORT` `D2`** splits the `StaticBody`-target class in two,
+/// again from the graph and not from a list: a body whose defining occurrence is
+/// a **transparent declaration's** planned occurrence is that declaration's own
+/// callable unit ([`AbiUnitDefinition::CallableDeclaration`]); every other body
+/// stays an anonymous [`AbiUnitDefinition::ClosureBody`].
+///
+/// ⛔ The discriminator is `declaration_origins` — the planner's
+/// `declaration_occurrences`, which is populated only by the one loop that plans
+/// transparent declarations. It is **not** a source-origin whitelist and not a
+/// syntactic test on the body, both of which §4's prohibitions forbid.
 fn unit_definitions(
     plane: &SemanticPlane,
     sources: &[SemanticSourceSeed],
     edges: &[StaticEdge],
     entries: &[StaticNodeId],
+    declaration_origins: &BTreeSet<StaticOriginId>,
     root_entry: StaticNodeId,
     root_ingress: AbiRootIngress,
 ) -> Result<Vec<AbiUnitDefinition>, CraneliftBackendError> {
@@ -986,9 +1392,28 @@ fn unit_definitions(
             (false, Some(from)) => {
                 let defining_origin = StaticOriginId(from.0);
                 let seed = source_for(sources, defining_origin)?;
-                AbiUnitDefinition::ClosureBody {
-                    defining_origin,
-                    provenance: closure_provenance(seed.source)?,
+                let provenance = closure_provenance(seed.source)?;
+                // `D2`: the same graph position, split by **who owns the
+                // defining occurrence**. A transparent declaration's planned
+                // occurrence owns a callable declaration unit; anything else
+                // owns an anonymous closure body.
+                #[cfg(test)]
+                let declaration_owned = !D2_IGNORE_DECLARATION_OWNERSHIP
+                    .with(std::cell::Cell::get)
+                    && (D2_CLAIM_ALL_BODIES_DECLARATION_OWNED.with(std::cell::Cell::get)
+                        || declaration_origins.contains(&defining_origin));
+                #[cfg(not(test))]
+                let declaration_owned = declaration_origins.contains(&defining_origin);
+                if declaration_owned {
+                    AbiUnitDefinition::CallableDeclaration {
+                        declaration_origin: defining_origin,
+                        provenance,
+                    }
+                } else {
+                    AbiUnitDefinition::ClosureBody {
+                        defining_origin,
+                        provenance,
+                    }
                 }
             }
             (true, Some(_)) => {
@@ -1040,9 +1465,16 @@ fn declared_arity(
     sources: &[SemanticSourceSeed],
     definition: AbiUnitDefinition,
 ) -> Result<(u32, u32), CraneliftBackendError> {
+    // `D2`: a callable declaration unit's arity comes from its own defining
+    // closure occurrence, exactly as a closure body's does — the parameters and
+    // captures are the declaration's callable identity.
     let defining_origin = match definition {
         AbiUnitDefinition::ClosureBody {
             defining_origin, ..
+        }
+        | AbiUnitDefinition::CallableDeclaration {
+            declaration_origin: defining_origin,
+            ..
         } => defining_origin,
         AbiUnitDefinition::SchedulingEntry { ingress } => {
             return Ok(match ingress {
@@ -1140,7 +1572,10 @@ fn push_slots(
             }
             None
         }
-        AbiUnitDefinition::ClosureBody { provenance, .. } => Some(provenance.carrier()),
+        // `D2`: same carrier rule, same provenance question — a callable
+        // declaration unit's captures are carried exactly as a closure body's.
+        AbiUnitDefinition::ClosureBody { provenance, .. }
+        | AbiUnitDefinition::CallableDeclaration { provenance, .. } => Some(provenance.carrier()),
         AbiUnitDefinition::ContinuationSpecialization { .. } => {
             return Err(planner_error(
                 "continuation specialization slots require their exact planner projection",
@@ -1157,6 +1592,26 @@ fn push_slots(
         slots.push(slot(kind, carrier, 0));
     }
     Ok(())
+}
+
+/// **`D7` — the capture slot a unit of this provenance MUST declare at
+/// `ordinal`, projected from the authority that lays it.**
+///
+/// ⭐ **This exists so the consumer-side capture-contract gate has no policy of
+/// its own.** The gate must reject a descriptor whose capture slot disagrees on
+/// carrier, ownership, storage owner, width, alignment or ordinal — and the only
+/// sound way to know what it should have been is to ask the same function
+/// [`push_slots`] asked. Re-deriving those six fields in the lowering would be a
+/// second authority on the capture ABI, and the two could drift silently in
+/// exactly the direction a gate is supposed to catch.
+///
+/// ⛔ Mints nothing and widens nothing: it is [`slot`] applied to
+/// [`AbiCaptureProvenance::carrier`], which is where both facts already live.
+pub(in crate::cranelift_backend) const fn expected_capture_slot(
+    provenance: AbiCaptureProvenance,
+    ordinal: u32,
+) -> AbiSlot {
+    slot(AbiSlotKind::Capture, provenance.carrier(), ordinal)
 }
 
 const fn slot(kind: AbiSlotKind, carrier: AbiCarrier, ordinal: u32) -> AbiSlot {
@@ -1593,10 +2048,18 @@ impl AbiPlane {
                 let ordinal = u32::try_from(position).map_err(|_| {
                     planner_capacity_error("continuation ABI input ordinal exhausted")
                 })?;
-                if authority.ordinal != ordinal || authority.source_owner != projection.source_owner
+                // `RT-CONTSRC-PRODUCER-LOCAL` `D3a` — re-derive the provenance
+                // from the planner projection and compare the COMPLETE tagged
+                // value. ⛔ Not the owner alone: comparing owners would accept
+                // an entry-ABI authority standing in for a producer-local one
+                // in the same owner, which is exactly the substitution the tag
+                // exists to refuse.
+                if authority.ordinal != ordinal
+                    || authority.provenance
+                        != AbiContinuationInputProvenance::of(projection.coordinate)
                 {
                     return Err(planner_error(
-                        "continuation ABI input source owner disagrees with the planner projection",
+                        "continuation ABI input provenance disagrees with the planner projection",
                     ));
                 }
                 if authority.referent_affinity.start as usize != next_affinity {
@@ -1699,6 +2162,7 @@ impl AbiPlane {
         sources: &[SemanticSourceSeed],
         edges: &[StaticEdge],
         entries: &[StaticNodeId],
+        declaration_origins: &BTreeSet<StaticOriginId>,
         root_entry: StaticNodeId,
         root_ingress: AbiRootIngress,
     ) -> Result<(), CraneliftBackendError> {
@@ -1712,8 +2176,15 @@ impl AbiPlane {
             ));
         }
 
-        let definitions =
-            unit_definitions(plane, sources, edges, entries, root_entry, root_ingress)?;
+        let definitions = unit_definitions(
+            plane,
+            sources,
+            edges,
+            entries,
+            declaration_origins,
+            root_entry,
+            root_ingress,
+        )?;
 
         for (ordinal, descriptor) in self.descriptors.iter().enumerate() {
             // `AC-1`, direction 2 — every descriptor names a member of the
@@ -1795,6 +2266,47 @@ impl AbiPlane {
 
         reject_imported_capture_edges(plane, sources, &definitions)?;
         self.validate_boundary_layouts(plane, sources, edges)?;
+        self.validate_declaration_call_targets(plane, edges)?;
+        Ok(())
+    }
+
+    /// **`RT-DECL-CLOSURE-PORT` `D4` — a `DeclarationCall` edge lands on one of
+    /// exactly two unit classes.**
+    ///
+    /// The planner's selective retarget decides, per declaration, whether the
+    /// call edge points at the zero-input scheduling entry or at the
+    /// declaration-owned callable unit. This re-reads that decision **through a
+    /// different derivation** — the edge's callee resolved to its ABI
+    /// descriptor, against the descriptor's own
+    /// [`AbiUnitDefinition`] — so a retarget that landed on an anonymous closure
+    /// body or a continuation specialization is refused here rather than
+    /// emitted.
+    ///
+    /// ⛔ Fails closed. There is no arm that tolerates an unrecognised
+    /// definition: the two admissible classes are named, and everything else is
+    /// an error. A `filter`-shaped check would have silently stopped covering
+    /// the very nodes `D2` reclassified.
+    fn validate_declaration_call_targets(
+        &self,
+        plane: &SemanticPlane,
+        edges: &[StaticEdge],
+    ) -> Result<(), CraneliftBackendError> {
+        for (_caller, callee, _callee_origin, _call_site) in plane.declaration_call_edges(edges)? {
+            let descriptor = self.descriptors.get(callee.0 as usize).ok_or_else(|| {
+                planner_error("declaration call callee is not forward-declared in the abi plane")
+            })?;
+            match descriptor.definition {
+                AbiUnitDefinition::SchedulingEntry { .. }
+                | AbiUnitDefinition::CallableDeclaration { .. } => {}
+                AbiUnitDefinition::ClosureBody { .. }
+                | AbiUnitDefinition::ContinuationSpecialization { .. } => {
+                    return Err(planner_error(
+                        "declaration call target is neither a scheduling entry nor a callable \
+                         declaration unit",
+                    ));
+                }
+            }
+        }
         Ok(())
     }
 
@@ -1825,13 +2337,19 @@ impl AbiPlane {
 
             // The provenance the graph says, against the provenance the
             // descriptor recorded.
-            let AbiUnitDefinition::ClosureBody {
-                defining_origin,
-                provenance,
-            } = descriptor.definition
+            //
+            // ⭐ `RT-DECL-CLOSURE-PORT` `D2`: the callee of a `StaticBody` edge
+            // is a closure body **or** a callable declaration unit — the port
+            // reclassified some of these very nodes, and this layout agreement
+            // must keep holding across that split. ⛔ The check is not relaxed
+            // for the new arm: it compares the identical four axes (defining
+            // occurrence, provenance, captures, parameters) against the same
+            // caller-side signature.
+            let Some((defining_origin, provenance)) =
+                descriptor.definition.closure_shaped_captures()
             else {
                 return Err(planner_error(
-                    "static body edge callee is not a closure-body unit",
+                    "static body edge callee is not a closure-body or callable-declaration unit",
                 ));
             };
             if defining_origin != signature.defining_origin {
@@ -1995,7 +2513,10 @@ fn validate_slot_run(
 ) -> Result<(), CraneliftBackendError> {
     let capture_carrier = match definition {
         AbiUnitDefinition::SchedulingEntry { .. } => None,
-        AbiUnitDefinition::ClosureBody { provenance, .. } => Some(provenance.carrier()),
+        // `D2`: same carrier rule, same provenance question — a callable
+        // declaration unit's captures are carried exactly as a closure body's.
+        AbiUnitDefinition::ClosureBody { provenance, .. }
+        | AbiUnitDefinition::CallableDeclaration { provenance, .. } => Some(provenance.carrier()),
         AbiUnitDefinition::ContinuationSpecialization { .. } => {
             return Err(planner_error(
                 "continuation specialization slots require their exact planner projection",

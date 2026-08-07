@@ -16,13 +16,20 @@ use super::{
     backend, unsupported, BackendFailure, CraneliftBackendError, RuntimeDeclaration,
     RuntimeDeclarationKind,
 };
-use crate::boundary_value::BoundaryReferentOwner;
+use crate::boundary_value::{BoundaryClass, BoundaryReferentOwner, BoundaryTag};
 use crate::{RuntimeExpr, RuntimePartiality, RuntimeTrap, RuntimeTrapCode};
-use abi::{build_abi_plane, install_continuation_specialization_abi, AbiPlane};
+use abi::{
+    build_abi_plane, install_continuation_context_abi, install_continuation_specialization_abi,
+    AbiPlane,
+};
 use semantic_ir::{
     build_semantic_plane, build_synthesized_constructor_inventory, SemanticMaterialArena,
     SemanticPlane, SemanticSourceKind, SemanticSourceSeed,
 };
+// `RT-CONTSRC-PRODUCER-LOCAL` `D2` — the shape vocabulary, so a producer-local
+// contract asks the existing `abi::result_carrier` authority rather than
+// restating a carrier.
+use semantic_ir::RuntimeExprShape;
 
 // ⭐ `D1`'s capability surface. The two identity types cross into
 // `crate::cranelift_backend` so `lowering` can hold and compare them; ⛔
@@ -32,9 +39,14 @@ use semantic_ir::{
 pub(in crate::cranelift_backend) use abi::{
     AbiCaptureProvenance, AbiCarrier, AbiFrameHeader, AbiOwnership, AbiProcessParameter,
     AbiRootIngress, AbiSchedulingIngress, AbiSlot, AbiSlotKind, AbiStorageOwner, AbiUnitDefinition,
+    expected_capture_slot,
 };
 #[cfg(test)]
 pub(in crate::cranelift_backend) use semantic_ir::with_last_io_error_role_omitted;
+#[cfg(test)]
+pub(in crate::cranelift_backend) use semantic_ir::{
+    with_d2a_population_mutation, D2aPopulationMutation,
+};
 pub(in crate::cranelift_backend) use semantic_ir::{
     ConstructorIdentity, FieldIdentity, PredeclaredFunctionId, StaticOriginId,
     SynthesizedConstructorRole, SynthesizedFixedConstructorRole, SynthesizedIoErrorRole,
@@ -178,6 +190,61 @@ enum EdgeKind {
     StaticBody,
     DeclarationCall,
     Trap,
+}
+
+/// **`RT-DECL-CLOSURE-PORT` `D4` causal control — the two ways the selective
+/// retarget can be wrong, both compile-preserving.**
+///
+/// ⭐ Two settings and not one, because a retarget can be wrong by not moving
+/// **and** by moving to the wrong place, and no single mutation shows both.
+///
+/// `NeverRetarget` is the pre-`D4` world: the closure-seed reference keeps its
+/// zero-input scheduling entry, which is the wrong-arity target `D4` removes.
+/// `AnyStaticBody` is the ruled-out *reverse body search*: it takes the first
+/// static-body target in the graph instead of the one leaving this
+/// declaration's own entry. ⛔ The second is the one a positive assertion is
+/// most likely to agree with by accident, because a program with one closure
+/// gives both spellings the same answer — which is why the fixture carries a
+/// second, anonymous closure.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum D4DeclarationTargetMutation {
+    Exact,
+    /// Never follow the static-body edge: the pre-`D4` behaviour.
+    NeverRetarget,
+    /// Follow the first static-body edge in the graph, whoever it leaves.
+    AnyStaticBody,
+}
+
+#[cfg(test)]
+thread_local! {
+    static D4_DECLARATION_TARGET_MUTATION: std::cell::Cell<D4DeclarationTargetMutation> =
+        const { std::cell::Cell::new(D4DeclarationTargetMutation::Exact) };
+}
+
+/// **`RT-DECL-CLOSURE-PORT` `D4` — the two lawful targets of a
+/// `EdgeKind::DeclarationCall` edge, kept apart by name.**
+///
+/// A transparent declaration is planned as one scheduling entry. Whether that
+/// entry *is* the callable unit depends on the declaration's own body:
+///
+/// - a body that is not a closure seed schedules and returns a value, so the
+///   entry is its unit and the call takes **no inputs**;
+/// - a `Closure` / `LexicalClosure` seed body owns a second unit — the
+///   declaration-owned [`abi::AbiUnitDefinition::CallableDeclaration`] reached
+///   by the entry's one forward `StaticBody` edge — which declares the
+///   declaration's parameters and captures and must be called **with them**.
+///
+/// ⛔ The two are indistinguishable downstream once flattened: both are reached
+/// by the same edge kind, both resolve to a `FuncId`, and `&[]` type-checks
+/// against either. ⇒ The class is carried, not re-inferred.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) enum DeclarationCallTargetClass {
+    /// The declaration's own scheduling entry, called with no inputs.
+    SchedulingEntry,
+    /// The declaration-owned callable unit, called with the declaration's
+    /// parameters followed by its captures.
+    CallableDeclaration,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -351,7 +418,7 @@ struct CaseProducerAuthority {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum CaseEmissionStatus {
+pub(in crate::cranelift_backend) enum CaseEmissionStatus {
     Reachable,
     Eliminated,
 }
@@ -375,7 +442,7 @@ struct PlannedCaseEmission {
 /// `Persistent` is issued only when the complete source result is closed over
 /// persistent children. There is deliberately no promotion operation.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-enum PlannedReferentLifetime {
+pub(in crate::cranelift_backend) enum PlannedReferentLifetime {
     Persistent,
     ActivationOwned,
 }
@@ -405,12 +472,406 @@ struct PlannedOccurrenceAuthority {
 #[repr(transparent)]
 pub(in crate::cranelift_backend) struct ContinuationSpecializationId(u32);
 
-/// The source ABI provenance class of one continuation input.
+/// **`RT-DECL-CLOSURE-PORT` `D5a` — the generalized emission-owner domain.**
+///
+/// Architect ruling `evt_609am4v7cdt5b`. The planner had been conflating three
+/// authorities, and the one that decides *who can emit a causal call* is
+/// neither of the two it was reading:
+///
+/// | authority | for the measured witness |
+/// |---|---|
+/// | source-occurrence provenance owner | raw `fn2` — the nested producer is textually in body 36 |
+/// | root input provenance owner | `fn3` — its parameters populate the continuation environment |
+/// | **immediate emission and availability owner** | the interned specialization that selected and invoked `fn2` |
+///
+/// ⛔ **The two variants are distinct ID domains and are never cast or aliased
+/// into one another.** That is the whole point of making this an enum rather
+/// than widening `PredeclaredFunctionId`: a specialization context is not a
+/// predeclared unit, and code that treats one as the other reintroduces exactly
+/// the conflation this type exists to remove.
+///
+/// ⚠ `Predeclared` is the *only* variant the population had before `D5a`, and
+/// every same-owner edge still lands there with identical behaviour. A
+/// `Specialization` owner appears only where the fixed point descended into a
+/// worker body from an interned specialization.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-enum ContinuationInputSource {
+pub(in crate::cranelift_backend) enum ContinuationEmissionOwner {
+    /// An ordinary predeclared function unit emits this call from its own body.
+    Predeclared(PredeclaredFunctionId),
+    /// The generated execution context of an interned specialization emits this
+    /// call. The raw body's predeclared owner remains **provenance only**.
+    Specialization(ContinuationSpecializationId),
+}
+
+/// Dense identity of one planner-interned generated producer execution context.
+///
+/// ⛔ **A third ID domain, and it is never cast into either of the other two.**
+/// A context is not a `PredeclaredFunctionId` (it has no source occurrence of
+/// its own) and it is not a `ContinuationSpecializationId` (it is not a
+/// continuation callee — it is the *caller* side, the execution in which one
+/// specialization's selected worker body runs with that specialization's
+/// continuation inputs still live).
+///
+/// ⚠ [`ContinuationEmissionOwner`] deliberately does **not** gain a variant for
+/// this. `Specialization(id)` already names the emitting context uniquely: a
+/// specialization has exactly one selected worker body, so
+/// `(specialization, worker_body_origin)` — the context key — is determined by
+/// the specialization alone. Adding a fourth owner class would give the same
+/// context two names, and the claim ledger's affinity is keyed on the owner.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[repr(transparent)]
+pub(in crate::cranelift_backend) struct ContinuationContextId(u32);
+
+impl ContinuationContextId {
+    /// A DIFFERENT context identity. **Mutation support only** — used to present
+    /// a claimed id that disagrees with the one the claim's own key resolves to,
+    /// so the consumer's agreement check has something to catch.
+    ///
+    /// ⛔ Not a way to construct an identity from an integer: it can only
+    /// displace an id that already exists, so no test can mint one out of thin
+    /// air and have it read as planner-issued.
+    #[cfg(test)]
+    pub(in crate::cranelift_backend) fn d4b_displaced(self) -> Self {
+        Self(self.0.wrapping_add(1))
+    }
+}
+
+/// **`RT-DECL-CLOSURE-PORT` `D5a` — one planner-interned generated producer
+/// execution context.**
+///
+/// Architect ruling `evt_609am4v7cdt5b`: *"Materialize this as an explicit
+/// planner-interned, continuation-specialized producer execution context."*
+///
+/// ## Where these come from, and why not at descent
+///
+/// Derived **after** the fixed point, from the calls whose `emission_owner` is a
+/// `Specialization`. ⛔ Interning at descent instead would mint a context for
+/// every worker body the fixed point walks into, including the ones whose bodies
+/// contain no nested producer at all — dead definitions the emitter would then
+/// have to declare and define. The post-hoc derivation mints exactly the
+/// contexts something actually emits from.
+///
+/// ## Its ABI, and what it must not do to the raw body
+///
+/// - **Parameters** = the raw worker's declared arity plus its capture count, in
+///   that order. That is exactly the operand run the enclosing specialization
+///   already passes when it calls the worker, so the call **keeps its shape**
+///   and only grows a suffix.
+/// - **Captures** = the enclosing specialization's continuation inputs, in
+///   ordinal order. These are the values raw `fn2` provably never receives.
+///
+/// ⛔ The raw `ClosureBody`'s own descriptor is **untouched** — not mutated, not
+/// unioned, and no runtime suffix is fused into it. The raw unit keeps its
+/// ordinary ABI, its provenance, and its authority as this body's source
+/// binding.
+///
+/// ⚠ **That is a claim about the descriptor, and it settles nothing about
+/// whether an executable `Function` is emitted for the raw worker.** Those are
+/// separate questions with separate authorities, and this comment used to
+/// conflate them by adding *"and simply loses this one caller"*.
+///
+/// Executable membership is decided from the **post-retarget final graph**, by
+/// [`StaticTransitionPlan::template_only_worker_bodies`]: when **every**
+/// specialization selecting a body has retargeted to a generated context, and
+/// that body's carried invocation also binds one, the raw worker is
+/// **template-only** — it retains everything above and is absent from the
+/// emitted-`Function` population. If any final raw call remains, the body
+/// stays executable. ⛔ So "loses one caller" describes only the mixed case;
+/// under a total retarget the raw worker loses its last one.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) struct PlannedContinuationContext {
+    id: ContinuationContextId,
+    /// **Stage 2** — the finalized availability of each capture, in capture
+    /// order. Empty until [`finalize_continuation_availability_plan`] runs; the
+    /// only reader is [`ContinuationContextView::captures`], which refuses when
+    /// an entry is missing rather than publishing a draft.
+    finalized_availability: Vec<ContinuationAvailabilityViews>,
+    /// The specialization whose selected worker body this context executes, and
+    /// whose continuation inputs it keeps live across that execution.
+    enclosing_specialization: ContinuationSpecializationId,
+    /// The raw worker body lowered inside this context.
+    worker_body_origin: StaticOriginId,
+    /// ⚠ **PROVENANCE ONLY.** The predeclared unit the worker body textually
+    /// belongs to. Retained so a reader can see which raw body this context
+    /// executes; it confers no emission authority — that is the whole point.
+    raw_owner: PredeclaredFunctionId,
+    /// Raw declared arity + raw capture count: the context's `Parameter` run.
+    parameters: u32,
+    /// The enclosing specialization's continuation inputs: the `Capture` run.
+    captures: Vec<ContinuationInputProjection>,
+}
+
+impl ContinuationContextId {
+    fn from_position(position: usize) -> Result<Self, CraneliftBackendError> {
+        Ok(Self(u32::try_from(position).map_err(|_| {
+            planner_capacity_error("generated context identity exhausted")
+        })?))
+    }
+}
+
+impl PlannedContinuationContext {
+    pub(in crate::cranelift_backend) fn id(&self) -> ContinuationContextId {
+        self.id
+    }
+    /// The specialization whose worker body this context executes.
+    ///
+    /// ⭐ This is also the **emission owner** every call emitted from inside
+    /// this context carries: `ContinuationEmissionOwner::Specialization(_)` of
+    /// exactly this id. The two are the same fact seen from the two sides, which
+    /// is why the owner enum needs no context variant.
+    pub(in crate::cranelift_backend) fn enclosing_specialization(
+        &self,
+    ) -> ContinuationSpecializationId {
+        self.enclosing_specialization
+    }
+    pub(in crate::cranelift_backend) fn worker_body_origin(&self) -> StaticOriginId {
+        self.worker_body_origin
+    }
+    /// ⚠ Provenance only — the raw predeclared unit this body textually is.
+    pub(in crate::cranelift_backend) fn raw_owner(&self) -> PredeclaredFunctionId {
+        self.raw_owner
+    }
+    pub(in crate::cranelift_backend) fn parameters(&self) -> u32 {
+        self.parameters
+    }
+    pub(super) fn captures(&self) -> &[ContinuationInputProjection] {
+        &self.captures
+    }
+}
+
+/// A read-only view of one already-validated generated producer execution
+/// context: its identity, the specialization it belongs to, and its validated
+/// ABI descriptor, slots and input authority.
+pub(in crate::cranelift_backend) struct ContinuationContextView<'plan> {
+    planned: &'plan PlannedContinuationContext,
+    /// Stage-2 availability, one per capture. ⛔ The view cannot reach the
+    /// drafts on `planned` -- `captures()` publishes from here or refuses.
+    finalized: &'plan [ContinuationAvailabilityViews],
+    header: AbiFrameHeader,
+    slots: &'plan [AbiSlot],
+    inputs: &'plan [abi::AbiContinuationInputAuthority],
+}
+
+impl<'plan> ContinuationContextView<'plan> {
+    pub(in crate::cranelift_backend) fn id(&self) -> ContinuationContextId {
+        self.planned.id
+    }
+    pub(in crate::cranelift_backend) fn enclosing_specialization(
+        &self,
+    ) -> ContinuationSpecializationId {
+        self.planned.enclosing_specialization
+    }
+    pub(in crate::cranelift_backend) fn worker_body_origin(&self) -> StaticOriginId {
+        self.planned.worker_body_origin
+    }
+    pub(in crate::cranelift_backend) fn raw_owner(&self) -> PredeclaredFunctionId {
+        self.planned.raw_owner
+    }
+    /// `D3b` — this context's declared parameter count, so a consumer can check
+    /// a capture slot against the run it actually names. ⛔ A read of existing
+    /// authority: the capture run begins after the parameters, and that offset
+    /// is the planner's rather than this accessor's.
+    pub(in crate::cranelift_backend) fn parameters(&self) -> u32 {
+        self.planned.parameters
+    }
+    pub(in crate::cranelift_backend) fn header(&self) -> AbiFrameHeader {
+        self.header
+    }
+    pub(in crate::cranelift_backend) fn slots(&self) -> &'plan [AbiSlot] {
+        self.slots
+    }
+
+    /// This context's own capture run, as continuation-input views.
+    ///
+    /// Each view's `source_owner`/`source_abi_position` is **root** provenance
+    /// naming the enclosing specialization's own root owner, and its
+    /// `immediate_slot` is that value's position in the *enclosing* environment.
+    /// ⛔ Neither is this context's own slot position — for that, use the
+    /// capture's `ordinal` against this descriptor's `Capture` run. Keeping the
+    /// two apart is the whole reason the record carries both.
+    pub(in crate::cranelift_backend) fn captures(
+        &self,
+    ) -> Result<Vec<ContinuationInputView>, CraneliftBackendError> {
+        self.planned
+            .captures
+            .iter()
+            .zip(self.inputs)
+            .enumerate()
+            .map(|(position, (projection, authority))| {
+                // `D3a` — the ABI-plane input authority records a DOMAIN-TAGGED
+                // provenance owner, so agreement is checked as the complete
+                // tagged value. ⛔ Both domains are now recordable here, and
+                // neither can satisfy the other's comparison by carrying the
+                // same owner id.
+                if projection.ordinal != authority.ordinal
+                    || abi::AbiContinuationInputProvenance::of(projection.coordinate)
+                        != authority.provenance
+                {
+                    return Err(planner_error(
+                        "a generated context capture disagrees with its validated ABI input \
+                         authority",
+                    ));
+                }
+                continuation_input_view(projection, self.finalized.get(position))
+            })
+            .collect()
+    }
+
+    /// Byte offsets for this context's slot run, from the one offset walk.
+    pub(in crate::cranelift_backend) fn slot_offsets(
+        &self,
+    ) -> Result<(Vec<u32>, u32), CraneliftBackendError> {
+        let (offsets, frame_bytes) = abi::slot_offsets(self.slots)?;
+        if frame_bytes != self.header.frame_bytes {
+            return Err(planner_error(
+                "a generated context descriptor's frame size disagrees with its own slot run",
+            ));
+        }
+        Ok((offsets, frame_bytes))
+    }
+}
+
+/// The source ABI provenance class of one continuation input.
+///
+/// ⛔ This labels provenance **inside one coordinate space** — a position in the
+/// source owner's entry ABI input run. It is not the place to name a value that
+/// has no such position; see [`ContinuationSourceCoordinate`].
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) enum ContinuationInputSource {
     Parameter,
     LexicalCapture { source_origin: StaticOriginId },
     SeedCapture { defining_origin: StaticOriginId },
+}
+
+/// `RT-CONTSRC-PRODUCER-LOCAL` `D1` — the exact structural identity of a value
+/// the producer **creates mid-body**.
+///
+/// ⛔ Deliberately carries no ABI position and is not convertible to one. The
+/// value does not exist at its owner's function entry, so `parameters +
+/// captures` has no position for it, and inventing one is the first of the five
+/// exits the Architect closed at `evt_75k8cydbj5127`.
+///
+/// The identity is the occurrence that introduces the binding **plus which
+/// binding of that occurrence it is**: an occurrence such as a `Match` case
+/// introduces several at once, and an origin alone would name the set rather
+/// than the value.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) struct ProducerLocalBinding {
+    /// The unit whose body contains the binding.
+    pub(in crate::cranelift_backend) binding_owner: PredeclaredFunctionId,
+    /// The occurrence that introduces it.
+    pub(in crate::cranelift_backend) binding_origin: StaticOriginId,
+    /// Which binding that occurrence introduces. Zero when it introduces one.
+    pub(in crate::cranelift_backend) binding_ordinal: u32,
+}
+
+/// `RT-CONTSRC-PRODUCER-LOCAL` `D1` — where a producer-local value is found at
+/// the moment the continuation call is emitted.
+///
+/// ⛔ Deliberately its own type rather than a second `u32` sitting beside an
+/// entry ABI position. An environment index and an ABI position are different
+/// coordinate spaces; the whole reason [`ContinuationSourceCoordinate`] is a
+/// closed sum is that no consumer can read one as the other by forgetting to
+/// ask which it holds.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) struct ProducerLocalLocator {
+    /// The occurrence whose value environment contains the binding at the point
+    /// the call is emitted.
+    pub(in crate::cranelift_backend) environment_origin: StaticOriginId,
+    /// The binding's index in that environment.
+    pub(in crate::cranelift_backend) environment_index: u32,
+}
+
+/// `RT-CONTSRC-PRODUCER-LOCAL` `D1` — which coordinate **domain** names one
+/// continuation input's value in its producer.
+///
+/// ⛔ A closed sum over two coordinate *spaces*, and ⛔ **not** a fourth
+/// [`ContinuationInputSource`] arm. The Architect rejected that shape
+/// explicitly (`evt_75k8cydbj5127`): appending a case to an enum whose
+/// enclosing record still requires an entry-ABI coordinate produces a truthful
+/// provenance label with an untruthful `source_abi_position` beside it.
+///
+/// ⛔ **No default or wildcard arm anywhere this is matched.** A third domain
+/// must fail to compile at every consumer until each one assigns it — that is
+/// `AC-2`, and it is the property that makes this a type rather than a
+/// convention.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) enum ContinuationSourceCoordinate {
+    /// A value that exists at the source owner's function entry: one position
+    /// in its `parameters + captures` ABI input run, carrying the contract that
+    /// `continuation_owner_entry_sources` reads off that exact `AbiSlot`.
+    ///
+    /// ⭐ Unchanged from before `D1` in both content and meaning. The three
+    /// components were previously inline fields of the records below; moving
+    /// them into an arm is what makes the other domain expressible without
+    /// making this one ambiguous.
+    EntryAbi {
+        source_owner: PredeclaredFunctionId,
+        source_abi_position: u32,
+        source: ContinuationInputSource,
+    },
+    /// A value created after entry by the producer body. Named by its exact
+    /// structural binding identity and located, at emission time, in the
+    /// environment that actually contains it. Its carrier / ownership /
+    /// storage-owner / affinity are planner-derived and live on the enclosing
+    /// record, exactly as the entry arm's slot-derived ones do.
+    ///
+    /// ⭐ `D4a` removed this arm's `dead_code` allowance. `D1` represented it,
+    /// `D2` populated it in the walk, and `D4a` admits it — so it is now
+    /// constructed and read on the ordinary planning path, not only by the
+    /// controls that prove each consumer handles it.
+    ProducerLocal {
+        binding: ProducerLocalBinding,
+        locator: ProducerLocalLocator,
+    },
+}
+
+impl ContinuationSourceCoordinate {
+
+    /// A producer-local coordinate for a control that must **reach** one.
+    ///
+    /// ⛔ Test-only, and it exists because `D1` represents this domain while
+    /// nothing constructs it yet: without a way to present one, every refusal
+    /// written for it is unmeasured code, which reads exactly like absent code.
+    /// The identifiers are sentinels — the controls assert on the refusal, not
+    /// on what the binding names.
+    #[cfg(test)]
+    pub(in crate::cranelift_backend) fn producer_local_probe() -> Self {
+        Self::ProducerLocal {
+            binding: ProducerLocalBinding {
+                binding_owner: PredeclaredFunctionId(u32::MAX),
+                binding_origin: StaticOriginId(u32::MAX),
+                binding_ordinal: 0,
+            },
+            locator: ProducerLocalLocator {
+                environment_origin: StaticOriginId(u32::MAX),
+                environment_index: 0,
+            },
+        }
+    }
+
+    /// The entry-ABI components, for a test that is asserting *about* them.
+    ///
+    /// ⛔ Test-only, and it panics rather than defaulting: a test that meant to
+    /// read an entry position and got a producer-local coordinate has measured
+    /// a different value than it names, which is the failure mode this whole
+    /// separation exists to prevent.
+    #[cfg(test)]
+    pub(in crate::cranelift_backend) fn expect_entry_abi(
+        self,
+    ) -> (PredeclaredFunctionId, u32, ContinuationInputSource) {
+        match self {
+            Self::EntryAbi {
+                source_owner,
+                source_abi_position,
+                source,
+            } => (source_owner, source_abi_position, source),
+            Self::ProducerLocal { binding, locator } => panic!(
+                "this assertion names an entry ABI coordinate but reached the producer-local \
+                 binding {binding:?} at {locator:?}"
+            ),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -450,9 +911,11 @@ enum BoundaryUseAvail {
 struct ContinuationInputProjection {
     producer_owner: PredeclaredFunctionId,
     consumer_owner: PredeclaredFunctionId,
-    source_owner: PredeclaredFunctionId,
-    source_abi_position: u32,
-    source: ContinuationInputSource,
+    /// `D1` — the closed coordinate domain naming this value in its producer.
+    /// ⛔ Replaces the inline `source_owner`/`source_abi_position`/`source`
+    /// triple; those are the `EntryAbi` arm's components and are unchanged
+    /// there.
+    coordinate: ContinuationSourceCoordinate,
     ordinal: u32,
     carrier: AbiCarrier,
     ownership: AbiOwnership,
@@ -463,7 +926,494 @@ struct ContinuationInputProjection {
     boundary_avail: BoundaryUseAvail,
     referent_affinity: Vec<BoundaryReferentOwner>,
     ordinary_abi_position: u32,
+    /// **`D5a` — where this value is IMMEDIATELY available to the emitter.**
+    ///
+    /// `source_owner`/`source_abi_position` above are **root provenance**: the
+    /// predeclared unit whose parameter or capture originally supplied this
+    /// value. That is retained and never substituted for. But the function that
+    /// actually emits the call is the key's `emission_owner`, and for a
+    /// generated specialization context that is **not** the root owner — raw
+    /// `fn2` never receives `fn3`'s parameters.
+    ///
+    /// This field is the position in the **emitting context's own environment**
+    /// where the value sits. For a `Predeclared` emission owner the emitter *is*
+    /// the root owner, so it equals `source_abi_position` and that equality is
+    /// checked at the emission seam rather than assumed. For a `Specialization`
+    /// emission owner it names one of the generated context's own capture
+    /// positions.
+    ///
+    /// ⛔ A root position used as an immediate one is exactly the reverse-map
+    /// `evt_609am4v7cdt5b` forbids; the two are kept apart here so no consumer
+    /// has to know which it holds.
+    ///
+    /// **`D3b` re-cut** — the two consumer-specific claims, as STAGE 1 drafts.
+    ///
+    /// ⛔ There is no single "immediate slot" here, because the two consumers do
+    /// not hold the same environment. ⛔ And these are **drafts**: a generated
+    /// frame is still a structural requirement, because the context ids that
+    /// would resolve it are minted after this record is interned. Nothing reads
+    /// this field directly — [`continuation_input_view`] publishes only the
+    /// finalized form.
+    availability: ContinuationAvailabilityDraft,
 }
+
+impl ContinuationAvailabilityViews {
+    /// The direct-emission claim's index, for a test that has already
+    /// established the claim exists. ⛔ Test-only and panicking on purpose:
+    /// production consumers must go through the fail-closed resolvers, never
+    /// assert their way past the "which environment" question.
+    #[cfg(test)]
+    pub(in crate::cranelift_backend) fn expect_direct_emission_slot(self) -> u32 {
+        match self.direct_emission {
+            Some(ContinuationEnvironmentClaim::CurrentLexical {
+                nearest_alias_index, ..
+            }) => nearest_alias_index,
+            Some(ContinuationEnvironmentClaim::EntryFrame { declared_slot, .. }) => declared_slot,
+            None => panic!("expected a direct-emission availability claim, found none"),
+        }
+    }
+}
+
+/// **`D3b` re-cut — which frame will emit this continuation call.**
+///
+/// ⛔ Deliberately an enum over the two emitting-frame classes rather than an
+/// `Option` with a defaulting arm: a generated context that declares no member
+/// for a value must **reject**, and a default would silently emit a call reading
+/// whatever sat at the root position.
+///
+/// ⭐ This replaces `ContinuationImmediateResolution`, whose `RootIsImmediate`
+/// arm carried the retired premise in its name: that when the emitter is the
+/// root owner, root position *is* immediate position. `D3c` measured otherwise.
+enum ContinuationEmitterFrame<'plan> {
+    /// The emitting frame is the predeclared producer owner itself, and its
+    /// direct-emission consumer stands in that owner's retained lexical
+    /// environment.
+    Predeclared(PredeclaredFunctionId),
+    /// The emitting frame is the generated execution context of an enclosing
+    /// specialization. Values are reachable only as that context's declared
+    /// captures, which are exactly the enclosing specialization's continuation
+    /// inputs laid out after its parameter run.
+    GeneratedContext {
+        enclosing: ContinuationSpecializationId,
+        worker_body_origin: StaticOriginId,
+        context_parameters: u32,
+        enclosing_inputs: &'plan [ContinuationInputProjection],
+    },
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D3b` (re-cut)** — WHERE ONE NAMED CONSUMER
+/// holds this value, as a closed sum over **environments**.
+///
+/// `D1` gave every continuation input a root coordinate
+/// ([`ContinuationSourceCoordinate`]): *which value is this, and in whose
+/// terms*. That answers identity and is never rewritten. This answers a
+/// different question — *where does the consumer about to read it find it* —
+/// and ⛔ **neither determines the other.**
+///
+/// ⛔⛔ **The retired law, named so it is not reconstructed.** `D3b` first
+/// landed a product over `(root coordinate, availability)` with three lawful
+/// pairings and three crossed, resting on the premise that root provenance
+/// constrains availability. `D3c` measured that premise false: at a predeclared
+/// seat under one intervening binder an entry root's ABI position 0 is not its
+/// immediate position, which is 1. So `EntryAbi` + `CurrentLexical` is not a
+/// crossed pair — **it is the lawful answer at nonzero lexical depth.**
+/// `RootIsImmediate`, the pairing table and the equality
+/// `immediate_slot == source_abi_position` are all retired.
+///
+/// The two arms are two genuinely different environments:
+///
+/// - [`Self::CurrentLexical`] — the *semantic* environment in force at one
+///   exact predeclared emission occurrence, with intervening binders counted.
+///   **Either root arm may take it.**
+/// - [`Self::EntryFrame`] — a declared slot in one exactly identified frame's
+///   operand run. **Either root arm may take it**, but only where that frame
+///   really does declare a member for the full coordinate.
+///
+/// ⛔ There is no accessor that answers "which index" without first answering
+/// "which environment, and whose". Reading a lexical index as a frame slot is
+/// the conflation this sum exists to make unrepresentable.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) enum ContinuationEnvironmentClaimOver<Frame> {
+    /// The value sits in the retained lexical environment at one exact
+    /// predeclared emission seat.
+    ///
+    /// ⭐ The index is the **nearest exact alias**: the minimum de Bruijn index
+    /// among the positions whose held authority is exactly `Closed([S])` for the
+    /// complete requested source slot `S`. See [`nearest_exact_alias`], which is
+    /// the single definition of that rule and is re-run by the consumer.
+    ///
+    /// ⛔ It is **not** a "post-shift index", and that retired spelling is not a
+    /// synonym. Post-shift named a count of binders pushed between the value's
+    /// scope and the seat, which presumes the value occupies exactly one
+    /// position; `let y = x` makes that false. The number here is selected from a
+    /// set of proved aliases, and a reader who thinks of it as a shift will
+    /// reconstruct the exactly-once law this replaced.
+    CurrentLexical {
+        emission_owner: PredeclaredFunctionId,
+        producer_result_origin: StaticOriginId,
+        emission_origin: StaticOriginId,
+        lexical_environment_origin: StaticOriginId,
+        nearest_alias_index: u32,
+    },
+    /// The value arrives as a declared slot of one exactly identified frame's
+    /// operand run.
+    ///
+    /// ⭐ **This subsumes the old `GeneratedContextCapture`.** A generated
+    /// context's capture run and a predeclared function's entry run are the same
+    /// *kind* of environment — a declared operand run — differing only in which
+    /// frame declares it. Two names for one environment class is what let the
+    /// old law read a frame identity off a root domain.
+    EntryFrame {
+        frame: Frame,
+        declared_slot: u32,
+    },
+}
+
+/// **Stage 2** — a claim whose frame is an exact, resolved identity. This is the
+/// only form any consumer ever sees.
+pub(in crate::cranelift_backend) type ContinuationEnvironmentClaim =
+    ContinuationEnvironmentClaimOver<ContinuationFrameIdentity>;
+
+/// **Stage 1** — a claim whose frame is still a structural requirement.
+/// ⛔ Never published: [`continuation_input_view`] has no way to expose one.
+pub(in crate::cranelift_backend) type ContinuationEnvironmentDraft =
+    ContinuationEnvironmentClaimOver<ContinuationFrameRequirement>;
+
+/// **STAGE 1 — the STRUCTURAL frame requirement a projection can state while the
+/// fixed point is still running.**
+///
+/// ⛔⛔ **A distinct type from [`ContinuationFrameIdentity`], and that is the
+/// mechanism rather than a style choice.** Specializations are interned first,
+/// each key carrying these very projections, and `ContinuationContextId`s are
+/// minted only afterwards from `enclosing_unit.key.continuation_inputs`. So a
+/// claim built during projection *cannot* carry a context id: it does not exist
+/// yet. Making the two stages one type would leave a field that is sometimes
+/// filled and sometimes not — a half-stamped claim — and every consumer would
+/// have to be trusted to check which it holds. Here the requirement simply
+/// **cannot be presented to a consumer**: nothing converts one into an identity
+/// except [`finalize_continuation_availability`], which resolves it.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) enum ContinuationFrameRequirement {
+    /// A predeclared function's own entry ABI run. ⭐ Already exact at stage 1 —
+    /// a predeclared function id is not minted by context interning, so this arm
+    /// carries no less evidence than its finalized twin.
+    Predeclared(PredeclaredFunctionId),
+    /// A generated execution context's frame, named by the pair contexts are
+    /// **provisionally interned on**. ⛔ This is a key, not an identity: it says
+    /// which context *should* exist, and finalization is what proves exactly one
+    /// does.
+    GeneratedContext {
+        enclosing: ContinuationSpecializationId,
+        worker_body_origin: StaticOriginId,
+    },
+}
+
+/// **STAGE 2 — which frame's operand run an
+/// [`ContinuationEnvironmentClaim::EntryFrame`] speaks for**, as an exact
+/// identity, published only after every generated context has been minted.
+///
+/// ⛔ A frame identity is never inferred from a root coordinate. It names the
+/// one environment whose declared members can discharge the claim, and a
+/// consumer holding a different frame must refuse rather than index its own.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) enum ContinuationFrameIdentity {
+    /// A predeclared function's own entry ABI run.
+    Predeclared(PredeclaredFunctionId),
+    /// A generated execution context's frame: its parameter run followed by its
+    /// declared capture run.
+    ///
+    /// ⭐ **All three sides are recorded, and the consumer revalidates all
+    /// three.** `context` is the resolved identity; `specialization` and
+    /// `worker_body_origin` are the key it resolved *from*. Keeping the key
+    /// beside the id is what lets a consumer check that the id it holds is the
+    /// one this key names, rather than taking the id on trust — the two could
+    /// only disagree if finalization resolved against a different plan, which is
+    /// exactly the failure worth being unable to hide.
+    GeneratedContext {
+        context: ContinuationContextId,
+        specialization: ContinuationSpecializationId,
+        worker_body_origin: StaticOriginId,
+    },
+}
+
+/// **STAGE 2 — resolve one structural frame requirement to an exact identity.**
+///
+/// ⛔ Exactly one match, or refuse. Zero means the plan names a frame that was
+/// never interned; more than one means the provisional key is not a key at all.
+/// Both are refused **here, at finalization**, rather than at whatever seam
+/// happens to reach the claim first — which is the difference between a plan
+/// that cannot be built and a plan that is accepted and fails later.
+fn finalize_continuation_frame(
+    contexts: &[PlannedContinuationContext],
+    requirement: ContinuationFrameRequirement,
+) -> Result<ContinuationFrameIdentity, CraneliftBackendError> {
+    match requirement {
+        // ⭐ Already exact: a predeclared function id is not minted by context
+        // interning, so there is nothing to resolve and nothing that could fail.
+        ContinuationFrameRequirement::Predeclared(owner) => {
+            Ok(ContinuationFrameIdentity::Predeclared(owner))
+        }
+        ContinuationFrameRequirement::GeneratedContext {
+            enclosing,
+            worker_body_origin,
+        } => {
+            let mut found = None;
+            for context in contexts {
+                if context.enclosing_specialization != enclosing
+                    || context.worker_body_origin != worker_body_origin
+                {
+                    continue;
+                }
+                if found.is_some() {
+                    return Err(planner_error(
+                        "two generated execution contexts share one (enclosing specialization, \
+                         worker body) pair, so the frame a continuation input names is ambiguous; \
+                         RT-CONTSRC-PRODUCER-LOCAL D3b refuses at finalization rather than \
+                         publishing a claim that resolves differently depending on which \
+                         consumer looks it up",
+                    ));
+                }
+                found = Some(context.id);
+            }
+            let context = found.ok_or_else(|| {
+                planner_error(
+                    "a continuation input names a generated execution context frame that was \
+                     never interned, so no declared operand run exists to discharge it; \
+                     RT-CONTSRC-PRODUCER-LOCAL D3b refuses at finalization rather than \
+                     publishing an unresolvable claim",
+                )
+            })?;
+            Ok(ContinuationFrameIdentity::GeneratedContext {
+                context,
+                specialization: enclosing,
+                worker_body_origin,
+            })
+        }
+    }
+}
+
+/// Finalize one draft claim. `CurrentLexical` carries no frame and passes
+/// through unchanged — it was already exact at stage 1.
+fn finalize_continuation_claim(
+    contexts: &[PlannedContinuationContext],
+    draft: ContinuationEnvironmentDraft,
+) -> Result<ContinuationEnvironmentClaim, CraneliftBackendError> {
+    Ok(match draft {
+        ContinuationEnvironmentDraft::CurrentLexical {
+            emission_owner,
+            producer_result_origin,
+            emission_origin,
+            lexical_environment_origin,
+            nearest_alias_index,
+        } => ContinuationEnvironmentClaim::CurrentLexical {
+            emission_owner,
+            producer_result_origin,
+            emission_origin,
+            lexical_environment_origin,
+            nearest_alias_index,
+        },
+        ContinuationEnvironmentDraft::EntryFrame {
+            frame,
+            declared_slot,
+        } => ContinuationEnvironmentClaim::EntryFrame {
+            frame: finalize_continuation_frame(contexts, frame)?,
+            declared_slot,
+        },
+    })
+}
+
+/// Finalize both consumer views of one input.
+fn finalize_continuation_availability(
+    contexts: &[PlannedContinuationContext],
+    draft: ContinuationAvailabilityDraft,
+) -> Result<ContinuationAvailabilityViews, CraneliftBackendError> {
+    Ok(ContinuationAvailabilityViews {
+        direct_emission: draft
+            .direct_emission
+            .map(|claim| finalize_continuation_claim(contexts, claim))
+            .transpose()?,
+        context_capture: draft
+            .context_capture
+            .map(|claim| finalize_continuation_claim(contexts, claim))
+            .transpose()?,
+    })
+}
+
+/// **STAGE 2, the pass** — run once, after every generated context has been
+/// minted, over every specialization input and every context capture.
+///
+/// ⛔⛔ **Whole-plan, and that is the obligation rather than a convenience.**
+/// Finalizing lazily — resolving each claim the first time some consumer asks
+/// for it — would leave a plan carrying an unresolvable frame *accepted*, and
+/// refused only if and when something happened to reach it. Every claim is
+/// resolved here, whether or not anything will ever read it.
+///
+/// ⛔ **The obligation does not rest on how reachable the route currently is,
+/// and must not be restated as if it did.** An accepted-but-unresolvable claim
+/// is the wrong state to publish whatever today's consumption looks like: a
+/// claim nothing reaches now may be reached by the next checkpoint, and a plan
+/// that cannot be built should fail when it is built. Reachability changes with
+/// fixtures; this refusal does not.
+fn finalize_continuation_availability_plan(
+    plan: &mut StaticTransitionPlan<'_>,
+) -> Result<(), CraneliftBackendError> {
+    let contexts = &plan.continuation_contexts;
+    let mut specialization_views = Vec::with_capacity(plan.continuation_specializations.len());
+    for unit in &plan.continuation_specializations {
+        specialization_views.push(
+            unit.key
+                .continuation_inputs
+                .iter()
+                .map(|input| finalize_continuation_availability(contexts, input.availability))
+                .collect::<Result<Vec<_>, _>>()?,
+        );
+    }
+    let mut context_views = Vec::with_capacity(contexts.len());
+    for context in contexts {
+        context_views.push(
+            context
+                .captures
+                .iter()
+                .map(|capture| finalize_continuation_availability(contexts, capture.availability))
+                .collect::<Result<Vec<_>, _>>()?,
+        );
+    }
+    for (unit, views) in plan
+        .continuation_specializations
+        .iter_mut()
+        .zip(specialization_views)
+    {
+        unit.finalized_availability = views;
+    }
+    for (context, views) in plan.continuation_contexts.iter_mut().zip(context_views) {
+        context.finalized_availability = views;
+    }
+    Ok(())
+}
+
+/// **`D3b` stage-2 controls** — how the context population is perturbed before
+/// finalization is re-run. Test-only.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) enum D3bFinalizationPerturbation {
+    Exact,
+    /// No context was interned at all: every generated requirement resolves to
+    /// ZERO.
+    DropContexts,
+    /// Every context appears twice under its own key: every generated
+    /// requirement resolves to MORE THAN ONE.
+    DuplicateContexts,
+}
+
+/// Re-run stage-2 finalization over a perturbed context population and report
+/// `(generated requirements resolved, claims finalized)`.
+///
+/// ⛔ The first number is the **non-vacuity** counter, and its premise is
+/// arithmetic rather than empirical: a zero-or-multiple perturbation over an
+/// **empty** generated-requirement population succeeds trivially — there is
+/// nothing to resolve, so nothing can fail to resolve. A control that only
+/// asserted the two refusals would therefore pass on a plan carrying no
+/// generated requirement at all.
+///
+/// ⭐ So this counter is what proves that population **nonempty**, and that is
+/// the whole of its job. ⛔ It is **not** premised on how reachable the
+/// generated-frame route is at any consumer — that is a different question,
+/// owned by `D4b`'s behavioural control, and a reachability figure must not be
+/// reintroduced here as this control's justification.
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d3b_refinalize(
+    plan: &StaticTransitionPlan<'_>,
+    perturbation: D3bFinalizationPerturbation,
+) -> Result<(usize, usize), CraneliftBackendError> {
+    let contexts = match perturbation {
+        D3bFinalizationPerturbation::Exact => plan.continuation_contexts.clone(),
+        D3bFinalizationPerturbation::DropContexts => Vec::new(),
+        D3bFinalizationPerturbation::DuplicateContexts => {
+            let mut doubled = plan.continuation_contexts.clone();
+            doubled.extend(plan.continuation_contexts.iter().cloned());
+            doubled
+        }
+    };
+    let mut generated = 0;
+    let mut total = 0;
+    let mut count = |draft: ContinuationAvailabilityDraft| {
+        for claim in [draft.direct_emission, draft.context_capture].into_iter().flatten() {
+            total += 1;
+            if matches!(
+                claim,
+                ContinuationEnvironmentDraft::EntryFrame {
+                    frame: ContinuationFrameRequirement::GeneratedContext { .. },
+                    ..
+                }
+            ) {
+                generated += 1;
+            }
+        }
+    };
+    for unit in &plan.continuation_specializations {
+        for input in &unit.key.continuation_inputs {
+            count(input.availability);
+            finalize_continuation_availability(&contexts, input.availability)?;
+        }
+    }
+    for context in &plan.continuation_contexts {
+        for capture in &context.captures {
+            count(capture.availability);
+            finalize_continuation_availability(&contexts, capture.availability)?;
+        }
+    }
+    Ok((generated, total))
+}
+
+/// Attempt to publish a view with no finalized entry — the publication gate.
+/// Test-only.
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d3b_publish_without_finalization(
+    plan: &StaticTransitionPlan<'_>,
+) -> Result<(), CraneliftBackendError> {
+    let projection = plan
+        .continuation_specializations
+        .first()
+        .and_then(|unit| unit.key.continuation_inputs.first())
+        .ok_or_else(|| planner_error("the fixture plans no continuation input"))?;
+    continuation_input_view(projection, None).map(|_| ())
+}
+
+/// **The two consumer-specific availability views of one continuation input.**
+///
+/// ⛔⛔ **One unqualified index cannot be authority for both consumers, and this
+/// is measured rather than argued.** The direct continuation-call emission reads
+/// `producer_env` — the exact lexical environment standing at the producer's
+/// emission seat. The generated-context capture append reads
+/// `function_local.defining_abi_operands` — an entry-frame operand run. `D3c`
+/// showed those two disagree at nonzero binder depth, so a single `availability`
+/// field repaired for one consumer silently mis-serves the other.
+///
+/// ⭐ The split is not artificial: the two consumers already read **two physical
+/// copies** of these records — the specialization's `continuation_inputs`, and
+/// the context's `captures`, which is a clone of them.
+///
+/// ⛔ A closed record keyed by consumer kind, deliberately **not** an unkeyed
+/// vector and **not** a "first matching availability" search. A consumer takes
+/// its own field or refuses; there is no arm that lets it fall back to the
+/// other's.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) struct ContinuationAvailabilityOver<Frame> {
+    /// For the direct continuation-call emission consumer.
+    pub(in crate::cranelift_backend) direct_emission:
+        Option<ContinuationEnvironmentClaimOver<Frame>>,
+    /// For the generated-context capture-append consumer.
+    pub(in crate::cranelift_backend) context_capture:
+        Option<ContinuationEnvironmentClaimOver<Frame>>,
+}
+
+/// **Stage 2** — the published, immutable views. Both consumers read this form.
+pub(in crate::cranelift_backend) type ContinuationAvailabilityViews =
+    ContinuationAvailabilityOver<ContinuationFrameIdentity>;
+
+/// **Stage 1** — what a projection carries while the fixed point runs.
+pub(in crate::cranelift_backend) type ContinuationAvailabilityDraft =
+    ContinuationAvailabilityOver<ContinuationFrameRequirement>;
 
 /// One exact source-slot value in the environment carried by a producer edge
 /// into a computational continuation.
@@ -472,14 +1422,17 @@ struct ContinuationInputProjection {
 /// A persistent function result does not narrow a `ValueWord` input that may
 /// still name invocation-owned storage.
 #[derive(Clone, Debug, Eq, PartialEq)]
-struct ContinuationSourceSlotAuthority {
-    source_owner: PredeclaredFunctionId,
-    source_abi_position: u32,
-    source: ContinuationInputSource,
-    carrier: AbiCarrier,
-    ownership: AbiOwnership,
-    storage_owner: AbiStorageOwner,
-    referent_affinity: Vec<BoundaryReferentOwner>,
+pub(in crate::cranelift_backend) struct ContinuationSourceSlotAuthority {
+    /// `D1` — the closed coordinate domain. The contract fields below are
+    /// slot-derived for the `EntryAbi` arm and planner-derived for the
+    /// `ProducerLocal` one; that difference is in how they are *obtained*, not
+    /// in what they mean, so they stay beside the coordinate rather than
+    /// inside it.
+    pub(in crate::cranelift_backend) coordinate: ContinuationSourceCoordinate,
+    pub(in crate::cranelift_backend) carrier: AbiCarrier,
+    pub(in crate::cranelift_backend) ownership: AbiOwnership,
+    pub(in crate::cranelift_backend) storage_owner: AbiStorageOwner,
+    pub(in crate::cranelift_backend) referent_affinity: Vec<BoundaryReferentOwner>,
 }
 
 /// One semantic value's closed source-ABI provenance while walking the exact
@@ -578,13 +1531,41 @@ pub(in crate::cranelift_backend) enum ContinuationWorkerCaptureSource {
     Lexical(StaticOriginId),
 }
 
+/// One selected worker capture's exact provenance.
+///
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D7a`** widened this from module-private to
+/// backend-visible so [`ComposedWorkerView`] can carry the *same* record the
+/// specialization key holds rather than a second copy of its shape. The fields
+/// stay private with read-only accessors: the point is that a consumer can read
+/// this provenance and cannot construct one, which a `pub`-field mirror would
+/// have given away.
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
-struct ContinuationWorkerCaptureProvenance {
+pub(in crate::cranelift_backend) struct ContinuationWorkerCaptureProvenance {
     ordinal: u32,
     owner: PredeclaredFunctionId,
     closure_origin: StaticOriginId,
     source: ContinuationWorkerCaptureSource,
     lifetime: PlannedReferentLifetime,
+}
+
+// Read by this node's tests; `D7b`/`D7c` are the held production consumers.
+#[cfg_attr(not(test), allow(dead_code))]
+impl ContinuationWorkerCaptureProvenance {
+    pub(in crate::cranelift_backend) fn ordinal(&self) -> u32 {
+        self.ordinal
+    }
+    pub(in crate::cranelift_backend) fn owner(&self) -> PredeclaredFunctionId {
+        self.owner
+    }
+    pub(in crate::cranelift_backend) fn closure_origin(&self) -> StaticOriginId {
+        self.closure_origin
+    }
+    pub(in crate::cranelift_backend) fn source(&self) -> ContinuationWorkerCaptureSource {
+        self.source
+    }
+    pub(in crate::cranelift_backend) fn lifetime(&self) -> PlannedReferentLifetime {
+        self.lifetime
+    }
 }
 
 /// Exact source provenance of the static worker whose result enters a return
@@ -606,7 +1587,16 @@ struct ContinuationWorkerProvenance {
 /// count, summary, or post-assignment widening operation.
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 struct ContinuationSpecializationKey {
+    /// ⚠ **`D5a`: PROVENANCE ONLY.** This is the raw source-occurrence owner —
+    /// the unit the producer `Construct` is textually in. It does **not** confer
+    /// emission authority; see `emission_owner` beside it.
     producer_owner: PredeclaredFunctionId,
+    /// **`D5a` — the immediate emission and availability owner.**
+    ///
+    /// Who can actually emit this call and possess its operands. Equal to
+    /// `Predeclared(producer_owner)` for every edge discovered at a top-level
+    /// computational frame, which is the entire pre-`D5a` population.
+    emission_owner: ContinuationEmissionOwner,
     producer_result_origin: StaticOriginId,
     producer_construct_origin: StaticOriginId,
     producer_alternative: u32,
@@ -655,6 +1645,15 @@ impl ContinuationCallIdentity {
     pub(in crate::cranelift_backend) fn producer_owner(&self) -> PredeclaredFunctionId {
         self.token.producer_owner
     }
+
+    /// **`D5a` — who emits this call.**
+    ///
+    /// ⛔ `D3`'s owner comparison moves to THIS accessor. `producer_owner`
+    /// above is provenance and answering the claim check with it is the exact
+    /// conflation `evt_609am4v7cdt5b` ruled against.
+    pub(in crate::cranelift_backend) fn emission_owner(&self) -> ContinuationEmissionOwner {
+        self.token.emission_owner
+    }
 }
 
 /// `D1` — a read-only view of one already-validated continuation
@@ -663,6 +1662,9 @@ impl ContinuationCallIdentity {
 pub(in crate::cranelift_backend) struct ContinuationUnitView<'plan> {
     id: ContinuationSpecializationId,
     key: &'plan ContinuationSpecializationKey,
+    /// Stage-2 availability, one per continuation input. ⛔ See
+    /// [`ContinuationContextView::finalized`].
+    finalized: &'plan [ContinuationAvailabilityViews],
     header: AbiFrameHeader,
     slots: &'plan [AbiSlot],
     inputs: &'plan [abi::AbiContinuationInputAuthority],
@@ -674,6 +1676,10 @@ impl<'plan> ContinuationUnitView<'plan> {
     }
     pub(in crate::cranelift_backend) fn producer_owner(&self) -> PredeclaredFunctionId {
         self.key.producer_owner
+    }
+    /// **`D5a`** — the immediate emission and availability owner.
+    pub(in crate::cranelift_backend) fn emission_owner(&self) -> ContinuationEmissionOwner {
+        self.key.emission_owner
     }
     pub(in crate::cranelift_backend) fn consumer_owner(&self) -> PredeclaredFunctionId {
         self.key.consumer_owner
@@ -747,8 +1753,94 @@ impl<'plan> ContinuationUnitView<'plan> {
             ));
         }
 
+        // ⭐⭐ `RT-CONTSRC-PRODUCER-LOCAL` `D8l2` — THE NONRECURSIVE POPULATION
+        // IS SOURCE POSITIONS, NOT ENVELOPE INDICES.
+        //
+        // The producer `Construct` has `N + 1` fields: `N` nonrecursive ones
+        // and the selected recursive one. The roles are those `N` fields at
+        // their OWN source positions, in source order, with the selected
+        // position skipped.
+        //
+        // ⛔ What stood here emitted `0..N` — the envelope index — and called it
+        // `source_position`. The two coincide only while every nonrecursive
+        // field precedes the selected recursive position, because omitting a
+        // later position does not renumber the earlier ones but omitting an
+        // earlier one renumbers every later one. `px8tr` selects its last field,
+        // so the defect was unreachable on every landed fixture and the method's
+        // own doc comment — "in producer source order with the selected
+        // recursive position omitted" — described the rule the loop did not
+        // implement. `D8l1` measured it with two witnesses differing only in
+        // field order.
+        //
+        // ⛔ This is neither a reverse source walk nor a new identity: the
+        // producer's field count is `N + 1` by construction from the checked
+        // capture subtraction above, and the selected position is the key's own
+        // `recursive_position`. Nothing is inferred from a body, a shape, or an
+        // ABI slot.
+        let field_count = nonrecursive_field_count.checked_add(1).ok_or_else(|| {
+            planner_error("the producer constructor's field count overflows the envelope")
+        })?;
+        // ⛔ The range refusal is REQUIRED, not defensive: a selected position
+        // at or past the field count would leave the loop below emitting `N + 1`
+        // roles for `N` slots, and the slot reconciliation would then report a
+        // length disagreement that says nothing about the real fault.
+        if self.key.recursive_position >= field_count {
+            return Err(planner_error(
+                "a continuation selects a recursive position outside its producer constructor's \
+                 field run, so the ordinary envelope cannot omit it and the remaining fields do \
+                 not name a population",
+            ));
+        }
+        // ⛔ `D8l2` — the defect switch perturbs the SELECTION the population is
+        // built from, never the range check or the loop. Out-of-range selection
+        // is unreachable through any plan the planner builds -- the key's
+        // recursive position and the field count are derived from one producer
+        // -- so the refusal would otherwise ship unexercised.
+        #[cfg(test)]
+        let selected = match envelope_defect() {
+            EnvelopeDefect::SelectionOutOfRange => field_count,
+            _ => self.key.recursive_position,
+        };
+        #[cfg(not(test))]
+        let selected = self.key.recursive_position;
+        // ⛔ The range refusal is REQUIRED, not defensive: a selected position
+        // at or past the field count would leave the loop below emitting `N + 1`
+        // roles for `N` slots, and the slot reconciliation would then report a
+        // length disagreement that says nothing about the real fault.
+        if selected >= field_count {
+            return Err(planner_error(
+                "a continuation selects a recursive position outside its producer constructor's \
+                 field run, so the ordinary envelope cannot omit it and the remaining fields do \
+                 not name a population",
+            ));
+        }
         let mut envelope = Vec::with_capacity(parameter_slots);
-        for source_position in 0..nonrecursive_field_count {
+        let mut nonrecursive = (0..field_count)
+            .filter(|position| *position != selected)
+            .collect::<Vec<_>>();
+        // ⛔ `D8l2` — the four population defects, applied to the built
+        // population. Each is a shape a wrong derivation would actually
+        // produce: the dense prefix is exactly what stood here before this
+        // repair.
+        #[cfg(test)]
+        match envelope_defect() {
+            EnvelopeDefect::Exact | EnvelopeDefect::SelectionOutOfRange => {}
+            EnvelopeDefect::Omit => {
+                nonrecursive.pop();
+            }
+            EnvelopeDefect::Duplicate => {
+                if let Some(first) = nonrecursive.first().copied() {
+                    if let Some(last) = nonrecursive.last_mut() {
+                        *last = first;
+                    }
+                }
+            }
+            EnvelopeDefect::DensePrefix => {
+                nonrecursive = (0..nonrecursive_field_count).collect();
+            }
+            EnvelopeDefect::WrongOrder => nonrecursive.reverse(),
+        }
+        for source_position in nonrecursive {
             envelope.push(ContinuationOrdinaryEnvelopeRole::NonrecursiveConstructorField {
                 source_position,
             });
@@ -793,30 +1885,20 @@ impl<'plan> ContinuationUnitView<'plan> {
             .continuation_inputs
             .iter()
             .zip(self.inputs)
-            .map(|(projection, authority)| {
+            .enumerate()
+            .map(|(position, (projection, authority))| {
+                // `D3a` — domain-tagged provenance agreement, as at the
+                // generated-context capture consumer above.
                 if projection.ordinal != authority.ordinal
-                    || projection.source_owner != authority.source_owner
+                    || abi::AbiContinuationInputProvenance::of(projection.coordinate)
+                        != authority.provenance
                 {
                     return Err(planner_error(
                         "a continuation input projection disagrees with its validated ABI input \
                          authority",
                     ));
                 }
-                Ok(ContinuationInputView {
-                    ordinal: projection.ordinal,
-                    source_owner: projection.source_owner,
-                    source_abi_position: projection.source_abi_position,
-                    source: projection.source,
-                    carrier: projection.carrier,
-                    ownership: projection.ownership,
-                    storage_owner: projection.storage_owner,
-                    boundary_phase: projection.boundary_phase,
-                    boundary_operation: projection.boundary_operation,
-                    boundary_need: projection.boundary_need,
-                    boundary_avail: projection.boundary_avail,
-                    referent_affinity: projection.referent_affinity.clone(),
-                    ordinary_abi_position: projection.ordinary_abi_position,
-                })
+                continuation_input_view(projection, self.finalized.get(position))
             })
             .collect()
     }
@@ -892,6 +1974,311 @@ pub(in crate::cranelift_backend) enum ContinuationOrdinaryEnvelopeRole {
     },
 }
 
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D7a` — whether the planner issued a generated
+/// execution context for the composed frame's worker body.**
+///
+/// ⛔ **This is eligibility, not a route.** The `D6a` route law is asymmetric
+/// and this enum does not restate half of it:
+///
+/// - the **selected recursive constructor argument** calls
+///   [`StaticWorkerCallRoute::RawWorker`] **unconditionally**, at every value of
+///   this enum. `GeneratedContextIssued` is not a licence to route it anywhere
+///   else;
+/// - an **induction hypothesis** at this frame carries
+///   `GeneratedContext` **iff** this is `GeneratedContextIssued` *and* the unit
+///   defining it resolved that exact context. `RawOnly` means every route out of
+///   this frame is raw, and equal routes are then a lawful, route-degenerate
+///   state — never evidence that one binding was reused for both.
+///
+/// [`StaticWorkerCallRoute::RawWorker`]:
+///     crate::cranelift_backend::lowering::StaticWorkerCallRoute
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) enum ComposedWorkerRouteEligibility {
+    /// The planner interned exactly this context for `(specialization, worker
+    /// body)`. The identity is carried, not merely the fact, so a consumer that
+    /// later resolves a context has something to compare against rather than a
+    /// boolean it must re-derive.
+    GeneratedContextIssued(ContinuationContextId),
+    /// No generated context names this specialization and this worker body, so
+    /// the raw worker is the only target. ⛔ Not "none found yet": the lookup
+    /// this is read from is a singleton resolution that refuses rather than
+    /// choosing.
+    RawOnly,
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D7a` — one composed frame's static worker, as
+/// the planner already knows it.**
+///
+/// ## Why this exists
+///
+/// The composed eliminator path holds the *causal* coordinates — the producer
+/// `Construct` occurrence it is building, the computational-frame origin, the
+/// selected alternative, and the ruled recursive source position — and does
+/// **not** hold the continuation unit that carries the worker those coordinates
+/// select. Every fact below already sits in an interned
+/// [`ContinuationSpecializationKey`]; without this projection the only route
+/// from those coordinates to these facts is to walk the closure occurrence and
+/// read its shape, which is the second authority `RT-WORKER-BIND` exists to
+/// prevent.
+///
+/// ⛔ **Exposure, not discovery.** Nothing here is computed from a lowered
+/// value, an emitted shape, a body arity, an environment length, or from which
+/// of the two targets happens to exist. Every field is copied out of the key
+/// and re-checked against an independent planner fact before it is returned.
+///
+/// ⛔ **Unmintable.** Every field is private, there is no public constructor,
+/// and the only way to obtain one is
+/// [`StaticTransitionPlan::composed_worker_view`].
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) struct ComposedWorkerView {
+    closure_origin: StaticOriginId,
+    body_origin: StaticOriginId,
+    declared_arity: u32,
+    captures: Vec<ContinuationWorkerCaptureProvenance>,
+    route_eligibility: ComposedWorkerRouteEligibility,
+    recursive_position: u32,
+}
+
+// Read by this node's tests; `D7b`/`D7c` are the held production consumers.
+#[cfg_attr(not(test), allow(dead_code))]
+impl ComposedWorkerView {
+    /// The exact closure occurrence the specialization selected.
+    pub(in crate::cranelift_backend) fn closure_origin(&self) -> StaticOriginId {
+        self.closure_origin
+    }
+    /// The **raw** worker body — the closure occurrence's own body child, and
+    /// the origin a raw-route call resolves. It is re-derived through the sole
+    /// child-origin production point before this view is built, so it is not
+    /// read back off the same children list that recorded it.
+    pub(in crate::cranelift_backend) fn body_origin(&self) -> StaticOriginId {
+        self.body_origin
+    }
+    /// The worker's declared arity, from the key. ⛔ Not a body parameter count
+    /// re-read at the call site.
+    pub(in crate::cranelift_backend) fn declared_arity(&self) -> u32 {
+        self.declared_arity
+    }
+    /// The ordered capture provenance, dense in capture ordinal. Its agreement
+    /// with the ABI-validated ordinary envelope is checked before this view is
+    /// built.
+    pub(in crate::cranelift_backend) fn captures(&self) -> &[ContinuationWorkerCaptureProvenance] {
+        &self.captures
+    }
+    /// See [`ComposedWorkerRouteEligibility`] — eligibility, and specifically
+    /// **not** the selected recursive argument's route, which is always raw.
+    pub(in crate::cranelift_backend) fn route_eligibility(&self) -> ComposedWorkerRouteEligibility {
+        self.route_eligibility
+    }
+    /// The selector's own recursive source position, echoed back after the
+    /// worker's `sibling_position` was checked to equal it.
+    pub(in crate::cranelift_backend) fn recursive_position(&self) -> u32 {
+        self.recursive_position
+    }
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8b` — one planner-issued composed-call
+/// target.**
+///
+/// ## What it is
+///
+/// The callee a composed eliminator frame will call at one exact `D8a`
+/// selector, with the complete provenance needed to call it: closure
+/// occurrence, raw body, declared arity, ordered capture provenance, and route
+/// eligibility, all carried as the whole [`ComposedWorkerView`] rather than as
+/// a bare origin beside it.
+///
+/// ⛔ **It is a representation, not a route decision and not a population
+/// claim.** It does not say which of the two callees is taken — the view
+/// carries route eligibility and `D8c` owns consumption. It mints no
+/// `EmittableCallEdge`, forces no declaration, demands no `Function`, and
+/// asserts nothing about the executable population.
+///
+/// ⭐ **This replaces `D7a2`'s raw-target requirement, and the difference is the
+/// whole point.** That object was a *demand on the population* — "this raw body
+/// must be a declared-and-defined `Function`" — and it was withdrawn because
+/// honouring it re-opened the permanently-refused raw closure route. This one
+/// makes no such demand. The shape survives because the shape was right: one per
+/// exact selector, unconstructible outside planning, whole view, derived from an
+/// interned specialization fact.
+///
+/// ## Which side of the split each fact sits on
+///
+/// | fact | side |
+/// |---|---|
+/// | the selector resolves to exactly one worker | **unreconciled** — [`StaticTransitionPlan::composed_worker_view_unreconciled`] |
+/// | provenance re-checks: position, body child, ordered captures | **unreconciled** |
+/// | selector agreement, the law this object is validated by | **unreconciled** |
+/// | is the callee reachable as an emitted `Function` | **reconciled** — `D8c` owns it, and nothing here asks it |
+///
+/// ⛔ Stating this is not decoration. `D7a2` derived its requirements from a
+/// population question that the requirements themselves decided, and the split
+/// exists so that cannot recur: a target is minted from resolution alone, so no
+/// later executability answer can depend on an earlier one that assumed it.
+///
+/// ⛔ **Unconstructible.** Every field is private, there is no constructor
+/// outside this module, and the only way to obtain one is
+/// [`StaticTransitionPlan::composed_call_targets`].
+///
+/// ⛔ **There is no body accessor.** The callee is read as
+/// `target.worker().body_origin()`. A `body_origin()` on this type would be a
+/// second spelling of one field, and the check that compared the two was
+/// deleted in `D7a2` for comparing a value with itself.
+///
+/// ## `D8h` — the paired causal identity
+///
+/// The target additionally carries the exact opaque [`ContinuationCallIdentity`]
+/// that its **own** five-field causal coordinate selects, resolved through
+/// [`StaticTransitionPlan::continuation_call_binding_for`] — the planner lookup
+/// that already existed for this coordinate — and never rebuilt here.
+///
+/// ⛔ **The identity stays opaque and planner-owned.** It has no sequence
+/// accessor and no lowering constructor, so pairing it here adds no way to
+/// fabricate one: this type hands out a value it could not have made. Nothing
+/// in the pairing consults the worker's body, the constructor's symbol, the
+/// declared arity, the source position, or a same-shaped constructor. On the
+/// witness population **constructor-symbol equality cannot discriminate at
+/// all** — both targets name one symbol — which is what makes that exclusion a
+/// measured fact rather than a stated intention.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) struct ComposedCallTarget {
+    emission_owner: ContinuationEmissionOwner,
+    producer_construct_origin: StaticOriginId,
+    continuation_origin: StaticOriginId,
+    producer_alternative: u32,
+    recursive_position: u32,
+    worker: ComposedWorkerView,
+    call_identity: ContinuationCallIdentity,
+}
+
+// `D8i` is the production consumer: `composed_recursive_argument_binding` reads
+// `selector()`, `worker()` and `call_identity()` to build and to authorize the
+// composed binding. ⛔ The dead-code allowance that stood here is DELETED rather
+// than narrowed -- it existed while nothing outside tests read this type, and
+// keeping it now would hide the next accessor that ships unread.
+impl ComposedCallTarget {
+    /// The exact `D8a` five-field selector this target was minted under.
+    pub(in crate::cranelift_backend) fn selector(
+        &self,
+    ) -> (
+        ContinuationEmissionOwner,
+        StaticOriginId,
+        StaticOriginId,
+        u32,
+        u32,
+    ) {
+        (
+            self.emission_owner,
+            self.producer_construct_origin,
+            self.continuation_origin,
+            self.producer_alternative,
+            self.recursive_position,
+        )
+    }
+    /// The full worker provenance — the callee, and everything needed to call
+    /// it. ⛔ The only route to the body origin, deliberately.
+    pub(in crate::cranelift_backend) fn worker(&self) -> &ComposedWorkerView {
+        &self.worker
+    }
+    /// **`D8h`** — the opaque causal identity this target's own coordinate
+    /// selects.
+    ///
+    /// ⛔ Returned by reference and still opaque: a consumer can compare it,
+    /// key a map on it, and ask it for its target specialization and emission
+    /// owner. It cannot read the call-site sequence, and it cannot construct
+    /// one — which is what keeps the identity planner-owned across the pairing.
+    pub(in crate::cranelift_backend) fn call_identity(&self) -> &ContinuationCallIdentity {
+        &self.call_identity
+    }
+}
+
+/// `D8b` target-minting defects, for the controls that no well-formed plan can
+/// reach on its own.
+///
+/// ⛔ `#[cfg(test)]`. Targets are derived from interned planner facts, so a
+/// wrong body or a transplanted construct origin is unreachable through any plan
+/// the planner will build — which is exactly why the law that catches them would
+/// otherwise ship unexercised.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) enum ComposedCallTargetDefect {
+    Exact,
+    /// Mint the first target carrying a body that is not its own worker's.
+    WrongBody,
+    /// Mint the first target under a sibling layer's construct origin while
+    /// keeping its own worker provenance.
+    TransplantConstruct,
+    /// **`D8h`** — pair the first target with the causal identity belonging to
+    /// a **different** target whose producer constructor carries the **same
+    /// symbol identity**.
+    ///
+    /// ⛔ This is not a fabricated identity and not an arbitrary swap: it is
+    /// exactly the value a pairing rule keyed on constructor-symbol equality
+    /// would have produced, taken from the real population by searching for
+    /// that equality. So the refusal below is attributable to the pairing rule
+    /// the release forbids, rather than to the identity being wrong in some
+    /// unrelated way. The selector and the carried worker are untouched, so
+    /// selector agreement still passes and only the pairing law can see it.
+    ///
+    /// ⚠ If no same-symbol sibling exists on the plan under test this leaves
+    /// the population exact, and the row that arms it asserts the sibling's
+    /// existence separately — so a population that cannot exhibit the defect
+    /// fails loudly instead of passing vacuously.
+    SameSymbolIdentity,
+}
+
+#[cfg(test)]
+thread_local! {
+    static COMPOSED_CALL_TARGET_DEFECT: Cell<ComposedCallTargetDefect> =
+        const { Cell::new(ComposedCallTargetDefect::Exact) };
+}
+
+/// Arm one `D8b` target-minting defect for the current thread.
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn set_composed_call_target_defect(
+    defect: ComposedCallTargetDefect,
+) {
+    COMPOSED_CALL_TARGET_DEFECT.with(|cell| cell.set(defect));
+}
+
+/// Re-expose one immutable input projection as a view.
+///
+/// ⭐ One constructor for both the specialization and the generated-context
+/// callers: the two populations hold the *same* projection records (a context's
+/// captures literally are its enclosing specialization's continuation inputs),
+/// so a second hand-written copy would be the place the two drift apart.
+fn continuation_input_view(
+    projection: &ContinuationInputProjection,
+    finalized: Option<&ContinuationAvailabilityViews>,
+) -> Result<ContinuationInputView, CraneliftBackendError> {
+    // ⛔⛔ **THE PUBLICATION GATE.** This is the single conversion both
+    // populations pass through, so it is the one place that can guarantee no
+    // consumer ever holds a draft. A missing entry means stage 2 did not run for
+    // this record, and the honest answer is a refusal -- never the draft, which
+    // would be a half-stamped claim, and never a default frame, which would be
+    // an invented one.
+    let availability = *finalized.ok_or_else(|| {
+        planner_error(
+            "a continuation input has no finalized availability, so its generated frame \
+             requirement was never resolved to an exact context identity; \
+             RT-CONTSRC-PRODUCER-LOCAL D3b refuses to publish an unfinalized claim",
+        )
+    })?;
+    Ok(ContinuationInputView {
+        ordinal: projection.ordinal,
+        coordinate: projection.coordinate,
+        carrier: projection.carrier,
+        ownership: projection.ownership,
+        storage_owner: projection.storage_owner,
+        boundary_phase: projection.boundary_phase,
+        boundary_operation: projection.boundary_operation,
+        boundary_need: projection.boundary_need,
+        boundary_avail: projection.boundary_avail,
+        referent_affinity: projection.referent_affinity.clone(),
+        ordinary_abi_position: projection.ordinary_abi_position,
+        availability,
+    })
+}
+
 /// A read-only view of one already-validated continuation input.
 ///
 /// Every field is existing immutable `ContinuationInputProjection` material,
@@ -899,9 +2286,10 @@ pub(in crate::cranelift_backend) enum ContinuationOrdinaryEnvelopeRole {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(in crate::cranelift_backend) struct ContinuationInputView {
     pub(in crate::cranelift_backend) ordinal: u32,
-    pub(in crate::cranelift_backend) source_owner: PredeclaredFunctionId,
-    pub(in crate::cranelift_backend) source_abi_position: u32,
-    pub(in crate::cranelift_backend) source: ContinuationInputSource,
+    /// `D1` — the closed coordinate domain naming this value in its producer.
+    /// ⛔ The emission seam must **match** on it; there is no field here that
+    /// answers "which ABI position" without first answering "which domain".
+    pub(in crate::cranelift_backend) coordinate: ContinuationSourceCoordinate,
     pub(in crate::cranelift_backend) carrier: AbiCarrier,
     pub(in crate::cranelift_backend) ownership: AbiOwnership,
     pub(in crate::cranelift_backend) storage_owner: AbiStorageOwner,
@@ -911,6 +2299,33 @@ pub(in crate::cranelift_backend) struct ContinuationInputView {
     pub(in crate::cranelift_backend) boundary_avail: BoundaryUseAvail,
     pub(in crate::cranelift_backend) referent_affinity: Vec<BoundaryReferentOwner>,
     pub(in crate::cranelift_backend) ordinary_abi_position: u32,
+    /// **`D3b` re-cut** — the two consumer-specific claims. See
+    /// [`ContinuationAvailabilityViews`]. ⛔ Each consumer must take its OWN
+    /// field and validate the frame or seat it names against the environment it
+    /// actually holds; there is no field here that answers "which index"
+    /// without first answering "which environment, and whose".
+    pub(in crate::cranelift_backend) availability: ContinuationAvailabilityViews,
+}
+
+impl ContinuationInputView {
+    /// **The complete requested source slot `S` this input names.**
+    ///
+    /// ⭐ One derivation, on the view, because the alias rule is stated over the
+    /// WHOLE record and a consumer that rebuilt it field-by-field at the seam
+    /// would be a second definition able to drift from the planner's. The
+    /// eligibility test in [`nearest_exact_alias`] is exact equality against
+    /// this, so a field omitted here would silently widen it.
+    pub(in crate::cranelift_backend) fn requested_source_slot(
+        &self,
+    ) -> ContinuationSourceSlotAuthority {
+        ContinuationSourceSlotAuthority {
+            coordinate: self.coordinate,
+            carrier: self.carrier,
+            ownership: self.ownership,
+            storage_owner: self.storage_owner,
+            referent_affinity: self.referent_affinity.clone(),
+        }
+    }
 }
 
 /// `D1` — a read-only view of one already-validated continuation call token,
@@ -928,6 +2343,10 @@ pub(in crate::cranelift_backend) struct ContinuationCallView<'plan> {
 impl ContinuationCallView<'_> {
     pub(in crate::cranelift_backend) fn producer_owner(&self) -> PredeclaredFunctionId {
         self.token.producer_owner
+    }
+    /// **`D5a`** — the immediate emission and availability owner.
+    pub(in crate::cranelift_backend) fn emission_owner(&self) -> ContinuationEmissionOwner {
+        self.token.emission_owner
     }
     pub(in crate::cranelift_backend) fn producer_result_origin(&self) -> StaticOriginId {
         self.token.producer_result_origin
@@ -949,6 +2368,23 @@ impl ContinuationCallView<'_> {
     }
 }
 
+/// **`RT-DECL-CLOSURE-PORT` `D5a`** — one already-issued causal call, projected
+/// onto the exact result edge it belongs to.
+///
+/// The three edge fields are the ruled key
+/// `(producer_owner, producer_result_origin, producer_construct_origin)`; the
+/// owner is implicit in how the projection is requested, so it cannot disagree
+/// with the unit asking. `recursive_position` rides along because the detached
+/// seat has to omit exactly that field of the planned constructor and has no
+/// other lawful way to learn which one it is.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) struct ContinuationResultEdge {
+    pub(in crate::cranelift_backend) producer_result_origin: StaticOriginId,
+    pub(in crate::cranelift_backend) producer_construct_origin: StaticOriginId,
+    pub(in crate::cranelift_backend) recursive_position: u32,
+    pub(in crate::cranelift_backend) identity: ContinuationCallIdentity,
+}
+
 /// Bounds-checked dense-range slice, failing closed rather than truncating.
 fn dense_slice<T>(arena: &[T], range: semantic_ir::DenseRange) -> Option<&[T]> {
     let start = range.start as usize;
@@ -960,12 +2396,23 @@ fn dense_slice<T>(arena: &[T], range: semantic_ir::DenseRange) -> Option<&[T]> {
 struct PlannedContinuationSpecialization {
     id: ContinuationSpecializationId,
     key: ContinuationSpecializationKey,
+    /// **Stage 2** — the finalized availability of each continuation input, in
+    /// ordinal order. ⛔ Deliberately a SIBLING of `key`, never inside it:
+    /// `key` is the interning identity, and stamping a resolved context id into
+    /// it after interning would rewrite the identity every dedup decision was
+    /// already made against.
+    finalized_availability: Vec<ContinuationAvailabilityViews>,
 }
 
 /// Exact causal identity for one direct producer edge into an interned target.
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 struct ContinuationSpecializationCallToken {
+    /// ⚠ **`D5a`: PROVENANCE ONLY** — the raw source-occurrence owner. Kept
+    /// because it is still the right answer to "where is this producer written";
+    /// it is no longer the answer to "who emits this call".
     producer_owner: PredeclaredFunctionId,
+    /// **`D5a` — who emits this call and holds its operands.**
+    emission_owner: ContinuationEmissionOwner,
     producer_result_origin: StaticOriginId,
     producer_construct_origin: StaticOriginId,
     producer_alternative: u32,
@@ -1034,6 +2481,19 @@ pub(in crate::cranelift_backend) struct StaticTransitionPlan<'src> {
     /// asymmetric with the two `lower_expr` closure arms
     ///.
     declaration_occurrences: BTreeMap<String, StaticOriginId>,
+    /// Which of the two lawful target classes each `DeclarationRef`
+    /// occurrence's `DeclarationCall` edge resolved to, keyed by the
+    /// **reference** occurrence.
+    ///
+    /// ⭐ `RT-DECL-CLOSURE-PORT` `D4`: the planner decides this once, in
+    /// `connect_declaration_calls`, and records the decision beside the edge it
+    /// made. ⛔ It is deliberately **not** erased into a single "declared unit"
+    /// notion: a zero-input scheduling entry and a declaration-owned callable
+    /// unit are both reached by `EdgeKind::DeclarationCall`, and an empty input
+    /// slice is type-correct-looking against either. Recording the class is
+    /// what lets the consumer refuse the empty call at a callable target
+    /// instead of emitting a wrong-arity one.
+    declaration_call_targets: BTreeMap<StaticOriginId, DeclarationCallTargetClass>,
     /// Exact trap values interned during the same occurrence visit that records
     /// their source semantics. Identity zero is reserved for "no trap".
     trap_catalog: Vec<RuntimeTrap>,
@@ -1063,6 +2523,18 @@ pub(in crate::cranelift_backend) struct StaticTransitionPlan<'src> {
     /// facts, but no lowering accessor exists until the activation slice.
     continuation_specializations: Vec<PlannedContinuationSpecialization>,
     continuation_specialization_calls: Vec<PlannedContinuationSpecializationCall>,
+    /// `RT-DECL-CLOSURE-PORT` `D5a`. The generated producer execution contexts,
+    /// derived after the specialization fixed point closes.
+    continuation_contexts: Vec<PlannedContinuationContext>,
+    /// `RT-DECL-CLOSURE-PORT` `D7`. One ownership record per aggregate producer
+    /// occurrence. ⭐ Unlike its two dormant siblings above, this population
+    /// HAS a lowering accessor — the allocation lane is unreadable at the
+    /// producer without it.
+    aggregate_ownership: Vec<PlannedAggregateOwnership>,
+    /// `RT-DECL-CLOSURE-PORT` `D7`. One record per capability/argument seat of
+    /// every admitted host effect occurrence. Read by lowering, which claims
+    /// exactly one of these per seat it consumes.
+    host_effect_seats: Vec<PlannedEffectSeat>,
 }
 
 #[cfg(test)]
@@ -1143,7 +2615,13 @@ struct BoundaryB1Census {
     ir_records: usize,
     semantic_edges: usize,
     /// The number of **function units** — `entries.len() + count(StaticBody
-    /// edges)`. Renamed from `helper_definitions` by `RT-FNSPLIT-B2O` `AC-6`.
+    /// edges) - count(declaration-owned pairs)` since `RT-DECL-CLOSURE-PORT`
+    /// `D2a`. ⛔ The subtraction is not a rounding detail: without it a
+    /// closure-seed transparent declaration contributes a second, unreachable
+    /// zero-input function whose body is a closure that cannot cross a unit
+    /// boundary. Old form, for readers of earlier evidence:
+    /// `entries.len() + count(StaticBody edges)`. Renamed from
+    /// `helper_definitions` by `RT-FNSPLIT-B2O` `AC-6`.
     ///
     /// ⚠ **This field is the one re-baselined quantity that cannot fail
     /// loudly, which is why the rename is an acceptance criterion and not
@@ -2164,6 +3642,1880 @@ fn validate_occurrence_authority_plan(
     Ok(())
 }
 
+/// **`RT-DECL-CLOSURE-PORT` `D7` — the opaque identity of one aggregate
+/// emission occurrence.**
+///
+/// Issued by the planner and only by the planner. The field is private to this
+/// module, so lowering **cannot construct one** — it can only receive an
+/// identity from an accessor that already interned it. That is the mechanical
+/// form of "lowering does not construct identities"; a doc comment saying so
+/// would be advisory, and this is not.
+///
+/// ## Why an identity rather than the emission origin
+///
+/// A `Lowered::Constructor` template outlives the occurrence that produced it.
+/// Lowering builds the template at the `Construct` occurrence and may transfer
+/// it into the carrier much later, at a `Let`, `Match`, `Call` or `Effect`
+/// origin reached through nested producer traversal. The identity the emitter
+/// needs is the **producer's**, and by then the emission origin is a different
+/// occurrence entirely.
+///
+/// That is not a hypothesis: the sibling `synthesized_identity` field on the
+/// template exists for exactly this reason and says so in its own comment —
+/// *"the caller occurrence is not the constructor occurrence and therefore
+/// cannot lawfully re-query its atom."* The allocation lane is the second fact
+/// with that property, and it travels the same way.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[repr(transparent)]
+pub(in crate::cranelift_backend) struct AggregateOccurrenceId(u32);
+
+/// Which producer an aggregate occurrence record is about.
+///
+/// The two arms are the two ways an aggregate comes to exist, and they are
+/// named by different authorities on purpose. A source aggregate is named by
+/// its own occurrence in the program. A synthesized one has no occurrence to be
+/// named by, so it is named by the closed compiler role that builds it — never
+/// by the origin it happens to be emitted at, which belongs to whatever
+/// expression the emission was reached through.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) enum AggregateOccurrenceProducer {
+    /// A `Construct`/`Record` written in the program.
+    Source(StaticOriginId),
+    /// One exact compiler-synthesized producer USE.
+    ///
+    /// A role is a schema, not an identity, and neither is a role at a seat.
+    /// Two uses of `PrivateTransferCount` at two seats are two occurrences even
+    /// though their schema is one; two uses of `ResourceKind` at ONE seat --
+    /// `ResourceKindMismatch` fields 0 and 1 -- are likewise two occurrences,
+    /// and no seat-and-role key can separate them. The path is what does.
+    SynthesizedUse {
+        /// The exact `D5a` emission owner, `Predeclared` or `Specialization`.
+        ///
+        /// It is in the KEY, not merely on the record. One seat's body may be
+        /// lowered under a predeclared unit and again inside a generated
+        /// specialization context; those are different emissions and their
+        /// records must not alias. Deriving this from the seat's provenance
+        /// owner would collapse exactly the distinction `D5a` exists to keep.
+        owner: ContinuationEmissionOwner,
+        /// The `Effect` occurrence whose lowering builds this producer, which
+        /// is also what supplies the emission owner.
+        seat: StaticOriginId,
+        /// Where in the seat's operation tree this use sits.
+        ///
+        /// ⛔ Not an ordinal. An ordinal would count emissions in lowering's
+        /// control flow, which the planner does not execute; a path is measured
+        /// structure that both sides state independently and can be checked
+        /// against each other at construction.
+        path: SynthesizedAggregatePath,
+        /// The constructor this use builds — **fixed or `IOError`**.
+        ///
+        /// ⭐ The full sum, not the fixed half. Every `IOError` alternative is
+        /// a real allocation with its own path, so the domain must be able to
+        /// name one. An earlier spelling typed this as the fixed roles alone,
+        /// which is what excluded them from `P` and from `R`.
+        role: SynthesizedConstructorRole,
+    },
+}
+
+/// Which aggregate shape one producer occurrence builds.
+///
+/// ⛔ Deliberately its own two-member enum rather than a reuse of
+/// [`crate::boundary_value::BoundaryClass`]. That type is the *node* class and
+/// admits five ground shapes; the population here is exactly the shapes that
+/// **have children to take a lifetime meet over**, and spelling it as its own
+/// type is what makes a `Bytes` occurrence a type error here instead of a
+/// record nothing ever consumes.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) enum PlannedAggregateShape {
+    Constructor,
+    Record,
+}
+
+/// A read-only view of one planned aggregate ownership record.
+///
+/// ⭐ Every accessor answers from the ONE record the occurrence names. Nothing
+/// here searches, and nothing takes a coordinate — a consumer that could pass a
+/// coordinate could pass the wrong one, which is the defect this projection
+/// exists to make unspellable.
+pub(in crate::cranelift_backend) struct PlannedAggregateView<'plan> {
+    record: &'plan PlannedAggregateOwnership,
+}
+
+impl<'plan> PlannedAggregateView<'plan> {
+    pub(in crate::cranelift_backend) fn id(&self) -> AggregateOccurrenceId {
+        self.record.id
+    }
+
+    pub(in crate::cranelift_backend) fn producer(&self) -> &'plan AggregateOccurrenceProducer {
+        &self.record.producer
+    }
+
+    /// The producer's own source occurrence, for a source aggregate.
+    ///
+    /// `None` for a compiler-synthesized use, which has no occurrence in the
+    /// program — an absence, not a coordinate to fall back on.
+    pub(in crate::cranelift_backend) fn producer_origin(&self) -> Option<StaticOriginId> {
+        match &self.record.producer {
+            AggregateOccurrenceProducer::Source(origin) => Some(*origin),
+            AggregateOccurrenceProducer::SynthesizedUse { .. } => None,
+        }
+    }
+
+    pub(in crate::cranelift_backend) fn owner(&self) -> Option<PredeclaredFunctionId> {
+        self.record.owner
+    }
+
+    pub(in crate::cranelift_backend) fn shape(&self) -> PlannedAggregateShape {
+        self.record.shape
+    }
+
+    /// The ruled allocation lane. ⛔ Read here, never re-derived from the value.
+    pub(in crate::cranelift_backend) fn allocation(&self) -> PlannedAggregateAllocation {
+        self.record.allocation
+    }
+
+    pub(in crate::cranelift_backend) fn meet(&self) -> PlannedReferentLifetime {
+        self.record.meet
+    }
+
+    /// The ordered children, with each one's position, source occurrence,
+    /// lifetime and possible referent owners.
+    pub(in crate::cranelift_backend) fn children(&self) -> &'plan [PlannedAggregateChild] {
+        &self.record.children
+    }
+}
+
+/// The allocation lane the ruled lifetime meet selects for one aggregate.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) enum PlannedAggregateAllocation {
+    /// Every child's possible-owner set excludes the invocation arena.
+    PersistentGround,
+    /// At least one child has an invocation-owned alternative, so the
+    /// aggregate's own lifetime is the invocation.
+    InvocationAggregate,
+}
+
+/// One child of an aggregate producer, with the exact facts the meet is taken
+/// over.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) struct PlannedAggregateChild {
+    pub(in crate::cranelift_backend) position: u32,
+    /// The child's own source occurrence.
+    ///
+    /// `None` for a child of a compiler-synthesized aggregate, which has no
+    /// occurrence in the program. Recorded as an absence rather than filled
+    /// with the parent's origin -- the aliasing that made a synthesized
+    /// subtree indistinguishable from the expression it was emitted under.
+    pub(in crate::cranelift_backend) origin: Option<StaticOriginId>,
+    /// **`RT-DECL-CLOSURE-PORT` `D7` — the ordered field identity a RECORD
+    /// producer plans at this position.**
+    ///
+    /// ⭐ Issued here, at the producer, and read nowhere else. A record's field
+    /// names are a producer fact in exactly the way its ownership record is, so
+    /// they travel with the template rather than being re-resolved at whatever
+    /// coordinate the record is finally transferred at.
+    ///
+    /// ⛔ `None` for a constructor child and for a synthesized child — an
+    /// absence, never a name to fall back on. A consumer comparing a record's
+    /// carried identity against `None` must refuse rather than skip: two
+    /// absences agreeing is the shape that let a grafted schema pass.
+    pub(in crate::cranelift_backend) field_identity: Option<FieldIdentity>,
+    pub(in crate::cranelift_backend) lifetime: PlannedReferentLifetime,
+    /// The **possible** referent owners of this child, never a determination.
+    ///
+    /// ⚠ Read the emptiness rule before the membership rule: a child whose set
+    /// is empty is not a child that owns nothing, it is a child whose
+    /// representation the planner could not derive, and the builder refuses it
+    /// rather than letting an empty set satisfy "contains no invocation owner"
+    /// vacuously.
+    pub(in crate::cranelift_backend) owners: Vec<BoundaryReferentOwner>,
+}
+
+/// **`RT-DECL-CLOSURE-PORT` `D7` — one exact ownership record per aggregate
+/// producer occurrence.**
+///
+/// ⭐ **The lifetime of an aggregate is a MEET over its children, and no
+/// per-value shape can compute it.** `Construct` and `Record` are persistable
+/// shapes, so the value-shape disposition reaches for a persistent lane for
+/// every one of them. That is right exactly when every child outlives the
+/// parent, and it is the dangling edge otherwise — which is why the tag may not
+/// be chosen at the allocation site from the value in hand.
+///
+/// ⛔ The consumer reads `allocation` and nothing else. It may not re-derive the
+/// meet, inspect a runtime tag, or search lifetimes in lowering.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) struct PlannedAggregateOwnership {
+    /// The opaque identity lowering carries on the template and hands back at
+    /// emission. Dense, and equal to this record's index in the population.
+    pub(in crate::cranelift_backend) id: AggregateOccurrenceId,
+    /// Which producer this record is about, and the population's sort key.
+    pub(in crate::cranelift_backend) producer: AggregateOccurrenceProducer,
+    /// The function unit that emits a source producer.
+    ///
+    /// `None` for a synthesized role, which has no source occurrence and
+    /// therefore no function owner. Spelled as an absence rather than a
+    /// borrowed owner so nothing can read a synthesized record as if it were
+    /// owned by whichever unit happened to emit it.
+    pub(in crate::cranelift_backend) owner: Option<PredeclaredFunctionId>,
+    pub(in crate::cranelift_backend) shape: PlannedAggregateShape,
+    /// The tree's own child model for a synthesized use, handed to the emitter
+    /// so it can check that each operand it holds is the KIND the meet was
+    /// taken over.
+    ///
+    /// `None` for a source producer, whose children are occurrences in the
+    /// program rather than nodes in a tree.
+    pub(in crate::cranelift_backend) declared_children:
+        Option<&'static [SynthesizedAggregateNode]>,
+    pub(in crate::cranelift_backend) children: Vec<PlannedAggregateChild>,
+    /// The meet itself, retained beside the lane it selects so a reader can
+    /// see the derivation rather than only its verdict.
+    pub(in crate::cranelift_backend) meet: PlannedReferentLifetime,
+    pub(in crate::cranelift_backend) allocation: PlannedAggregateAllocation,
+}
+
+/// The **possible** referent owners of one aggregate child.
+///
+/// Two authorities bound this set and the answer is their intersection:
+///
+/// - **Lifetime** ([`lifetime_referent_affinity`]) — how long the referent may
+///   live. `ActivationOwned` admits the invocation arena; `Persistent` does not.
+/// - **Representation** ([`JoinResultRepresentation`]) — whether there is a
+///   referent to own at all. A child the emitter materializes as a
+///   `NativeScalarPair` is an immediate: it has no heap node, so no owner but
+///   [`BoundaryReferentOwner::NoReferent`] is possible for it.
+///
+/// Reading only the first is what makes every call-shaped child look
+/// arena-owned. `derive_occurrence_lifetime` answers `ActivationOwned` for
+/// every `Call`, `Effect` and `PrimitiveCall` unconditionally — not because
+/// their results are arena-owned, but because it does not look through them.
+/// That is a sound floor on the LIFETIME axis and says nothing about the
+/// REFERENT axis, and treating it as if it did forces an aggregate over two
+/// integer-returning calls into the invocation lane. Such an aggregate is then
+/// refused at the process root, which cannot accept an arena-owned answer — so
+/// the over-approximation does not merely cost a lane, it rejects a program
+/// that is sound and that ran before the lane existed.
+///
+/// This is a narrowing of "possible", not a relaxation of the escape rule. A
+/// child with no referent cannot dangle, so it cannot be the reason a parent
+/// must die with the invocation. Where the representation is unknown the
+/// lifetime answer stands unnarrowed, which is the conservative direction.
+fn aggregate_child_referent_owners(
+    plan: &StaticTransitionPlan<'_>,
+    child: &PlannedOccurrenceChildAuthority,
+) -> Result<Vec<BoundaryReferentOwner>, CraneliftBackendError> {
+    let by_lifetime = lifetime_referent_affinity(child.lifetime);
+    let representation = plan
+        .join_results
+        .get(child.origin.0 as usize)
+        .and_then(|slot| slot.as_ref())
+        .map(|result| result.representation);
+    match representation {
+        // The emitter will produce a native scalar pair here. There is no
+        // boundary node, so there is nothing for an arena or a store to own.
+        Some(JoinResultRepresentation::NativeScalarPair) => {
+            Ok(vec![BoundaryReferentOwner::NoReferent])
+        }
+        // A carrier word may name a node, and an occurrence with no planned
+        // join result tells us nothing. Both keep the lifetime's own answer.
+        Some(JoinResultRepresentation::CarrierWord) | None => Ok(by_lifetime),
+    }
+}
+
+/// Which arm of a host result one synthesized aggregate tree is rooted at.
+///
+/// A host operation synthesizes two independent values — the `error` arm and
+/// the `ok` arm — and they are separate trees, not two halves of one. Rooting a
+/// path at one of them is what keeps `FsWriteAt`'s `PrivateTransferCount`
+/// (which lives under `ok`, inside `Wrote`) distinct from `FsReadAt`'s
+/// error-side machinery, without either arm having to know the other's shape.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) enum SynthesizedAggregateRoot {
+    HostResultError,
+    HostResultOk,
+}
+
+/// One step from a synthesized aggregate to one of its ordered children.
+///
+/// ⛔ The two constructors are deliberately different steps rather than one
+/// integer. A fixed constructor's field 0 and a dynamic constructor's
+/// alternative 0 are positions in different structures — one is a child that is
+/// always present, the other is a child that exists only when the discriminator
+/// selects it. Collapsing them to a bare index would let a path name a node it
+/// does not reach and still compare equal to the one that does.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) enum SynthesizedAggregateStep {
+    /// The ordered field of a fixed constructor, by position.
+    Field(u32),
+    /// One alternative of a dynamic constructor, by its ordered position in the
+    /// closed alternative list.
+    ///
+    /// ⚠ The POSITION, not the ABI discriminator tag. `ResourceKind`'s two tags
+    /// are wire-schema facts (`wire.resource_kind_fs_handle`), so a path keyed
+    /// on them would depend on a value this planner does not own and could not
+    /// state without importing the host's wire layout. The position is the same
+    /// fact on both sides, and the emitter's own alternative list is checked
+    /// against it at construction.
+    Alternative(u32),
+}
+
+/// The exact position of one synthesized aggregate in its operation's tree.
+///
+/// ⭐ **This is the fact a role alone cannot supply.** Six of the measured
+/// construction sites build a repeated role at one seat: `ResourceKind` appears
+/// under `ResourceReleaseFailed` field 0 and `ResourceKindMismatch` fields 0
+/// and 1, and the `IOError` alternative set appears under `ResourceHostIo`
+/// field 0, `ResourceReleaseFailed` field 2 and `FileError` field 2. A
+/// role-keyed record cannot tell those apart, so one row would have to serve
+/// three allocations.
+///
+/// ⛔ The separator is **where the node sits**, never an issued ordinal. An
+/// ordinal would have to count emissions in lowering's control flow, which the
+/// planner does not execute and therefore cannot compute; the path is measured
+/// structure and both sides can state it independently.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) struct SynthesizedAggregatePath {
+    root: SynthesizedAggregateRoot,
+    steps: Vec<SynthesizedAggregateStep>,
+}
+
+impl SynthesizedAggregatePath {
+    /// The empty path at one of a host result's two arms.
+    pub(in crate::cranelift_backend) fn root(root: SynthesizedAggregateRoot) -> Self {
+        Self {
+            root,
+            steps: Vec::new(),
+        }
+    }
+
+    /// This path extended by one ordered field of a fixed constructor.
+    pub(in crate::cranelift_backend) fn field(&self, position: u32) -> Self {
+        self.extend(SynthesizedAggregateStep::Field(position))
+    }
+
+    /// This path extended by one alternative of a dynamic constructor.
+    pub(in crate::cranelift_backend) fn alternative(&self, position: u32) -> Self {
+        self.extend(SynthesizedAggregateStep::Alternative(position))
+    }
+
+    fn extend(&self, step: SynthesizedAggregateStep) -> Self {
+        let mut steps = self.steps.clone();
+        steps.push(step);
+        Self {
+            root: self.root,
+            steps,
+        }
+    }
+}
+
+/// One node of a host operation's closed synthesized aggregate tree.
+///
+/// ⭐ **The tree is the recipe.** The previous spelling was a flat per-role
+/// child list plus a flat per-operation use list, and the two together could
+/// not state *where* a use sits — which is exactly the fact that separates the
+/// six repeated-role sites above.
+///
+/// ## Acyclicity is a compile-time property here, not a runtime colouring
+///
+/// The children are `&'static` slices built from `const` items, and a `const`
+/// that transitively references itself is an evaluation cycle rustc rejects. So
+/// the walk over this tree terminates because the tree is finite, and there is
+/// no back-edge check to get wrong. The previous role-graph spelling needed a
+/// visiting/done colouring precisely because a role could name itself; a value
+/// tree cannot.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) enum SynthesizedAggregateNode {
+    /// A fixed constructor with ordered children, built through
+    /// `Lowered::Constructor`.
+    Fixed {
+        role: SynthesizedFixedConstructorRole,
+        children: &'static [SynthesizedAggregateNode],
+    },
+    /// A dynamic constructor: exactly one alternative is selected at runtime.
+    Dynamic(SynthesizedDynamicSet),
+    /// A scalar, named by the **exact** closed immediate disposition the
+    /// emitter must produce for it.
+    ///
+    /// `spill` is the whole reason this is not one class. A
+    /// `RepresentedImmediate` does NOT mean "no boundary node": when a runtime
+    /// magnitude test finds the payload too wide for the immediate field, a
+    /// `spill: Some(_)` value becomes a handle of that class, which is a
+    /// persistent-store referent. So
+    ///
+    /// - `spill: None` (`Bool`) is exactly `{NoReferent}`;
+    /// - `spill: Some(_)` (`Int`, `BoundedNat`, `StructuralNat`,
+    ///   `ProcessExitStatus`) is `{NoReferent, PersistentStore}`.
+    ///
+    /// These are the disposition authority's own two fields, not a second tag
+    /// table. Recording only the broad `RepresentedImmediate` family, or
+    /// widening every scalar to the larger set, is a safe LANE answer and a
+    /// false statement about the child -- and a record's owner sets are its
+    /// stated evidence, not merely a means to a verdict.
+    Scalar {
+        tag: BoundaryTag,
+        spill: Option<BoundaryClass>,
+    },
+    /// A value the **Effect seat itself** supplies, named by the ordered
+    /// position of the operand it comes from.
+    ///
+    /// ⭐ **Site-dependence is not non-reachability.** `OptionSome` wraps the
+    /// seat's path operand and `PrivateBufferSpan` carries the seat's buffer
+    /// `ResourceToken`; both are real allocations that production emits. What
+    /// is unavailable for them is a *role-invariant* meet — not a meet. The
+    /// evidence is exact and it is already in the plan: the operand is a child
+    /// occurrence of this very seat, with its own lifetime and join
+    /// representation.
+    ///
+    /// ⛔ So this is resolved against the seat, never defaulted and never
+    /// pruned. Omitting the node from `P` because no role-invariant answer
+    /// exists is not the fail-closed direction once production can emit the
+    /// allocation — it leaves a real allocation with no record. If the seat's
+    /// operand evidence cannot be derived, **planning fails**.
+    ///
+    /// The index is into the seat's `args`, before the capability offset that
+    /// `RuntimeExpr::Effect` applies to its semantic children.
+    SiteOperand(u32),
+    /// This arm of the host result synthesizes no aggregate at all.
+    ///
+    /// `FsReadFile`'s `ResponseBytes`, `FsOpen`'s `ResourceToken`,
+    /// `FsHandleMetadata`'s `Int`. Distinct from [`Self::SiteOperand`] on
+    /// purpose: that one is a child whose evidence the seat supplies, this one
+    /// is a position where the tree governs nothing because no aggregate is
+    /// built. Collapsing them would let "no allocation here" and "an allocation
+    /// whose child comes from the site" share an arm.
+    Absent,
+}
+
+/// The closed alternative set of one dynamic constructor.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) enum SynthesizedDynamicSet {
+    /// The `IOError` alternative set, whose population is the process symbol
+    /// inventory rather than a list this module can spell.
+    ///
+    /// Named rather than enumerated because its arity is
+    /// `NativeProcessSymbols::io_errors.len()` and its roles are minted by
+    /// [`StaticTransitionPlan::synthesized_io_error_roles`]. Its alternatives
+    /// carry at most one `Int` payload, on the last alternative only.
+    IoErrors,
+    /// An alternative list this module states, indexed by position.
+    Alternatives(&'static [SynthesizedAggregateNode]),
+}
+
+impl SynthesizedAggregateNode {
+    /// A `BoundedNat` scalar, as the reply-validation lowering produces it.
+    const fn bounded_nat() -> Self {
+        Self::Scalar {
+            tag: BoundaryTag::ImmediateBoundedNat,
+            spill: Some(BoundaryClass::Int),
+        }
+    }
+
+    /// A native `Int` scalar.
+    const fn native_int() -> Self {
+        Self::Scalar {
+            tag: BoundaryTag::ImmediateInt,
+            spill: Some(BoundaryClass::Int),
+        }
+    }
+
+    /// A fixed constructor with no children.
+    const fn nullary(role: SynthesizedFixedConstructorRole) -> Self {
+        Self::Fixed {
+            role,
+            children: &[],
+        }
+    }
+}
+
+/// **`RT-DECL-CLOSURE-PORT` `D7` — the closed synthesized aggregate tree of one
+/// host operation, both arms.**
+///
+/// ## It was MEASURED, not transcribed
+///
+/// This structure lives in `lower_process_host_effect` as roughly four hundred
+/// lines of imperative code interleaved with `builder.ins()` calls. It was
+/// derived by instrumenting every `synthesized_constructor` and
+/// `synthesized_dynamic_alternative` call to print the KINDS of its own
+/// children, running the suite **single-threaded**, and reading the edges off
+/// the log.
+///
+/// The single-threaded run is not incidental: `--nocapture` output from
+/// concurrent tests interleaves, and a parallel run manufactured a phantom in
+/// which one seat built its error tree twice. That phantom would have forced a
+/// planner-issued repetition ordinal into the key — an ordinal the planner
+/// cannot compute, because it depends on lowering's control flow.
+///
+/// ## Two things the measurement found that a transcription would have smoothed
+///
+/// - `OptionSome -> [Bytes]` and `PrivateBufferSpan -> [ResourceToken, …]` are
+///   genuine **site-dependent leaves**. A `ResourceToken` is a handle, not a
+///   scalar, so neither can take a role-invariant child model.
+/// - `Wrote -> [Bool]` occurs exactly once in the whole suite, in the `c2_ac4`
+///   fixture, and disagrees with every production construction of `Wrote`. It
+///   is recorded here as the fixture's disagreement, not the tree's.
+///
+/// ## The eager `IOError` template is ABANDONED for the resource-surface ops
+///
+/// `lower_process_host_effect` builds one `IOError` dynamic constructor before
+/// it knows which branch it is in. The file operations use it as `FileError`
+/// field 2 and the console operations use it as the whole error; the six
+/// resource-surface operations build their **own** `surface_io_error` and never
+/// reference it. So the trees below do not contain it at those roots — an
+/// abandoned template is not a semantic use, and giving it a path would plan a
+/// record for an allocation that never happens.
+fn host_effect_recipe_tree(operation: ken_host::HostOpV1) -> SynthesizedHostResultTree {
+    use ken_host::HostOpV1 as Op;
+    use SynthesizedAggregateNode as N;
+    use SynthesizedFixedConstructorRole as R;
+
+    const NAT2: &[SynthesizedAggregateNode] = &[N::bounded_nat(), N::bounded_nat()];
+    const INT2: &[SynthesizedAggregateNode] = &[N::native_int(), N::native_int()];
+
+    /// `PrivateTransferCount(BoundedNat, BoundedNat)`.
+    const TRANSFER_COUNT: SynthesizedAggregateNode = N::Fixed {
+        role: R::PrivateTransferCount,
+        children: NAT2,
+    };
+    /// `ResourceTraceIdentity(Int, Int)`.
+    const TRACE_IDENTITY: SynthesizedAggregateNode = N::Fixed {
+        role: R::ResourceTraceIdentity,
+        children: INT2,
+    };
+    /// The two-alternative `ResourceKind` set, at wire tags this module does
+    /// not spell — reached by POSITION, per [`SynthesizedAggregateStep`].
+    const RESOURCE_KIND: SynthesizedAggregateNode =
+        N::Dynamic(SynthesizedDynamicSet::Alternatives(&[
+            N::nullary(R::ResourceKindFsHandle),
+            N::nullary(R::ResourceKindBuffer),
+        ]));
+    const IO_ERRORS: SynthesizedAggregateNode = N::Dynamic(SynthesizedDynamicSet::IoErrors);
+
+    /// The ten-alternative resource surface, in the emitter's own order.
+    const RESOURCE_SURFACE: SynthesizedAggregateNode =
+        N::Dynamic(SynthesizedDynamicSet::Alternatives(&[
+            N::Fixed {
+                role: R::ResourceHostIo,
+                children: &[IO_ERRORS],
+            },
+            N::nullary(R::ResourceClosed),
+            N::nullary(R::ResourceMalformed),
+            N::Fixed {
+                role: R::ResourceRightNotHeld,
+                children: INT2,
+            },
+            N::Fixed {
+                role: R::ResourceReleaseFailed,
+                children: &[RESOURCE_KIND, TRACE_IDENTITY, IO_ERRORS],
+            },
+            N::Fixed {
+                role: R::ResourceKindMismatch,
+                children: &[RESOURCE_KIND, RESOURCE_KIND],
+            },
+            N::nullary(R::ResourceBufferLimit),
+            N::nullary(R::ResourceInvalidOffset),
+            N::nullary(R::ResourceInvalidBounds),
+            N::nullary(R::ResourceNoProgress),
+        ]));
+
+    /// `Option::Some(<the site's path operand>)`.
+    ///
+    /// Its child is site-bound, which bounds the ROLE-INVARIANT meet and not
+    /// the meet: this node and every parent of it gets an exact seat-bound
+    /// record, derived from the seat's own operand authority.
+    const SOME_SITE_PATH: SynthesizedAggregateNode = N::Fixed {
+        role: R::OptionSome,
+        // The seat's operand 0 — the path the caller passed.
+        children: &[N::SiteOperand(0)],
+    };
+    /// `FileError(FileOperation*, Option::Some(<site path>), IOError)`.
+    const READ_FILE_ERROR_CHILDREN: &[SynthesizedAggregateNode] = &[
+        N::nullary(R::FileOperationRead),
+        SOME_SITE_PATH,
+        IO_ERRORS,
+    ];
+    const WRITE_FILE_ERROR_CHILDREN: &[SynthesizedAggregateNode] = &[
+        N::nullary(R::FileOperationWrite),
+        SOME_SITE_PATH,
+        IO_ERRORS,
+    ];
+    const CHANGE_MODE_ERROR_CHILDREN: &[SynthesizedAggregateNode] = &[
+        N::nullary(R::FileOperationChangeMode),
+        SOME_SITE_PATH,
+        IO_ERRORS,
+    ];
+    const READ_FILE_ERROR: SynthesizedAggregateNode = N::Fixed {
+        role: R::FileError,
+        children: READ_FILE_ERROR_CHILDREN,
+    };
+    const WRITE_FILE_ERROR: SynthesizedAggregateNode = N::Fixed {
+        role: R::FileError,
+        children: WRITE_FILE_ERROR_CHILDREN,
+    };
+    const CHANGE_MODE_ERROR: SynthesizedAggregateNode = N::Fixed {
+        role: R::FileError,
+        children: CHANGE_MODE_ERROR_CHILDREN,
+    };
+
+    /// The `FsReadAt` success value: `ReadEof` or `ReadSome(span, transferred)`.
+    const READ_PROGRESS: SynthesizedAggregateNode =
+        N::Dynamic(SynthesizedDynamicSet::Alternatives(&[
+            N::nullary(R::ReadEof),
+            N::Fixed {
+                role: R::ReadSome,
+                children: &[
+                    // `PrivateBufferSpan(ResourceToken, Int, BoundedNat)` — the
+                    // token is the site's buffer operand, so this whole node is
+                    // site-dependent.
+                    N::Fixed {
+                        role: R::PrivateBufferSpan,
+                        // The seat's operand 2 — the buffer `ResourceToken`
+                        // this span is bound to (`PX8-SPAN-PROV`).
+                        children: &[N::SiteOperand(2), N::native_int(), N::bounded_nat()],
+                    },
+                    TRANSFER_COUNT,
+                ],
+            },
+        ]));
+    const WROTE: SynthesizedAggregateNode = N::Fixed {
+        role: R::Wrote,
+        children: &[TRANSFER_COUNT],
+    };
+    const UNIT: SynthesizedAggregateNode = N::nullary(R::Unit);
+
+    let (error, ok) = match operation {
+        // Returns a `Bool` before any synthesized producer runs, so neither arm
+        // exists. Not a gap: the early return is above the synthesis entirely.
+        Op::ConsoleIsTerminal => (N::Absent, N::Absent),
+        Op::ConsoleWrite | Op::ConsoleFlush => (IO_ERRORS, UNIT),
+        Op::FsReadFile => (READ_FILE_ERROR, N::Absent),
+        Op::FsOpen => (READ_FILE_ERROR, N::Absent),
+        // ⚠ The `ok` arm here is the emitter's `else` branch, which is `Unit`.
+        // The flat use table this tree replaces derived these two rows from the
+        // operation match and MISSED that branch, so it planned no `Unit`
+        // record for them. No fixture exercises either operation, which is why
+        // the omission was invisible; the tree states both arms from the same
+        // match the emitter uses, so an arm cannot be dropped by inattention.
+        Op::FsWriteFile => (WRITE_FILE_ERROR, UNIT),
+        Op::FsChangeMode => (CHANGE_MODE_ERROR, UNIT),
+        Op::BufferAllocate | Op::BufferFreeze => (RESOURCE_SURFACE, N::Absent),
+        Op::FsHandleMetadata => (RESOURCE_SURFACE, N::Absent),
+        Op::ResourceRelease => (RESOURCE_SURFACE, UNIT),
+        Op::FsReadAt => (RESOURCE_SURFACE, READ_PROGRESS),
+        Op::FsWriteAt => (RESOURCE_SURFACE, WROTE),
+        // Not an admitted consumer; `lower_process_host_effect` refuses it
+        // before any synthesized producer runs.
+        _ => (N::Absent, N::Absent),
+    };
+    SynthesizedHostResultTree { error, ok }
+}
+
+/// The two synthesized aggregate trees of one host operation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) struct SynthesizedHostResultTree {
+    error: SynthesizedAggregateNode,
+    ok: SynthesizedAggregateNode,
+}
+
+impl SynthesizedHostResultTree {
+    fn node(&self, root: SynthesizedAggregateRoot) -> SynthesizedAggregateNode {
+        match root {
+            SynthesizedAggregateRoot::HostResultError => self.error,
+            SynthesizedAggregateRoot::HostResultOk => self.ok,
+        }
+    }
+}
+
+/// What a path walk arrived at.
+///
+/// The `IOError` alternatives are not nodes in the static tree — they are
+/// minted from the process symbol inventory — so a walk that reaches one
+/// reports its position rather than a node it cannot produce.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SynthesizedTreeResolution {
+    Node(SynthesizedAggregateNode),
+    IoErrorAlternative(u32),
+}
+
+/// One semantic use the flattening found: a node, and where it sits.
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct FlattenedSynthesizedUse {
+    path: SynthesizedAggregatePath,
+    role: SynthesizedConstructorRole,
+    children: &'static [SynthesizedAggregateNode],
+}
+
+/// Flatten one operation's trees to every **allocation-reachable** use.
+///
+/// ⭐ **A dynamic SET is not an allocation; every selected ALTERNATIVE is.**
+/// That is the boundary, ruled by the Architect after an earlier spelling drew
+/// it at "a `Fixed` node that is not itself a dynamic alternative". That
+/// predicate was wrong in a specific way worth recording: it was about *which
+/// authority supplies the lane today* (`emit_carrier_dynamic_constructor` read
+/// the value-shape disposition) rather than about *what allocates*. An
+/// alternative calls `emit_carrier_alloc` exactly as a fixed constructor does —
+/// dynamic allocations are measured live — so reconciling one against the tree
+/// without interning an occurrence proves only that lowering named the expected
+/// schema. It supplies no lifetime record, cannot enter `R`, and cannot satisfy
+/// "every event has exactly one record".
+///
+/// The traversal is therefore total over constructor-valued nodes:
+///
+/// ```text
+/// Fixed(role, children):
+///   intern (owner, seat, path, Fixed(role)) with its ordered child model
+///   recurse into every aggregate-valued child at path.Field(position)
+///
+/// Dynamic(Alternatives(alts)):
+///   visit each alternative at path.Alternative(index)
+///
+/// Dynamic(IoErrors):
+///   intern each planner-issued role at path.Alternative(index),
+///   keyed IoError(role), with that role's exact children
+/// ```
+///
+/// ⛔ Nothing is pruned for want of a role-invariant meet. A node whose child
+/// comes from the emission site gets an exact **site-bound** record derived
+/// from the seat's own operand authority, or planning fails.
+fn flatten_allocation_reachable_uses(
+    plan: &StaticTransitionPlan<'_>,
+    operation: ken_host::HostOpV1,
+) -> Vec<FlattenedSynthesizedUse> {
+    let tree = host_effect_recipe_tree(operation);
+    let io_errors = plan.semantic.synthesized_io_error_roles().len();
+    let mut uses = Vec::new();
+    for root in [
+        SynthesizedAggregateRoot::HostResultError,
+        SynthesizedAggregateRoot::HostResultOk,
+    ] {
+        collect_reachable_uses(
+            tree.node(root),
+            &SynthesizedAggregatePath::root(root),
+            io_errors,
+            plan,
+            &mut uses,
+        );
+    }
+    uses
+}
+
+/// The ordered children of one `IOError` alternative.
+///
+/// The set is nullary but for its **last** alternative, which carries the
+/// decoded payload as a native `Int`. That is the emitter's own shape in
+/// `synthesized_io_error_alternatives`, restated here so the record's child
+/// model is the one the allocation actually has.
+fn io_error_alternative_children(
+    index: usize,
+    count: usize,
+) -> &'static [SynthesizedAggregateNode] {
+    const PAYLOAD: &[SynthesizedAggregateNode] = &[SynthesizedAggregateNode::native_int()];
+    if count > 0 && index + 1 == count {
+        PAYLOAD
+    } else {
+        &[]
+    }
+}
+
+/// The flattening's walk. Terminates because the tree is a finite `&'static`
+/// value; see [`SynthesizedAggregateNode`] on why it cannot be cyclic.
+fn collect_reachable_uses(
+    node: SynthesizedAggregateNode,
+    path: &SynthesizedAggregatePath,
+    io_errors: usize,
+    plan: &StaticTransitionPlan<'_>,
+    uses: &mut Vec<FlattenedSynthesizedUse>,
+) {
+    match node {
+        SynthesizedAggregateNode::Fixed { role, children } => {
+            uses.push(FlattenedSynthesizedUse {
+                path: path.clone(),
+                role: SynthesizedConstructorRole::Fixed(role),
+                children,
+            });
+            for (position, child) in children.iter().enumerate() {
+                collect_reachable_uses(
+                    *child,
+                    &path.field(position as u32),
+                    io_errors,
+                    plan,
+                    uses,
+                );
+            }
+        }
+        // The set is not an allocation. Each alternative is, and each is
+        // visited at its own ordered position -- which is what separates the
+        // three `ResourceKind` uses and the repeated `IOError` sets.
+        SynthesizedAggregateNode::Dynamic(SynthesizedDynamicSet::Alternatives(alternatives)) => {
+            for (position, alternative) in alternatives.iter().enumerate() {
+                collect_reachable_uses(
+                    *alternative,
+                    &path.alternative(position as u32),
+                    io_errors,
+                    plan,
+                    uses,
+                );
+            }
+        }
+        // The closed `IOError` inventory supplies both the alternative token
+        // and the role. The ABI tag remains non-authoritative: the path step is
+        // the ordered position, as everywhere else.
+        SynthesizedAggregateNode::Dynamic(SynthesizedDynamicSet::IoErrors) => {
+            for (position, role) in plan
+                .semantic
+                .synthesized_io_error_roles()
+                .iter()
+                .enumerate()
+            {
+                uses.push(FlattenedSynthesizedUse {
+                    path: path.alternative(position as u32),
+                    role: SynthesizedConstructorRole::IoError(*role),
+                    children: io_error_alternative_children(position, io_errors),
+                });
+            }
+        }
+        SynthesizedAggregateNode::Scalar { .. }
+        | SynthesizedAggregateNode::SiteOperand(_)
+        | SynthesizedAggregateNode::Absent => {}
+    }
+}
+
+/// Every emission owner under which one effect seat's body may be lowered.
+///
+/// A seat is always emitted by its own predeclared unit. It is ALSO emitted
+/// inside every generated specialization context whose selected worker body
+/// contains it — that is the `D5a` case, and those two emissions are different
+/// occurrences of the same static seat.
+///
+/// Both halves are enumerated so neither needs a default. A seat reached under
+/// an owner this misses has no record and refuses loudly at its allocation,
+/// which is the fail-closed direction.
+fn synthesized_seat_emission_owners(
+    plan: &StaticTransitionPlan<'_>,
+    seat: StaticOriginId,
+) -> Result<Vec<ContinuationEmissionOwner>, CraneliftBackendError> {
+    let mut owners = Vec::new();
+    if let Some(predeclared) = plan.semantic.function_owner(seat)? {
+        owners.push(ContinuationEmissionOwner::Predeclared(predeclared));
+    }
+    for context in &plan.continuation_contexts {
+        if occurrence_subtree_contains(plan, context.worker_body_origin, seat)? {
+            owners.push(ContinuationEmissionOwner::Specialization(
+                context.enclosing_specialization,
+            ));
+        }
+    }
+    owners.sort();
+    owners.dedup();
+    Ok(owners)
+}
+
+/// Whether `needle` lies in the occurrence subtree rooted at `root`.
+///
+/// Bounded by the occurrence population rather than by a depth budget: the
+/// walk visits each origin at most once, so a malformed cyclic child relation
+/// terminates instead of recurring.
+fn occurrence_subtree_contains(
+    plan: &StaticTransitionPlan<'_>,
+    root: StaticOriginId,
+    needle: StaticOriginId,
+) -> Result<bool, CraneliftBackendError> {
+    let mut seen = BTreeSet::new();
+    let mut stack = vec![root];
+    while let Some(origin) = stack.pop() {
+        if origin == needle {
+            return Ok(true);
+        }
+        if !seen.insert(origin) {
+            continue;
+        }
+        if let Ok(children) = plan.semantic.child_origins(origin) {
+            stack.extend(children.iter().copied());
+        }
+    }
+    Ok(false)
+}
+
+
+/// The possible referent owners of one tree node, at one exact effect seat.
+///
+/// ⚠ Exactness matters here independently of the verdict. These sets are the
+/// record's stated evidence, and a set that is merely *sufficient* to reach the
+/// right lane is still a false statement about what the child can be.
+///
+/// ⛔ **There is no "not derivable" answer.** A node whose child comes from the
+/// emission site is resolved against that site — the operand is a child
+/// occurrence of this very seat, and its lifetime and join representation are
+/// already planned. If that evidence cannot be read, planning FAILS. Returning
+/// an absence here is what previously pruned four real constructors out of `P`,
+/// leaving allocations production emits with no record at all.
+fn node_referent_owners(
+    plan: &StaticTransitionPlan<'_>,
+    seat: StaticOriginId,
+    node: SynthesizedAggregateNode,
+) -> Result<Vec<BoundaryReferentOwner>, CraneliftBackendError> {
+    match node {
+        // A scalar is NOT `NoReferent` alone. `Int`, `BoundedNat`,
+        // `StructuralNat` and `ProcessExitStatus` each have a declared
+        // persistent SPILL arm, so a scalar child may be a persistent-store
+        // referent. It can never be arena-owned, which is why the lane verdict
+        // is the same either way -- and why recording `{NoReferent}` was a
+        // false statement that happened not to cost anything yet.
+        SynthesizedAggregateNode::Scalar { spill: None, .. } => {
+            Ok(vec![BoundaryReferentOwner::NoReferent])
+        }
+        SynthesizedAggregateNode::Scalar { spill: Some(_), .. } => Ok(vec![
+            BoundaryReferentOwner::NoReferent,
+            BoundaryReferentOwner::PersistentStore,
+        ]),
+        // A nested fixed constructor IS a referent, and its owner is
+        // determined -- it is the lane its own children select. It is never
+        // `NoReferent`, and listing alternatives it cannot take would describe
+        // a different node than the one being allocated.
+        SynthesizedAggregateNode::Fixed { children, .. } => {
+            Ok(vec![fixed_node_selected_owner(plan, seat, children)?])
+        }
+        // ⭐ A dynamic child is the UNION of its alternatives' selected owners.
+        //
+        // ⛔ Not `None`, and not a flat `{PersistentStore}` read off the lane
+        // `emit_carrier_dynamic_constructor` happens to take. The value at this
+        // position is whichever alternative the discriminator selects, so the
+        // parent must survive every one of them: a single invocation-capable
+        // alternative makes the parent invocation-owned. Answering persistent
+        // because the *set* is shaped persistently would allocate the parent
+        // over a child that can be shorter-lived than it.
+        SynthesizedAggregateNode::Dynamic(set) => {
+            let mut owners = BTreeSet::new();
+            for alternative in dynamic_alternative_nodes(plan, set) {
+                owners.insert(fixed_node_selected_owner_of(plan, seat, alternative)?);
+            }
+            if owners.is_empty() {
+                return Err(planner_error(
+                    "a dynamic aggregate child has no alternatives, so its owner set is empty \
+                     and would satisfy the escape test vacuously",
+                ));
+            }
+            Ok(owners.into_iter().collect())
+        }
+        // The seat's own operand. Its evidence is the child occurrence's
+        // lifetime narrowed by its join representation -- the same two
+        // authorities a source aggregate's children are read through, applied
+        // to the exact operand this node names.
+        SynthesizedAggregateNode::SiteOperand(index) => {
+            site_operand_referent_owners(plan, seat, index)
+        }
+        // ⛔ Never a child. `Absent` marks a host-result arm that builds no
+        // aggregate; reaching it as a child means the tree claims an allocation
+        // has a child at a position where nothing is built.
+        SynthesizedAggregateNode::Absent => Err(planner_error(
+            "a synthesized aggregate child is marked absent, so the tree describes an \
+             allocation whose operand is not built",
+        )),
+    }
+}
+
+/// The possible owners of the operand one [`SynthesizedAggregateNode::SiteOperand`]
+/// names, read from the seat's own child occurrence.
+///
+/// The index is into the Effect's `args`; its semantic child position is offset
+/// by the capability operand, exactly as `lower_process_host_effect` offsets it
+/// when it lowers the same operand.
+fn site_operand_referent_owners(
+    plan: &StaticTransitionPlan<'_>,
+    seat: StaticOriginId,
+    index: u32,
+) -> Result<Vec<BoundaryReferentOwner>, CraneliftBackendError> {
+    let occurrence = plan
+        .source_occurrences
+        .get(seat.0 as usize)
+        .and_then(|slot| slot.as_ref())
+        .ok_or_else(|| planner_error("synthesized aggregate seat is not an occurrence"))?;
+    let RuntimeExpr::Effect { capability, .. } = occurrence.expr else {
+        return Err(planner_error(
+            "a site-bound synthesized aggregate child names a seat that is not a host effect",
+        ));
+    };
+    let position = usize::from(capability.is_some())
+        .checked_add(index as usize)
+        .ok_or_else(|| planner_capacity_error("site operand position overflows"))?;
+    let authority = occurrence_authority(plan, seat)?;
+    let child = authority.children.get(position).ok_or_else(|| {
+        planner_error(
+            "a site-bound synthesized aggregate child names an operand the seat does not have",
+        )
+    })?;
+    let owners = aggregate_child_referent_owners(plan, child)?;
+    if owners.is_empty() {
+        return Err(planner_error(
+            "a site-bound synthesized aggregate child has no derivable referent owner",
+        ));
+    }
+    Ok(owners)
+}
+
+/// The alternative nodes of a dynamic set, as owner derivation must see them.
+fn dynamic_alternative_nodes(
+    plan: &StaticTransitionPlan<'_>,
+    set: SynthesizedDynamicSet,
+) -> Vec<SynthesizedAggregateNode> {
+    match set {
+        SynthesizedDynamicSet::Alternatives(alternatives) => alternatives.to_vec(),
+        // Every `IOError` alternative is nullary but the last, which carries an
+        // `Int`. Both shapes are enumerated rather than collapsed to the widest,
+        // so the union is over the alternatives that actually exist.
+        SynthesizedDynamicSet::IoErrors => {
+            let count = plan.semantic.synthesized_io_error_roles().len();
+            (0..count)
+                .map(|index| SynthesizedAggregateNode::Fixed {
+                    // The role names an alternative for shape purposes only;
+                    // owner derivation never keys on it, only on the children.
+                    role: SynthesizedFixedConstructorRole::ResourceHostIo,
+                    children: io_error_alternative_children(index, count),
+                })
+                .collect()
+        }
+    }
+}
+
+/// The exact owner one fixed node's allocation takes, given its children.
+///
+/// `Wrote` is persistent **because** `PrivateTransferCount` is, which is
+/// persistent because neither of its scalar children can be arena-owned. The
+/// chain is computed rather than asserted per role, so a verdict cannot
+/// disagree with the tree it is supposed to follow.
+fn fixed_node_selected_owner(
+    plan: &StaticTransitionPlan<'_>,
+    seat: StaticOriginId,
+    children: &'static [SynthesizedAggregateNode],
+) -> Result<BoundaryReferentOwner, CraneliftBackendError> {
+    let mut escapes = false;
+    for child in children {
+        if node_referent_owners(plan, seat, *child)?
+            .contains(&BoundaryReferentOwner::InvocationArena)
+        {
+            escapes = true;
+        }
+    }
+    Ok(if escapes {
+        BoundaryReferentOwner::InvocationArena
+    } else {
+        BoundaryReferentOwner::PersistentStore
+    })
+}
+
+/// [`fixed_node_selected_owner`] for a node rather than a child list.
+fn fixed_node_selected_owner_of(
+    plan: &StaticTransitionPlan<'_>,
+    seat: StaticOriginId,
+    node: SynthesizedAggregateNode,
+) -> Result<BoundaryReferentOwner, CraneliftBackendError> {
+    match node {
+        SynthesizedAggregateNode::Fixed { children, .. } => {
+            fixed_node_selected_owner(plan, seat, children)
+        }
+        // A dynamic set nested directly inside a dynamic set is not a shape the
+        // measured tree has; it would be an alternative that is itself a
+        // choice, with no constructor to allocate.
+        other => {
+            let _ = other;
+            Err(planner_error(
+                "a dynamic aggregate alternative is not a constructor, so it allocates nothing",
+            ))
+        }
+    }
+}
+
+/// **`RT-DECL-CLOSURE-PORT` `D7` — the phase one host-effect seat's value is
+/// actually in.**
+///
+/// ⛔ Deliberately its own type rather than a reuse of [`BoundaryUsePhase`].
+/// That vocabulary is the CONTINUATION-input projection's and is keyed on ABI
+/// slots; this one is keyed on a semantic seat of a host operation. They answer
+/// different questions about different populations, and one enum spanning both
+/// is what lets an answer derived for one be read as authority for the other.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) enum EffectSeatPhase {
+    /// A compile-time `Lowered` template the emitter may read directly.
+    SpecializedTemplate,
+    /// A boundary-carrier word, observable only through emitted helpers.
+    CarriedWord,
+}
+
+/// What the emitter DOES at one seat.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) enum EffectSeatOperation {
+    /// Select one member of a closed constructor set (`Stream`, `CreatePolicy`,
+    /// `ResourceOpenMode`) and write its wire tag.
+    SelectClosedTag,
+    /// Project a byte span to a `(pointer, length)` pair.
+    ProjectBytesSpan,
+    /// Observe an opaque resource handle as a scalar.
+    ObserveResourceHandle,
+    /// Observe the opaque invocation capability token as a scalar.
+    ObserveCapabilityToken,
+    /// Narrow an exact `Int` to a checked `u64`.
+    NarrowExactInt,
+}
+
+/// **Which slot of one effect occurrence a seat is.**
+///
+/// ⛔ The conditional capability is NOT argument ordinal 0, and collapsing the
+/// two is the exact confusion the post-capability offset exists to prevent.
+/// `FsOpen`'s capability and `FsOpen`'s first semantic argument are both real
+/// consumed seats with different needs; keyed on the structural position alone
+/// they would be positions 0 and 1, and keyed on a bare ordinal they would
+/// collide at 0. This carries the distinction in the key itself.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) enum EffectSeatSlot {
+    /// The capability at structural position 0, when the occurrence has one.
+    Capability,
+    /// The semantic argument at this ordinal, AFTER the capability offset.
+    Argument(u32),
+}
+
+/// **What a seat must be able to OBSERVE — derived FIRST, before any
+/// representation is selected.**
+///
+/// ⭐⭐ **The direction is the whole point.** A `Need` read off a chosen
+/// disposition reverses the equation: it makes whatever the representation
+/// happens to offer into the definition of what the consumer wanted. Planning
+/// derives this from the seat's own semantics — what the wire request requires
+/// at that ordinal — and only then selects and validates an `Avail` that
+/// satisfies it.
+///
+/// ⛔ Equality-bearing, together with the operation and the semantic ordinal. A
+/// seat's identity is not its structural role: `BufferAllocate.capacity`,
+/// `FsChangeMode.mode` and `FsReadAt.length` are all `EffectArgument`s holding
+/// an `Int`, and they are three different seats.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) enum EffectSeatNeed {
+    /// The member identity of a closed constructor set.
+    ConstructorTag,
+    /// A byte span's address and length.
+    BytesPointerLength,
+    /// An opaque resource handle's scalar word.
+    ResourceScalar,
+    /// The invocation capability token's scalar word.
+    ///
+    /// ⛔ Deliberately not [`Self::ResourceScalar`]. Both are opaque scalars and
+    /// the emitter reads both through `emit_carrier_scalar`, but a capability
+    /// token authorizes an operation while a resource handle names an object.
+    /// One need spanning both would let a seat proved for one be read as proof
+    /// for the other.
+    CapabilityTokenScalar,
+    /// An exact `Int`'s magnitude as a checked `u64`.
+    ExactIntU64,
+}
+
+/// **The phases in which a seat's [`EffectSeatNeed`] can actually be
+/// satisfied.**
+///
+/// ⛔ Per-SEAT, never per-need, and that is not redundancy. `BufferFreeze`'s
+/// buffer and span-origin seats observe a resource handle in either phase
+/// because their route already emits the helper; `ResourceRelease`'s and
+/// `FsReadAt`'s observe the same `ResourceScalar` and have no such route. Same
+/// need, different availability — a per-need table would have to answer one of
+/// them wrongly.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) struct EffectSeatAvail {
+    pub(in crate::cranelift_backend) specialized: bool,
+    pub(in crate::cranelift_backend) carried: bool,
+}
+
+impl EffectSeatAvail {
+    const SPECIALIZED_ONLY: Self = Self {
+        specialized: true,
+        carried: false,
+    };
+    const EITHER_PHASE: Self = Self {
+        specialized: true,
+        carried: true,
+    };
+
+    /// Whether a seat consumed in `phase` can satisfy its need.
+    ///
+    /// ⛔ This IS the `Need ⊆ Avail` test. It is a membership question, and the
+    /// seat it is asked about carries its own coordinates — so a seat that
+    /// fails it is refused as that exact seat of that exact operation, never as
+    /// a generic specialized-only surface.
+    pub(in crate::cranelift_backend) fn admits(self, phase: EffectSeatPhase) -> bool {
+        match phase {
+            EffectSeatPhase::SpecializedTemplate => self.specialized,
+            EffectSeatPhase::CarriedWord => self.carried,
+        }
+    }
+}
+
+/// **One FULL semantic seat of one admitted host effect.**
+///
+/// ⭐ "Full" is the correction this record exists to make. A seat is not a
+/// structural position and not a nominal role: it is the position *plus* the
+/// operation it belongs to *plus* its post-capability-offset semantic ordinal.
+/// Two seats agreeing on the first and differing on either of the others are
+/// two records, because the wire request wants different things of them.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) struct PlannedEffectSeat {
+    pub(in crate::cranelift_backend) effect_origin: StaticOriginId,
+    /// The exact child occurrence that produces this seat's value.
+    pub(in crate::cranelift_backend) child_origin: StaticOriginId,
+    /// The child's STRUCTURAL position, capability included.
+    pub(in crate::cranelift_backend) position: u32,
+    pub(in crate::cranelift_backend) operation: ken_host::HostOpV1,
+    /// The slot: the capability, or a semantic argument ordinal AFTER the
+    /// conditional capability offset.
+    ///
+    /// ⛔ Not the structural position. An operation carrying a capability shifts
+    /// every argument by one, so a seat keyed on the structural position alone
+    /// names a different semantic argument depending on a fact about the
+    /// operation's capability that the position does not carry.
+    pub(in crate::cranelift_backend) slot: EffectSeatSlot,
+    /// The owner of the occurrence that PRODUCES this seat's value.
+    pub(in crate::cranelift_backend) producer_owner: PredeclaredFunctionId,
+    /// The owner of the body that DISPATCHES the effect.
+    ///
+    /// ⚠ **No phase accompanies either owner, and that is a measured
+    /// correction rather than an omission.** A derived `consumer_phase` was
+    /// built first, from the child's planned join-result representation widened
+    /// to `CarriedWord` across an owner boundary, and checked against the phase
+    /// the emitter actually held. It was WRONG on real programs: `BufferFreeze`
+    /// argument 0 and `FsReadFile`'s capability both arrive carried while their
+    /// child occurrence has no `CarrierWord` join result and no owner crossing,
+    /// because the value reaches the body through a declared ABI slot — a fact
+    /// about the enclosing unit's parameters, not about the child. Rather than
+    /// keep a prediction that is false, the phase is OBSERVED at the claim and
+    /// `Need ⊆ Avail` is asked there, of the operand actually in hand. The
+    /// membership question is unchanged; only the thing it is asked about is
+    /// now a measurement instead of a guess.
+    pub(in crate::cranelift_backend) consumer_owner: PredeclaredFunctionId,
+    pub(in crate::cranelift_backend) semantic_operation: EffectSeatOperation,
+    pub(in crate::cranelift_backend) need: EffectSeatNeed,
+    pub(in crate::cranelift_backend) avail: EffectSeatAvail,
+}
+
+/// **Erase one axis of the seat key, or collapse every seat onto one
+/// contract.**
+///
+/// ⛔ Applied ONLY inside [`build_host_effect_seat_plan`], never in the
+/// re-derivation the close performs. That asymmetry is the whole mechanism: the
+/// rebuild-equality validation mutates on both sides and so cannot see any of
+/// these, which is correct — it checks the derivation is a function, not that
+/// the function is right. What sees them is the independent recomputation of
+/// the contract from the operation and the slot at the ledger close.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) enum EffectSeatPlanMutation {
+    Exact,
+    /// The operation stops being part of the key: every seat records the first
+    /// admitted operation.
+    EraseOperation,
+    /// The ordinal stops being part of the key: every argument seat becomes
+    /// argument 0.
+    EraseOrdinal,
+    /// The need stops being part of the authority: every seat records one need.
+    EraseNeed,
+    /// Every seat takes one contract, which is the "all argument seats are the
+    /// same kind of thing" collapse the full-seat key exists to refuse.
+    CollapseContract,
+}
+
+#[cfg(test)]
+thread_local! {
+    static EFFECT_SEAT_PLAN_MUTATION: std::cell::Cell<EffectSeatPlanMutation> =
+        const { std::cell::Cell::new(EffectSeatPlanMutation::Exact) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn set_effect_seat_plan_mutation(
+    mutation: EffectSeatPlanMutation,
+) {
+    EFFECT_SEAT_PLAN_MUTATION.with(|cell| cell.set(mutation));
+}
+
+/// **The host operations this backend represents as consumers.**
+///
+/// ⛔ It lives in PLANNING because the seat population is derived here and the
+/// emitter's admission check reads the same list. A second copy on the lowering
+/// side would be a second authority: the two could disagree about whether an
+/// operation is admitted, and the disagreement would show up as a seat with no
+/// planned record rather than as a contradiction anyone stated.
+pub(in crate::cranelift_backend) const CRANELIFT_HOST_EFFECT_CONSUMERS_V1:
+    [ken_host::HostOpV1; 13] = [
+    ken_host::HostOpV1::ConsoleWrite,
+    ken_host::HostOpV1::ConsoleFlush,
+    ken_host::HostOpV1::ConsoleIsTerminal,
+    ken_host::HostOpV1::FsReadFile,
+    ken_host::HostOpV1::FsWriteFile,
+    ken_host::HostOpV1::FsChangeMode,
+    ken_host::HostOpV1::FsOpen,
+    ken_host::HostOpV1::FsHandleMetadata,
+    ken_host::HostOpV1::FsReadAt,
+    ken_host::HostOpV1::FsWriteAt,
+    ken_host::HostOpV1::ResourceRelease,
+    ken_host::HostOpV1::BufferAllocate,
+    ken_host::HostOpV1::BufferFreeze,
+];
+
+/// The seat contract of one admitted operation at one semantic ordinal.
+///
+/// ⛔ **Total over the 13 admitted operations, with no `_` arm**, so a new
+/// admitted operation is a compile error here rather than an operation whose
+/// seats silently have no contract. `None` means the operation has no seat at
+/// that ordinal, which is an arity disagreement and is refused by the caller —
+/// never a seat that is exempt.
+///
+/// ⚠ The `Avail` column is where this release's one new capability appears, and
+/// nowhere else: `BufferAllocate.capacity` is the single seat whose exact `Int`
+/// this release can observe through the carrier ABI. Every other `ExactIntU64`
+/// seat stays specialized-only, which is why `Avail` is recorded per seat.
+fn host_effect_seat_contract(
+    operation: ken_host::HostOpV1,
+    slot: EffectSeatSlot,
+) -> Option<(EffectSeatOperation, EffectSeatNeed, EffectSeatAvail)> {
+    use ken_host::HostOpV1 as Op;
+    use EffectSeatAvail as Avail;
+    use EffectSeatNeed as Need;
+    use EffectSeatOperation as Semantic;
+    // ⭐ The CAPABILITY half, kept ahead of the argument table because its
+    // population is the exact complement: the four FS-path operations require
+    // one, and every other admitted operation refuses one outright. A `None`
+    // here is therefore not an arity gap but a capability the operation does
+    // not admit, and the caller refuses it with the seat's own coordinates.
+    let ordinal = match slot {
+        EffectSeatSlot::Capability => {
+            return match operation {
+                Op::FsReadFile | Op::FsWriteFile | Op::FsChangeMode | Op::FsOpen => Some((
+                    Semantic::ObserveCapabilityToken,
+                    Need::CapabilityTokenScalar,
+                    // Both phases: the emitter reads a specialized
+                    // `CapabilityToken` template directly and a carried word
+                    // through `emit_carrier_scalar`.
+                    Avail::EITHER_PHASE,
+                )),
+                Op::ConsoleWrite
+                | Op::ConsoleFlush
+                | Op::ConsoleIsTerminal
+                | Op::FsHandleMetadata
+                | Op::FsReadAt
+                | Op::FsWriteAt
+                | Op::ResourceRelease
+                | Op::BufferAllocate
+                | Op::BufferFreeze
+                | Op::ConsoleRead
+                | Op::ClockWallNow
+                | Op::ClockMonotonicNow
+                | Op::ClockSleepUntil
+                | Op::FsAppendFile
+                | Op::FsMetadata
+                | Op::FsReadDirectory
+                | Op::FsCreateDirectory
+                | Op::FsRemoveFile
+                | Op::FsRemoveDirectory
+                | Op::FsRename
+                | Op::EntropyRandomBytes => None,
+            };
+        }
+        EffectSeatSlot::Argument(ordinal) => ordinal,
+    };
+    let tag = (
+        Semantic::SelectClosedTag,
+        Need::ConstructorTag,
+        Avail::SPECIALIZED_ONLY,
+    );
+    let bytes = (
+        Semantic::ProjectBytesSpan,
+        Need::BytesPointerLength,
+        Avail::SPECIALIZED_ONLY,
+    );
+    let resource = (
+        Semantic::ObserveResourceHandle,
+        Need::ResourceScalar,
+        Avail::SPECIALIZED_ONLY,
+    );
+    let phase_bearing_resource = (
+        Semantic::ObserveResourceHandle,
+        Need::ResourceScalar,
+        Avail::EITHER_PHASE,
+    );
+    let exact_int = (
+        Semantic::NarrowExactInt,
+        Need::ExactIntU64,
+        Avail::SPECIALIZED_ONLY,
+    );
+    let carried_exact_int = (
+        Semantic::NarrowExactInt,
+        Need::ExactIntU64,
+        Avail::EITHER_PHASE,
+    );
+    match (operation, ordinal) {
+        (Op::ConsoleWrite, 0) | (Op::ConsoleFlush, 0) | (Op::ConsoleIsTerminal, 0) => Some(tag),
+        (Op::ConsoleWrite, 1) => Some(bytes),
+        (Op::FsReadFile, 0)
+        | (Op::FsWriteFile, 0)
+        | (Op::FsChangeMode, 0)
+        | (Op::FsOpen, 0)
+        | (Op::FsWriteFile, 2) => Some(bytes),
+        (Op::FsWriteFile, 1) | (Op::FsOpen, 1) => Some(tag),
+        (Op::FsChangeMode, 1) => Some(exact_int),
+        (Op::FsHandleMetadata, 0) | (Op::ResourceRelease, 0) => Some(resource),
+        // ⭐ The one seat this release teaches the carrier to observe.
+        (Op::BufferAllocate, 0) => Some(carried_exact_int),
+        (Op::BufferFreeze, 0) | (Op::BufferFreeze, 3) => Some(phase_bearing_resource),
+        (Op::BufferFreeze, 1) | (Op::BufferFreeze, 2) => Some(exact_int),
+        (Op::FsReadAt, 0) | (Op::FsReadAt, 2) | (Op::FsWriteAt, 0) | (Op::FsWriteAt, 2) => {
+            Some(resource)
+        }
+        (Op::FsWriteAt, 5) => Some(resource),
+        (Op::FsReadAt, 1)
+        | (Op::FsReadAt, 3)
+        | (Op::FsReadAt, 4)
+        | (Op::FsWriteAt, 1)
+        | (Op::FsWriteAt, 3)
+        | (Op::FsWriteAt, 4) => Some(exact_int),
+        // An ADMITTED operation at an ordinal it does not have. `None` here is
+        // an arity disagreement, refused by the caller with the seat's own
+        // coordinates -- never a seat that is exempt from having a contract.
+        (
+            Op::ConsoleWrite
+            | Op::ConsoleFlush
+            | Op::ConsoleIsTerminal
+            | Op::FsReadFile
+            | Op::FsWriteFile
+            | Op::FsChangeMode
+            | Op::FsOpen
+            | Op::FsHandleMetadata
+            | Op::FsReadAt
+            | Op::FsWriteAt
+            | Op::ResourceRelease
+            | Op::BufferAllocate
+            | Op::BufferFreeze,
+            _,
+        ) => None,
+        // ⛔ The represented-UNAVAILABLE lanes, named rather than wildcarded.
+        // They are refused before any seat is derived, so they have no seat
+        // contract at all -- and naming them is what makes promoting one to the
+        // admitted set a compile error here rather than an operation whose
+        // seats silently answer `None`.
+        (
+            Op::ConsoleRead
+            | Op::ClockWallNow
+            | Op::ClockMonotonicNow
+            | Op::ClockSleepUntil
+            | Op::FsAppendFile
+            | Op::FsMetadata
+            | Op::FsReadDirectory
+            | Op::FsCreateDirectory
+            | Op::FsRemoveFile
+            | Op::FsRemoveDirectory
+            | Op::FsRename
+            | Op::EntropyRandomBytes,
+            _,
+        ) => None,
+    }
+}
+
+/// **Derive one record for every capability/argument seat of every admitted
+/// host effect occurrence.**
+///
+/// ⛔ **The population is every `Effect` source occurrence, not the ones some
+/// reached trace visited**, and within one occurrence it is every slot the
+/// operation actually has — not the slots the arm this compilation took
+/// happened to read.
+///
+/// ⭐ The order of the derivation is the correction this record exists to make.
+/// `Need` comes from [`host_effect_seat_contract`], which is keyed on the
+/// operation and the slot and knows nothing about how the value will be
+/// represented. Only then is the seat's `Avail` checked to admit the phase the
+/// consumer will see it in. Reading the need off the representation instead is
+/// what makes whatever the emitter happens to offer into the definition of what
+/// the wire request wanted.
+fn build_host_effect_seat_plan(
+    plan: &StaticTransitionPlan<'_>,
+) -> Result<Vec<PlannedEffectSeat>, CraneliftBackendError> {
+    let mut records = Vec::new();
+    for occurrence in plan.source_occurrences.iter().flatten() {
+        let RuntimeExpr::Effect {
+            operation,
+            capability,
+            args,
+            ..
+        } = occurrence.expr
+        else {
+            continue;
+        };
+        // A represented-unavailable lane has no seats at all: it is refused
+        // whole, before any slot of it is derived.
+        if !CRANELIFT_HOST_EFFECT_CONSUMERS_V1.contains(operation) {
+            continue;
+        }
+        let effect_origin = occurrence.static_origin;
+        let authority = occurrence_authority(plan, effect_origin)?;
+        let consumer_owner = authority.owner;
+        let argument_base = u32::from(capability.is_some());
+        let slots = capability
+            .iter()
+            .map(|_| EffectSeatSlot::Capability)
+            .chain((0..args.len()).map(|ordinal| {
+                EffectSeatSlot::Argument(
+                    u32::try_from(ordinal).expect("an argument list shorter than u32::MAX"),
+                )
+            }));
+        for slot in slots {
+            let position = match slot {
+                EffectSeatSlot::Capability => 0,
+                EffectSeatSlot::Argument(ordinal) => argument_base
+                    .checked_add(ordinal)
+                    .ok_or_else(|| planner_capacity_error("effect seat position overflows"))?,
+            };
+            let child = authority
+                .children
+                .get(position as usize)
+                .ok_or_else(|| planner_error("a host effect seat has no child occurrence"))?;
+            // ⛔ `Need` FIRST, from the seat's own semantics.
+            let Some((semantic_operation, need, avail)) =
+                host_effect_seat_contract(*operation, slot)
+            else {
+                return Err(planner_error(format!(
+                    "host operation {:?} has no seat contract at {slot:?}, so the occurrence's \
+                     shape and the operation's wire request disagree",
+                    operation
+                )));
+            };
+            let record = PlannedEffectSeat {
+                effect_origin,
+                child_origin: child.origin,
+                position,
+                operation: *operation,
+                slot,
+                producer_owner: child.owner,
+                consumer_owner,
+                semantic_operation,
+                need,
+                avail,
+            };
+            #[cfg(test)]
+            let record = mutate_planned_effect_seat(record);
+            records.push(record);
+        }
+    }
+    records.sort();
+    Ok(records)
+}
+
+#[cfg(test)]
+fn mutate_planned_effect_seat(record: PlannedEffectSeat) -> PlannedEffectSeat {
+    let tag = (
+        EffectSeatOperation::SelectClosedTag,
+        EffectSeatNeed::ConstructorTag,
+        EffectSeatAvail::SPECIALIZED_ONLY,
+    );
+    match EFFECT_SEAT_PLAN_MUTATION.with(std::cell::Cell::get) {
+        EffectSeatPlanMutation::Exact => record,
+        EffectSeatPlanMutation::EraseOperation => PlannedEffectSeat {
+            operation: CRANELIFT_HOST_EFFECT_CONSUMERS_V1[0],
+            ..record
+        },
+        EffectSeatPlanMutation::EraseOrdinal => PlannedEffectSeat {
+            slot: match record.slot {
+                EffectSeatSlot::Capability => EffectSeatSlot::Capability,
+                EffectSeatSlot::Argument(_) => EffectSeatSlot::Argument(0),
+            },
+            ..record
+        },
+        EffectSeatPlanMutation::EraseNeed => PlannedEffectSeat {
+            need: EffectSeatNeed::ConstructorTag,
+            ..record
+        },
+        EffectSeatPlanMutation::CollapseContract => PlannedEffectSeat {
+            semantic_operation: tag.0,
+            need: tag.1,
+            avail: tag.2,
+            ..record
+        },
+    }
+}
+
+/// **The contract one operation/slot pair has, recomputed from nothing but the
+/// pair.**
+///
+/// ⭐ This is the INDEPENDENT side of the seat authority's contract half. The
+/// planned population records a semantic operation, a need and an availability;
+/// this recomputes them at the close from the two key axes alone. Without it
+/// `need` would be diagnostic text — nothing would read it, so erasing it would
+/// change no decision and no gate could see the erasure.
+pub(in crate::cranelift_backend) fn host_effect_seat_contract_of(
+    operation: ken_host::HostOpV1,
+    slot: EffectSeatSlot,
+) -> Option<(EffectSeatOperation, EffectSeatNeed, EffectSeatAvail)> {
+    host_effect_seat_contract(operation, slot)
+}
+
+/// Every record names a DISTINCT seat.
+///
+/// The non-aliasing law of the seat domain, in production rather than in a
+/// test, for the same reason the aggregate producers have one: if two records
+/// shared `(effect_origin, slot)`, one seat's contract could authorize
+/// another's consumption.
+fn validate_host_effect_seats_are_unique(
+    records: &[PlannedEffectSeat],
+) -> Result<(), CraneliftBackendError> {
+    let mut seen = BTreeSet::new();
+    for record in records {
+        if !seen.insert((record.effect_origin, record.slot)) {
+            return Err(planner_error(
+                "two host effect seat records name the same occurrence slot, so a seat identity \
+                 is not unique",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_host_effect_seat_plan(
+    plan: &StaticTransitionPlan<'_>,
+    records: &[PlannedEffectSeat],
+) -> Result<(), CraneliftBackendError> {
+    if records != build_host_effect_seat_plan(plan)? {
+        return Err(planner_error(
+            "the host effect seat population is not the exact closed seat-contract derivation",
+        ));
+    }
+    validate_host_effect_seats_are_unique(records)
+}
+
+/// Derive one ownership record for every aggregate producer occurrence.
+///
+/// ⛔ **The population is every `Construct`/`Record` source occurrence, not the
+/// ones some reached trace visited.** A lane chosen from the branch this
+/// execution happened to take is exactly the row-driven discovery the frame
+/// forbids.
+fn build_aggregate_ownership_plan(
+    plan: &StaticTransitionPlan<'_>,
+) -> Result<Vec<PlannedAggregateOwnership>, CraneliftBackendError> {
+    let mut records = Vec::new();
+    for occurrence in plan.source_occurrences.iter().flatten() {
+        let shape = match occurrence.expr {
+            RuntimeExpr::Construct { .. } => PlannedAggregateShape::Constructor,
+            RuntimeExpr::Record { .. } => PlannedAggregateShape::Record,
+            _ => continue,
+        };
+        let origin = occurrence.static_origin;
+        let authority = occurrence_authority(plan, origin)?;
+        let mut children = Vec::with_capacity(authority.children.len());
+        for child in &authority.children {
+            let owners = aggregate_child_referent_owners(plan, child)?;
+            if owners.is_empty() {
+                return Err(planner_error(
+                    "aggregate producer child has no derivable referent owner",
+                ));
+            }
+            // ⭐ The RECORD half of the producer schema, issued once beside the
+            // ownership record it belongs to. ⛔ Gated on the shape rather than
+            // attempted-and-recovered: a `Construct` occurrence has no field
+            // names at all, so asking for one and swallowing the failure would
+            // make "this producer plans no name here" and "the lookup did not
+            // work" the same answer.
+            let field_identity = match shape {
+                PlannedAggregateShape::Record => Some(
+                    plan.record_field_identity(origin, child.position as usize)?,
+                ),
+                PlannedAggregateShape::Constructor => None,
+            };
+            children.push(PlannedAggregateChild {
+                position: child.position,
+                origin: Some(child.origin),
+                field_identity,
+                lifetime: child.lifetime,
+                owners,
+            });
+        }
+        // ⭐ The ruled meet, stated once. "Any invocation-owned ALTERNATIVE"
+        // is membership in the possible set, not a proof that the child *is*
+        // invocation-owned — an aggregate is only persistable when no child
+        // could be shorter-lived than it.
+        let escapes = children
+            .iter()
+            .any(|child| child.owners.contains(&BoundaryReferentOwner::InvocationArena));
+        let (meet, allocation) = if escapes {
+            (
+                PlannedReferentLifetime::ActivationOwned,
+                PlannedAggregateAllocation::InvocationAggregate,
+            )
+        } else {
+            (
+                PlannedReferentLifetime::Persistent,
+                PlannedAggregateAllocation::PersistentGround,
+            )
+        };
+        records.push(PlannedAggregateOwnership {
+            // Renumbered below. The identity is the record's index in the
+            // sorted population, so it cannot be assigned before the order is
+            // final.
+            id: AggregateOccurrenceId(0),
+            producer: AggregateOccurrenceProducer::Source(origin),
+            owner: Some(
+                plan.semantic
+                    .function_owner(origin)?
+                    .ok_or_else(|| planner_error("aggregate producer has no function owner"))?,
+            ),
+            shape,
+            declared_children: None,
+            children,
+            meet,
+            allocation,
+        });
+    }
+    // The synthesized half: ONE record per exact allocation-reachable use in
+    // the operation's tree, keyed by WHERE that use sits.
+    //
+    // The population is (every `Effect` source occurrence) x (its emission
+    // owners) x (the allocation-reachable uses its operation's tree flattens
+    // to). Two seats using one role get two records, and two uses of one role
+    // at one seat -- `ResourceKind` under `ResourceKindMismatch` fields 0 and
+    // 1, say -- get two records because their paths differ.
+    for occurrence in plan.source_occurrences.iter().flatten() {
+        let RuntimeExpr::Effect { operation, .. } = occurrence.expr else {
+            continue;
+        };
+        let seat = occurrence.static_origin;
+        for owner in synthesized_seat_emission_owners(plan, seat)? {
+            for semantic_use in flatten_allocation_reachable_uses(plan, *operation) {
+                let mut children = Vec::with_capacity(semantic_use.children.len());
+                for (position, child) in semantic_use.children.iter().enumerate() {
+                    // ⛔ No pruning. A child the emission site supplies is
+                    // resolved AGAINST that site; a child that cannot be
+                    // resolved fails planning. Skipping the use here is what
+                    // left four real constructors -- `OptionSome`, `FileError`,
+                    // `PrivateBufferSpan`, `ReadSome` -- allocating with no
+                    // record.
+                    let owners = node_referent_owners(plan, seat, *child)?;
+                    children.push(PlannedAggregateChild {
+                        position: u32::try_from(position).map_err(|_| {
+                            planner_capacity_error(
+                                "synthesized aggregate arity exceeds the position space",
+                            )
+                        })?,
+                        // A synthesized child has no source occurrence of its own.
+                        origin: None,
+                        // Every synthesized aggregate this population reaches is
+                        // a constructor node, so there is no field name to plan.
+                        field_identity: None,
+                        lifetime: if owners.contains(&BoundaryReferentOwner::InvocationArena) {
+                            PlannedReferentLifetime::ActivationOwned
+                        } else {
+                            PlannedReferentLifetime::Persistent
+                        },
+                        owners,
+                    });
+                }
+                let escapes = children
+                    .iter()
+                    .any(|child| child.owners.contains(&BoundaryReferentOwner::InvocationArena));
+                let (meet, allocation) = if escapes {
+                    (
+                        PlannedReferentLifetime::ActivationOwned,
+                        PlannedAggregateAllocation::InvocationAggregate,
+                    )
+                } else {
+                    (
+                        PlannedReferentLifetime::Persistent,
+                        PlannedAggregateAllocation::PersistentGround,
+                    )
+                };
+                records.push(PlannedAggregateOwnership {
+                    id: AggregateOccurrenceId(0),
+                    producer: AggregateOccurrenceProducer::SynthesizedUse {
+                        owner,
+                        seat,
+                        path: semantic_use.path.clone(),
+                        role: semantic_use.role,
+                    },
+                    // Provenance only, kept for readers. The emission owner that
+                    // confers authority is in the key above.
+                    owner: plan.semantic.function_owner(seat)?,
+                    shape: PlannedAggregateShape::Constructor,
+                    declared_children: Some(semantic_use.children),
+                    children,
+                    meet,
+                    allocation,
+                });
+            }
+        }
+    }
+    records.sort_by(|left, right| left.producer.cmp(&right.producer));
+    for (index, record) in records.iter_mut().enumerate() {
+        record.id = AggregateOccurrenceId(u32::try_from(index).map_err(|_| {
+            planner_capacity_error("the aggregate occurrence population exceeds the identity space")
+        })?);
+    }
+    Ok(records)
+}
+
+/// Every record names a DISTINCT producer.
+///
+/// This is the non-aliasing law of the occurrence domain, and it is production
+/// code rather than a test because it is what makes an identity an identity: if
+/// two records shared a producer, one seat's record could authorize another
+/// seat's allocation and the lane chosen for one node would govern a different
+/// one. Two uses of a role at two seats must be two occurrences; two records for
+/// ONE use is the same failure seen from the other side.
+fn validate_aggregate_producers_are_unique(
+    records: &[PlannedAggregateOwnership],
+) -> Result<(), CraneliftBackendError> {
+    let mut seen = BTreeSet::new();
+    for record in records {
+        if !seen.insert(record.producer.clone()) {
+            return Err(planner_error(
+                "two aggregate ownership records name the same producer, so an occurrence \
+                 identity is not unique",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_aggregate_ownership_plan(
+    plan: &StaticTransitionPlan<'_>,
+    records: &[PlannedAggregateOwnership],
+) -> Result<(), CraneliftBackendError> {
+    if records != build_aggregate_ownership_plan(plan)? {
+        return Err(planner_error(
+            "aggregate ownership is not the exact closed lifetime-meet derivation",
+        ));
+    }
+    validate_aggregate_producers_are_unique(records)?;
+    // ⛔ A second, independent check on the same records, because the
+    // re-derivation above only proves the builder agrees with itself. This one
+    // states the PROPERTY: the persistent lane is issued only where no child
+    // has an invocation-owned alternative.
+    // The identity is only opaque to its consumers if it is exact here: a
+    // record whose id is not its own index would resolve to a *different*
+    // record's lane, which is the one failure this domain has to be incapable
+    // of. Stated as its own law rather than left to the rebuild comparison
+    // above, which would agree with a builder that numbered every record zero.
+    for (index, record) in records.iter().enumerate() {
+        if record.id.0 as usize != index {
+            return Err(planner_error(
+                "aggregate occurrence identities are not the dense index of their own population",
+            ));
+        }
+    }
+    for record in records {
+        let escapes = record
+            .children
+            .iter()
+            .any(|child| child.owners.contains(&BoundaryReferentOwner::InvocationArena));
+        let expected = if escapes {
+            PlannedAggregateAllocation::InvocationAggregate
+        } else {
+            PlannedAggregateAllocation::PersistentGround
+        };
+        if record.allocation != expected {
+            return Err(planner_error(
+                "aggregate allocation lane disagrees with its own children's owner sets",
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn validate_substrate_preallocation_closure(
     plan: &StaticTransitionPlan<'_>,
     case_emissions: &[PlannedCaseEmission],
@@ -2476,9 +5828,20 @@ fn continuation_owner_entry_sources(
                     .ok_or_else(|| {
                         planner_capacity_error("continuation capture ABI position exhausted")
                     })?;
+                // ⭐ `RT-DECL-CLOSURE-PORT` `D2`: `CallableDeclaration` is
+                // matched **beside** `ClosureBody`, with the identical sourcing,
+                // because it occupies the identical graph position — same
+                // defining closure occurrence, same `[body, captures..]` child
+                // layout. Before `D2` these very nodes WERE `ClosureBody`, so
+                // anything else here (an error arm, a fresh derivation) would be
+                // a behaviour change smuggled in under a reclassification.
                 match descriptor.definition {
                     AbiUnitDefinition::ClosureBody {
                         defining_origin,
+                        provenance: AbiCaptureProvenance::Lexical,
+                    }
+                    | AbiUnitDefinition::CallableDeclaration {
+                        declaration_origin: defining_origin,
                         provenance: AbiCaptureProvenance::Lexical,
                     } => {
                         let defining = occurrence_authority(plan, defining_origin)?;
@@ -2506,6 +5869,10 @@ fn continuation_owner_entry_sources(
                     }
                     AbiUnitDefinition::ClosureBody {
                         defining_origin,
+                        provenance: AbiCaptureProvenance::Seed,
+                    }
+                    | AbiUnitDefinition::CallableDeclaration {
+                        declaration_origin: defining_origin,
                         provenance: AbiCaptureProvenance::Seed,
                     } => {
                         occurrence_authority(plan, defining_origin)?;
@@ -2539,27 +5906,188 @@ fn continuation_owner_entry_sources(
             }
         };
         sources.push(ContinuationSourceSlotAuthority {
-            source_owner: owner,
-            source_abi_position,
-            source,
+            // ⭐ This function enumerates the ENTRY ABI input run and nothing
+            // else, so it produces exactly the `EntryAbi` arm. That is not an
+            // omission: a value with no entry position is by construction not
+            // in the population this function walks.
+            coordinate: ContinuationSourceCoordinate::EntryAbi {
+                source_owner: owner,
+                source_abi_position,
+                source,
+            },
             carrier: slot.carrier,
             ownership: slot.ownership,
             storage_owner: slot.storage_owner,
             referent_affinity,
         });
     }
-    sources.sort_by_key(|source| source.source_abi_position);
+    let entry_position = |source: &ContinuationSourceSlotAuthority| match source.coordinate {
+        ContinuationSourceCoordinate::EntryAbi {
+            source_abi_position, ..
+        } => source_abi_position,
+        // ⛔ Unreachable by construction — every push above is `EntryAbi` — and
+        // deliberately mapped to a position no exact run can hold, so a future
+        // arm smuggled into this walk fails the exactness check below instead
+        // of sorting silently into it.
+        ContinuationSourceCoordinate::ProducerLocal { .. } => u32::MAX,
+    };
+    sources.sort_by_key(entry_position);
     if sources.len() != input_count as usize
         || sources
             .iter()
             .enumerate()
-            .any(|(position, source)| source.source_abi_position as usize != position)
+            .any(|(position, source)| entry_position(source) as usize != position)
     {
         return Err(planner_error(
             "continuation owner entry environment is not exact for its ABI slots",
         ));
     }
     Ok(sources)
+}
+
+/// `RT-CONTSRC-PRODUCER-LOCAL` `D2` — which producer-local binding kind a
+/// coordinate names.
+///
+/// ⛔ **Not part of the coordinate's identity.** `binding_origin` +
+/// `binding_ordinal` already distinguish every binding, including two of
+/// different kinds, so adding a kind tag to the representation would be a
+/// second statement of a fact the identity already carries. This selects the
+/// two facts whose *derivation* differs, and nothing else.
+///
+/// ⛔ Closed, no default arm: a third binding kind must state its carrier and
+/// its referent lifetime explicitly rather than inherit either.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ProducerLocalKind {
+    /// The result of a host effect. The `Effect` occurrence owns the identity,
+    /// and its own occurrence authority owns the referent lifetime.
+    HostEffectResult,
+    /// One **constructor argument** binder of one `Match` /
+    /// `ComputationalMatch` case. Its representation and referent both come
+    /// from the scrutinee, named here by the match occurrence whose child 0 it
+    /// is.
+    ///
+    /// ⛔ **Not "any case binder".** A `ComputationalMatch` case environment is
+    /// `[recursive IH binders, constructor argument binders, outer
+    /// environment]`, and the two runs are **not homogeneous** —
+    /// `derive_occurrence_lifetime` gives every IH `ActivationOwned` while
+    /// argument binders take the scrutinee's, and the result-phase pass gives
+    /// IHs a declared-unit-result contract while argument binders preserve the
+    /// scrutinee's representation. `a5a6ce9b` looped over the combined count
+    /// and stamped one contract across both, which silently misclassified the
+    /// IH prefix; the Architect blocked it at `evt_9krmbv834z9p`. There is
+    /// deliberately no `RecursiveIhBinder` arm here — see the walk.
+    CaseArgumentBinder { match_origin: StaticOriginId },
+}
+
+/// `RT-CONTSRC-PRODUCER-LOCAL` `D2` — the planner contract for one
+/// producer-local binding.
+///
+/// ⭐ **One authority for both kinds.** Only the carrier and the referent
+/// lifetime are derived per kind; ownership and storage owner are read off
+/// `AbiCarrier`'s existing methods — the same two the entry plane's `abi::slot`
+/// reads — so this record cannot disagree with the entry plane about what a
+/// carrier implies. ⛔ Nothing here restates a fact another record already
+/// holds.
+///
+/// **Where each fact comes from, stated because "planner-derived" is not an
+/// answer:**
+///
+/// | fact | host-effect result | constructor **argument** binder |
+/// |---|---|---|
+/// | carrier | `abi::result_carrier` on the `Effect` shape — the existing "carrier an occurrence's result travels in" authority, and this binding *is* that result | `abi::result_carrier` on the **scrutinee's** shape, gated by `slot_referent_affinity` |
+/// | ownership | `AbiCarrier::ownership` | `AbiCarrier::ownership` |
+/// | storage owner | `AbiCarrier::storage_owner` | `AbiCarrier::storage_owner` |
+/// | referent affinity | the `Effect` occurrence's own lifetime authority | the scrutinee child's lifetime authority |
+///
+/// ⛔ **Recursive IH binders are not in this table and take no contract here.**
+/// They are a separate subrun of a `ComputationalMatch` case and stay `Open`;
+/// see the walk for why none can be read. ⛔ There is no blanket carrier for
+/// "a case binder": a constructor argument's carrier is the **scrutinee's**,
+/// read from the existing authority, and nothing else is claimed.
+///
+/// ⭐ The binder's referent lifetime is **not** conservatively floored, because
+/// it does not have to be: `PlannedReferentLifetime::Persistent` is issued only
+/// when the complete source result is closed over persistent children, so a
+/// field of a persistent scrutinee is persistent by that type's own definition
+/// and reading the scrutinee's lifetime is not a promotion.
+fn producer_local_source(
+    plan: &StaticTransitionPlan<'_>,
+    kind: ProducerLocalKind,
+    binding: ProducerLocalBinding,
+    locator: ProducerLocalLocator,
+) -> Result<ContinuationSourceSlotAuthority, CraneliftBackendError> {
+    let (carrier, lifetime) = match kind {
+        ProducerLocalKind::HostEffectResult => (
+            abi::result_carrier(SemanticSourceKind::Expression(RuntimeExprShape::Effect))?,
+            occurrence_authority(plan, binding.binding_origin)?.lifetime,
+        ),
+        ProducerLocalKind::CaseArgumentBinder { match_origin } => {
+            let scrutinee = occurrence_authority(plan, match_origin)?
+                .children
+                .iter()
+                .find(|child| child.position == 0)
+                .ok_or_else(|| {
+                    planner_error("a case argument binder names a match with no scrutinee child")
+                })?;
+            // ⭐ The carrier is READ, not chosen. A constructor argument binder
+            // preserves the scrutinee's representation — that is the existing
+            // result-phase rule, stated at the `Match` and `ComputationalMatch`
+            // arms of `summarize_result_phase` — so the binder's carrier is the
+            // carrier the scrutinee's result travels in, and `abi::result_carrier`
+            // is the sole authority for that. ⛔ This replaces the blanket
+            // `ValueWord` of `a5a6ce9b`, which was a `D2` invention.
+            let seed = plan
+                .semantic_sources
+                .iter()
+                .find(|seed| seed.origin == scrutinee.origin)
+                .ok_or_else(|| {
+                    planner_error("a case argument binder's scrutinee has no semantic seed")
+                })?;
+            let carrier = abi::result_carrier(seed.source)?;
+            // ⛔ Admissibility, from the same authority that gates an entry
+            // slot: a continuation source environment admits `ValueWord` and
+            // `GroundValueCarrier` and refuses every convention carrier. A
+            // scrutinee whose result travels in one fails closed HERE rather
+            // than being silently narrowed to an ordinary value word.
+            slot_referent_affinity(carrier)?;
+            (carrier, scrutinee.lifetime)
+        }
+    };
+    Ok(ContinuationSourceSlotAuthority {
+        coordinate: ContinuationSourceCoordinate::ProducerLocal { binding, locator },
+        carrier,
+        ownership: carrier.ownership(),
+        storage_owner: carrier.storage_owner(),
+        referent_affinity: lifetime_referent_affinity(lifetime),
+    })
+}
+
+/// `D2` — one producer-local value, as the walk's value authority.
+///
+/// `binding_origin` is what **creates** the value; `locator.environment_origin`
+/// is the scope whose environment **contains** it. For a case binder the two
+/// coincide; for a `Let`-bound effect result they deliberately do not, which is
+/// the separation `D1` exists to express.
+fn producer_local_value(
+    plan: &StaticTransitionPlan<'_>,
+    kind: ProducerLocalKind,
+    binding_origin: StaticOriginId,
+    binding_ordinal: u32,
+    environment_origin: StaticOriginId,
+    environment_index: u32,
+) -> Result<ContinuationValueSourceAuthority, CraneliftBackendError> {
+    let binding = ProducerLocalBinding {
+        binding_owner: occurrence_authority(plan, binding_origin)?.owner,
+        binding_origin,
+        binding_ordinal,
+    };
+    let locator = ProducerLocalLocator {
+        environment_origin,
+        environment_index,
+    };
+    Ok(ContinuationValueSourceAuthority::source(
+        producer_local_source(plan, kind, binding, locator)?,
+    ))
 }
 
 fn walk_continuation_value_environment(
@@ -2603,6 +6131,30 @@ fn walk_continuation_value_environment(
             if found.is_some() {
                 return Ok((ContinuationValueSourceAuthority::Open, found));
             }
+            // `RT-CONTSRC-PRODUCER-LOCAL` `D2` — a `Let`-bound **host-effect
+            // result** is a producer-local binding, not an opaque value.
+            //
+            // ⭐ Minted HERE rather than in the `Effect` arm, because this is
+            // where the value enters an environment and therefore where it
+            // acquires a locator. An effect result consumed without a binder
+            // never enters one, and correctly stays `Open`: there is no
+            // environment position to name.
+            //
+            // ⛔ The binding origin is the `Effect` occurrence — what creates
+            // the value — while the locator names this `Let`'s body, whose
+            // environment holds it at index 0. The two differ on purpose.
+            let bound_origin = child(0)?;
+            let value = match plan.planned_occurrence_expr(bound_origin)? {
+                RuntimeExpr::Effect { .. } => producer_local_value(
+                    plan,
+                    ProducerLocalKind::HostEffectResult,
+                    bound_origin,
+                    0,
+                    child(1)?,
+                    0,
+                )?,
+                _ => value,
+            };
             let mut nested = Vec::with_capacity(environment.len() + 1);
             nested.push(value);
             nested.extend_from_slice(environment);
@@ -2630,10 +6182,31 @@ fn walk_continuation_value_environment(
             }
             let mut value = ContinuationValueSourceAuthority::Closed(Vec::new());
             for (index, case) in cases.iter().enumerate() {
+                // `RT-CONTSRC-PRODUCER-LOCAL` `D2` — each case binder is a
+                // producer-local binding. ⛔ Its identity is the case BODY's
+                // occurrence plus the binder ordinal, never the match
+                // occurrence plus an encoded pair: two numbers packed into one
+                // is the aliasing this plane refuses everywhere else, and the
+                // case body is already the exact static identity of that
+                // binder's scope.
+                let case_body = child(1 + index)?;
                 let mut nested = Vec::with_capacity(case.binders + environment.len());
-                nested.extend(
-                    (0..case.binders).map(|_| ContinuationValueSourceAuthority::Open),
-                );
+                for binder in 0..case.binders {
+                    nested.push(producer_local_value(
+                        plan,
+                        ProducerLocalKind::CaseArgumentBinder {
+                            match_origin: origin,
+                        },
+                        case_body,
+                        u32::try_from(binder).map_err(|_| {
+                            planner_capacity_error("continuation case binder ordinal exhausted")
+                        })?,
+                        case_body,
+                        u32::try_from(binder).map_err(|_| {
+                            planner_capacity_error("continuation case binder ordinal exhausted")
+                        })?,
+                    )?);
+                }
                 nested.extend_from_slice(environment);
                 let (case_value, found) = walk(1 + index, &nested)?;
                 if found.is_some() {
@@ -2656,10 +6229,51 @@ fn walk_continuation_value_environment(
                     .ok_or_else(|| {
                         planner_capacity_error("continuation case binder count exhausted")
                     })?;
+                // `D2` corrected — this case environment is
+                // `[recursive IH binders, constructor argument binders, outer
+                // environment]`, and the two runs are **not homogeneous**.
+                // `derive_occurrence_lifetime` gives every IH `ActivationOwned`
+                // and every argument binder the scrutinee's lifetime; the
+                // result-phase pass gives IHs a declared-unit-result contract
+                // and argument binders the scrutinee's representation.
+                //
+                // ⛔ The IH prefix stays `Open`. **No contract is claimed for
+                // it**, because none can be read: nothing maps a `ResultPhase`
+                // to an `AbiCarrier`; the IH's phase depends on
+                // `functionized_units`, a whole-plan argument that is not a
+                // field of `StaticTransitionPlan` and so is not edge-local; and
+                // an IH is a *callable*, whose continuation-input vocabulary
+                // (`BoundaryUseAvail::Callable`,
+                // `BoundaryUseNeed::PreserveCallableIdentity`) exists only under
+                // `#[cfg(test)]`. Leaving it `Open` is the pre-`D2` behaviour
+                // and refuses to claim what it cannot derive; a default carrier
+                // here is exactly what `evt_9krmbv834z9p` forbids.
+                //
+                // ⭐ The ordinal still spans the whole run, so identity stays
+                // `(case body, binder ordinal)` with no new tag.
+                let case_body = child(1 + index)?;
+                let recursive_binders = case.recursive_positions.len();
                 let mut nested = Vec::with_capacity(binders + environment.len());
-                nested.extend(
-                    (0..binders).map(|_| ContinuationValueSourceAuthority::Open),
-                );
+                for binder in 0..binders {
+                    if binder < recursive_binders {
+                        nested.push(ContinuationValueSourceAuthority::Open);
+                        continue;
+                    }
+                    nested.push(producer_local_value(
+                        plan,
+                        ProducerLocalKind::CaseArgumentBinder {
+                            match_origin: origin,
+                        },
+                        case_body,
+                        u32::try_from(binder).map_err(|_| {
+                            planner_capacity_error("continuation case binder ordinal exhausted")
+                        })?,
+                        case_body,
+                        u32::try_from(binder).map_err(|_| {
+                            planner_capacity_error("continuation case binder ordinal exhausted")
+                        })?,
+                    )?);
+                }
                 nested.extend_from_slice(environment);
                 let (case_value, found) = walk(1 + index, &nested)?;
                 if found.is_some() {
@@ -2738,14 +6352,98 @@ fn validate_continuation_source_slot(
     plan: &StaticTransitionPlan<'_>,
     source: &ContinuationSourceSlotAuthority,
 ) -> Result<(), CraneliftBackendError> {
-    let expected = continuation_owner_entry_sources(plan, source.source_owner)?
-        .into_iter()
-        .find(|candidate| candidate.source_abi_position == source.source_abi_position)
-        .ok_or_else(|| planner_error("continuation value names no exact source ABI slot"))?;
-    if expected != *source || source.referent_affinity.is_empty() {
-        return Err(planner_error(
-            "continuation value disagrees with its exact source ABI provenance",
-        ));
+    // `D1` `D3a` consumer 1 of 3 — the slot's only exact validator.
+    //
+    // ⛔ Exhaustive over the coordinate domains with no wildcard, and **neither
+    // arm is exempted**: each RE-DERIVES its own authority and compares the
+    // whole record. The entry arm re-reads the owner's entry slot run; the
+    // producer-local arm re-runs the very walk that mints these values. A
+    // domain added later gets its own derivation here or does not compile.
+    match source.coordinate {
+        ContinuationSourceCoordinate::EntryAbi {
+            source_owner,
+            source_abi_position,
+            ..
+        } => {
+            let expected = continuation_owner_entry_sources(plan, source_owner)?
+                .into_iter()
+                .find(|candidate| {
+                    matches!(
+                        candidate.coordinate,
+                        ContinuationSourceCoordinate::EntryAbi {
+                            source_abi_position: candidate_position,
+                            ..
+                        } if candidate_position == source_abi_position
+                    )
+                })
+                .ok_or_else(|| {
+                    planner_error("continuation value names no exact source ABI slot")
+                })?;
+            if expected != *source || source.referent_affinity.is_empty() {
+                return Err(planner_error(
+                    "continuation value disagrees with its exact source ABI provenance",
+                ));
+            }
+        }
+        ContinuationSourceCoordinate::ProducerLocal { binding, locator } => {
+            // `D3a` — the producer-local re-derivation, the exact analogue of
+            // the entry arm above.
+            //
+            // ⭐ The independent authority is the **walk itself**: re-run it
+            // from this binding owner's own source root to the scope the
+            // locator names, and the value it places at the locator's index
+            // must be this one. That re-derives carrier, ownership, storage
+            // owner and affinity from `producer_local_source`, rather than
+            // trusting the fields the projection arrived carrying.
+            //
+            // ⛔ Rooted at `binding.binding_owner`, not at the consumer or the
+            // emitting owner: a binding's scope belongs to the function whose
+            // body created it, and walking from anywhere else would reach a
+            // different environment and index it with this locator's number.
+            let owner_root = continuation_owner_source_root(plan, binding.binding_owner)?;
+            let entry = continuation_owner_entry_sources(plan, binding.binding_owner)?
+                .into_iter()
+                .map(ContinuationValueSourceAuthority::source)
+                .collect::<Vec<_>>();
+            let (_, reached) = walk_continuation_value_environment(
+                plan,
+                owner_root,
+                locator.environment_origin,
+                &entry,
+            )?;
+            let reached = reached.ok_or_else(|| {
+                planner_error(
+                    "a producer-local continuation value names a scope outside its own binding \
+                     owner's source subtree, so the forward walk never reaches it and no \
+                     environment holds the value it claims",
+                )
+            })?;
+            let index = usize::try_from(locator.environment_index).map_err(|_| {
+                planner_capacity_error("continuation producer-local environment index exhausted")
+            })?;
+            let held = reached.get(index).ok_or_else(|| {
+                planner_error(
+                    "a producer-local continuation value names an environment index past the end \
+                     of the environment in force at its own locator scope",
+                )
+            })?;
+            let ContinuationValueSourceAuthority::Closed(sources) = held else {
+                return Err(planner_error(
+                    "a producer-local continuation value's locator names an open environment \
+                     position, which carries no exact source authority to agree with; this \
+                     fails closed rather than accepting a position whose contents are unknown",
+                ));
+            };
+            // ⛔ Whole-record containment, not a coordinate match. The position
+            // may legitimately hold several joined sources, so membership is
+            // the right relation — but the member must agree in every field,
+            // which is what makes this a re-derivation rather than a lookup.
+            if !sources.contains(source) || source.referent_affinity.is_empty() {
+                return Err(planner_error(
+                    "continuation value disagrees with its exact producer-local source provenance",
+                ));
+            }
+        }
     }
     Ok(())
 }
@@ -2773,6 +6471,50 @@ fn continuation_owner_source_root(
         })
         .collect::<BTreeSet<_>>();
     let roots = origins.difference(&nested).copied().collect::<Vec<_>>();
+    // ⭐⭐ `RT-DECL-CLOSURE-PORT` `D2a` — the seed's origin is the source root,
+    // and the set difference is a PROXY for it.
+    //
+    // The two agree for every unit whose owned occurrences form one tree: the
+    // un-nested root is the occurrence the seed node was planned from. `D2a` is
+    // exactly where the proxy diverges. A declaration-owned callable unit now
+    // owns **two** occurrence trees — the declaration occurrence (its ownership,
+    // provenance and `D3` signature authority) and the closure body it actually
+    // emits — and the body occurrence is a *child* of the declaration
+    // occurrence, so the difference collapses to the declaration and the walk
+    // starts one level above the code this unit contains.
+    //
+    // ⇒ Take the property, not the proxy: the root is the origin of this unit's
+    // seed node. ⚠ The difference derivation is retained as a **cross-check**
+    // wherever it still yields exactly one root, so its existing failure mode
+    // (an owner with no single occurrence tree) is not silently deleted.
+    // ⛔ Narrowed to the exact declaration-owned pair — the unit's seed carries
+    // an incoming `StaticBody` edge from a scheduling entry THIS SAME unit owns.
+    // That conjunction is only true of the `D2a` pair: an anonymous closure
+    // body's `StaticBody` source is owned by a different unit, and every other
+    // unit's seed has no incoming `StaticBody` edge at all. Applying the
+    // preference any wider re-roots units whose proxy was correct.
+    let seed = plan
+        .semantic
+        .functions
+        .get(owner.0 as usize)
+        .map(|function| function.planned_node);
+    let declaration_owned_seed = seed.is_some_and(|seed| {
+        plan.edges.iter().any(|edge| {
+            edge.kind == EdgeKind::StaticBody
+                && edge.to == seed
+                && plan.entries.contains(&edge.from)
+                // ⚠ Ownership is read off `origins` — the occurrences this
+                // owner already holds — rather than by spelling
+                // `SemanticOwner` here, which this file deliberately does not.
+                && origins.contains(&origin_of(edge.from))
+        })
+    });
+    if declaration_owned_seed {
+        let seed = origin_of(seed.expect("checked above"));
+        if origins.contains(&seed) {
+            return Ok(seed);
+        }
+    }
     let [root] = roots.as_slice() else {
         return Err(planner_error(
             "continuation owner does not have one exact source-occurrence root",
@@ -2947,6 +6689,40 @@ fn required_surrounding_environment_prefix(
     Ok(maximum)
 }
 
+/// **`D4b`** — one required position's admission verdict, as the take-loop's own
+/// two clauses see it. Test-only.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) enum D4bVerdict {
+    /// `Closed([S])` — one exact source. The only admitting verdict.
+    Closed,
+    /// `Open` — refused by the take-loop's first clause.
+    Open,
+    /// `Closed([S, T, ..])` — refused by the take-loop's second clause.
+    Ambiguous(usize),
+}
+
+#[cfg(test)]
+thread_local! {
+    static D4B_ADMISSION: std::cell::RefCell<Vec<(Vec<D4bVerdict>, bool)>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+    static D4B_ADMISSION_ARMED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d4b_arm_admission(armed: bool) {
+    D4B_ADMISSION_ARMED.with(|cell| cell.set(armed));
+    if armed {
+        D4B_ADMISSION.with(|ledger| ledger.borrow_mut().clear());
+    }
+}
+
+/// Every candidate edge seen while armed, as `(required verdict vector, admitted)`.
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d4b_take_admission() -> Vec<(Vec<D4bVerdict>, bool)> {
+    D4B_ADMISSION.with(|ledger| std::mem::take(&mut *ledger.borrow_mut()))
+}
+
 fn exact_continuation_source_environment(
     plan: &StaticTransitionPlan<'_>,
     producer_owner: PredeclaredFunctionId,
@@ -3019,6 +6795,52 @@ fn exact_continuation_source_environment(
             "computational continuation lacks its complete semantic value environment",
         ));
     }
+    // `D4b` — record this candidate's FULL required vector, and let the
+    // take-loop below decide the outcome.
+    //
+    // ⭐ **The mechanism, exactly.** The vector is captured here, before the
+    // loop runs, and the record is pushed carrying `false` — NOT admitted. The
+    // only thing that ever flips it to `true` is the assignment after the loop
+    // (below), which is reachable only when the loop has fallen through every
+    // required position without returning. So the recorded outcome is
+    // **production's own control flow**: reaching that line is what "admitted"
+    // means, and the loop's two `return Ok(None)` clauses simply leave the
+    // record as it was pushed.
+    //
+    // ⛔⛔ **This is deliberately NOT a predicate written beside the loop, and
+    // the earlier form was.** That form recomputed the outcome as
+    // "every position closed and unambiguous" right here — which made the
+    // control compare the instrument with itself, so an extra route modality
+    // installed in the real loop passed unnoticed. That was measured, not
+    // supposed: a mutation admitting an all-`Open` vector survived until this
+    // was restructured. The control's subject is that admission *equals* that
+    // predicate, so the instrument must not be allowed to assume it.
+    #[cfg(test)]
+    let recorded = if D4B_ADMISSION_ARMED.with(std::cell::Cell::get) {
+        let verdicts = reached
+            .iter()
+            .take(required_input_count)
+            .map(|value| match value {
+                ContinuationValueSourceAuthority::Open => D4bVerdict::Open,
+                ContinuationValueSourceAuthority::Closed(sources) if sources.len() == 1 => {
+                    D4bVerdict::Closed
+                }
+                ContinuationValueSourceAuthority::Closed(sources) => {
+                    D4bVerdict::Ambiguous(sources.len())
+                }
+            })
+            .collect::<Vec<_>>();
+        // Pushed as NOT admitted. ⛔ The `false` is load-bearing, not a
+        // placeholder -- see the mechanism note above; nothing here may compute
+        // the outcome.
+        Some(D4B_ADMISSION.with(|ledger| {
+            let mut ledger = ledger.borrow_mut();
+            ledger.push((verdicts, false));
+            ledger.len() - 1
+        }))
+    } else {
+        None
+    };
     let mut exact_inputs = Vec::with_capacity(required_input_count);
     for value in reached.into_iter().take(required_input_count) {
         let ContinuationValueSourceAuthority::Closed(mut sources) = value else {
@@ -3033,6 +6855,36 @@ fn exact_continuation_source_environment(
         }
         exact_inputs.push(sources.remove(0));
     }
+    // The take-loop fell through: this candidate is admitted. ⭐ This assignment
+    // IS the observation -- reaching this line is what "admitted" means.
+    #[cfg(test)]
+    if let Some(index) = recorded {
+        D4B_ADMISSION.with(|ledger| ledger.borrow_mut()[index].1 = true);
+    }
+    // `RT-CONTSRC-PRODUCER-LOCAL` `D4a` — ADMISSION. The `D2` transition
+    // sentinel that declined every producer-local candidate stood exactly here
+    // and is now deleted, which is the event its own promise class named.
+    //
+    // ⭐ **Nothing replaces it, and that is the point.** The declined set `R`
+    // is refused **upstream** by the take-loop above, on the authority that was
+    // always there: an `Open` value declines, and a position carrying more than
+    // one exact source declines as ambiguous. Those two clauses are precisely
+    // the census's three non-closed positions — `OPEN[ih-binder]`,
+    // `OPEN[let-value:Construct]`, `AMBIG2[let-value:If]`. So admitting `V` is
+    // *removing* a filter, never adding a selector.
+    //
+    // ⛔ No corpus, closure identity, planned-member status, first-`Open`
+    // classification or edge predicate is consulted here or anywhere below.
+    // The full required vector is walked — `required_input_count` positions,
+    // every one of which must be closed and unambiguous — and that walk remains
+    // the sole authority.
+    //
+    // ⚠ The consumers below are what make this safe: `D3a` taught
+    // `validate_continuation_source_slot` to RE-DERIVE a producer-local source
+    // rather than refuse it, so admitting the domain no longer walks into a
+    // planner error. The two lowering emission seams still refuse both local
+    // availability arms; `D3b` assigns them, against the emissions this
+    // checkpoint creates.
     for source in &exact_inputs {
         validate_continuation_source_slot(plan, source)?;
     }
@@ -3077,10 +6929,370 @@ fn exact_continuation_source_environment(
     }))
 }
 
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D2b` arm 1** — the exact semantic environment
+/// in force at the emission seat.
+///
+/// ⭐ This is the *same* forward walk `D1`/`D2` already use to build a
+/// continuation's source environment, pointed at a different target. The walk
+/// returns the environment it is holding when it reaches its target, so
+/// targeting the emission occurrence yields the environment the emitter is
+/// standing in — binders pushed by every intervening `Let`, `Match` case and
+/// `ComputationalMatch` case already applied. That is precisely what
+/// "nearest-alias" names, and it is why no new authority is needed: the binder
+/// push rules are read off the walk rather than restated here.
+///
+/// ⛔ **Fail-closed path 1 of 5 — wrong emission origin.** The seat must be an
+/// occurrence of the producer owner *and* one of this exact result edge's
+/// construct origins. A seat that is neither has no defined lexical environment
+/// and gets an error, never an empty one.
+fn continuation_emission_seat_environment(
+    plan: &StaticTransitionPlan<'_>,
+    environment: &ContinuationProducerEnvironment,
+) -> Result<(StaticOriginId, Vec<ContinuationValueSourceAuthority>), CraneliftBackendError> {
+    if occurrence_authority(plan, environment.producer_construct_origin)?.owner
+        != environment.producer_owner
+        || !continuation_result_origins(plan, environment.producer_result_origin)?
+            .contains(&environment.producer_construct_origin)
+    {
+        return Err(planner_error(
+            "a continuation emission seat is not an occurrence of its own producer owner on its \
+             own result edge, so no exact lexical environment holds there; RT-CONTSRC-PRODUCER-\
+             LOCAL D2b refuses rather than walking to a seat that belongs to another edge",
+        ));
+    }
+    let source_root = continuation_owner_source_root(plan, environment.producer_owner)?;
+    let entry_environment = continuation_owner_entry_sources(plan, environment.producer_owner)?
+        .into_iter()
+        .map(ContinuationValueSourceAuthority::source)
+        .collect::<Vec<_>>();
+    let (_, reached) = walk_continuation_value_environment(
+        plan,
+        source_root,
+        environment.producer_construct_origin,
+        &entry_environment,
+    )?;
+    let reached = reached.ok_or_else(|| {
+        planner_error(
+            "a continuation emission seat is outside its producer owner's source subtree, so the \
+             forward semantic environment walk never reaches it and no nearest-alias index exists",
+        )
+    })?;
+    Ok((source_root, reached))
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D3b`** — VERIFY that one producer-local
+/// coordinate really occupies the nearest-alias index a `CurrentLexical`
+/// availability names, at the emission seat that availability is keyed to.
+///
+/// ⭐ **This is verification, not derivation, and the direction is the whole
+/// point.** The index arrives from the projection; this walks the emission
+/// seat's own environment and asks whether that index is where the coordinate
+/// actually sits. Deriving the index *from* the environment here would be the
+/// reverse map `evt_609am4v7cdt5b` forbids — lowering would be re-answering a
+/// question the planner owns, and the two answers could then disagree with
+/// nothing to arbitrate them.
+///
+/// ⛔ **Why the emission consumer needs it at all.** A `CurrentLexical`
+/// availability is consumed by *indexing an environment*, and every incidental
+/// discriminator a consumer could otherwise check — carrier, ownership, storage
+/// owner, referent affinity, lowering shape — is **equal** across the positions
+/// of one seat environment in the measured population (`D4a`, exact
+/// `ac897a08`). So a consumer that indexed with the wrong number would read a
+/// well-formed operand of exactly the right contract and emit a call with the
+/// wrong value in it, silently. This is the check that makes that
+/// unrepresentable.
+///
+/// ⚠ **THE GAP, stated because it is easy to over-read.** This proves the
+/// consumer indexes with the number the planner assigned. It does **not**
+/// re-prove the assignment: it re-runs the planner's own walk, so a defect in
+/// that walk would be reproduced here rather than caught. `D2b`'s discriminator
+/// and `D3a`'s validator own that half.
+pub(in crate::cranelift_backend) fn verify_current_lexical_availability(
+    plan: &StaticTransitionPlan<'_>,
+    emission_owner: PredeclaredFunctionId,
+    producer_result_origin: StaticOriginId,
+    emission_origin: StaticOriginId,
+    lexical_environment_origin: StaticOriginId,
+    requested: &ContinuationSourceSlotAuthority,
+    nearest_alias_index: u32,
+) -> Result<(), CraneliftBackendError> {
+    let producer_owner = emission_owner;
+    let environment = ContinuationProducerEnvironment {
+        producer_owner,
+        producer_result_origin,
+        producer_construct_origin: emission_origin,
+        consumer_owner: producer_owner,
+        inputs: Vec::new(),
+    };
+    let (source_root, seat) = continuation_emission_seat_environment(plan, &environment)?;
+    if source_root != lexical_environment_origin {
+        return Err(planner_error(
+            "a current-lexical availability names a lexical environment origin that is not the              emitting owner's own source root, so the index it carries counts binders in an              environment this seat never stands in",
+        ));
+    }
+    // ⛔ Reuses the projection's OWN locator, so "where the coordinate is" has
+    // exactly one definition in this plane. A second search written here would
+    // be a second authority that could drift from the first.
+    let derived = current_lexical_availability(
+        requested,
+        emission_owner,
+        producer_result_origin,
+        source_root,
+        emission_origin,
+        &seat,
+    )?;
+    if derived
+        != (ContinuationEnvironmentDraft::CurrentLexical {
+            emission_owner,
+            producer_result_origin,
+            emission_origin,
+            lexical_environment_origin,
+            nearest_alias_index,
+        })
+    {
+        return Err(planner_error(
+            "a continuation input is being consumed at an index the emission seat's own lexical              environment does not hold that coordinate at; RT-CONTSRC-PRODUCER-LOCAL D3b refuses              rather than emitting a call carrying a well-formed operand of the right contract and              the wrong value",
+        ));
+    }
+    Ok(())
+}
+
+/// **`D3b` re-cut — VERIFY that one predeclared frame really declares a member
+/// for a full coordinate, at exactly the declared slot.**
+///
+/// ⭐ **Membership, not numeric agreement.** The retired law asked whether
+/// `immediate_slot == source_abi_position` — a comparison between a frame
+/// position and a ROOT position, which is the coupling `D3c` falsified. This
+/// asks the only question that is actually about the frame: *does this
+/// descriptor's own entry run declare this coordinate here?*
+///
+/// ⛔ **A `ProducerLocal` member cannot be invented.** The entry source
+/// enumeration produces exactly the entry ABI input run, so a mid-body value is
+/// simply absent from it and this refuses. That is the ruled law: a
+/// producer-local member remains unavailable at a predeclared entry frame unless
+/// a separately authorized substrate later declares one.
+pub(in crate::cranelift_backend) fn verify_predeclared_entry_frame_membership(
+    plan: &StaticTransitionPlan<'_>,
+    frame: PredeclaredFunctionId,
+    coordinate: ContinuationSourceCoordinate,
+    declared_slot: u32,
+) -> Result<(), CraneliftBackendError> {
+    let members = continuation_owner_entry_sources(plan, frame)?;
+    let mut found = None;
+    for (position, member) in members.iter().enumerate() {
+        if member.coordinate != coordinate {
+            continue;
+        }
+        if found.is_some() {
+            return Err(planner_error(
+                "a predeclared entry frame declares two members for one continuation \
+                 coordinate, so its declared slot is ambiguous; RT-CONTSRC-PRODUCER-LOCAL D3b \
+                 refuses rather than taking the first",
+            ));
+        }
+        found = Some(position);
+    }
+    let position = found.ok_or_else(|| {
+        planner_error(
+            "a predeclared entry frame declares no member for this continuation coordinate, so \
+             its entry run cannot make that value available; RT-CONTSRC-PRODUCER-LOCAL D3b fails \
+             closed rather than reading whichever operand sits at a plausible position",
+        )
+    })?;
+    let position = u32::try_from(position)
+        .map_err(|_| planner_capacity_error("predeclared entry frame slot exhausted"))?;
+    if position != declared_slot {
+        return Err(planner_error(
+            "an entry-frame claim's declared slot is not the position at which that predeclared \
+             frame declares the coordinate, so the slot names a different member",
+        ));
+    }
+    Ok(())
+}
+
+/// **`D3b` re-cut — the position at which one predeclared frame's ENTRY RUN
+/// declares a coordinate**, or `None` when it declares no member for it.
+///
+/// ⭐⭐ **This is the measured shape of the capture consumer's source frame, and
+/// the measurement is what put it here.** The generated-context capture append
+/// indexes `function_local.defining_abi_operands` — the operand run of the frame
+/// *currently being defined*. Over the corpus that frame was, in every
+/// observation, the **emission owner of the enclosing specialization**, and in
+/// every observation it was a predeclared function rather than that
+/// specialization's own generated context. So the capture consumer's claim is an
+/// entry-frame claim against a PREDECLARED frame, and its declared slot is the
+/// coordinate's position in that frame's entry ABI run.
+///
+/// ⛔ `None` is the honest answer, not a failure to look. A `ProducerLocal`
+/// coordinate is a mid-body value with no position in any entry run, so no
+/// capture claim can be built for it and the consumer refuses rather than
+/// indexing an operand run the value was never in. `D4b` owns making such a value
+/// capturable; until then the boundary fails closed.
+///
+/// ⛔ Membership is by the **whole coordinate, exactly once**. Two members for
+/// one coordinate is an ambiguous slot, refused rather than resolved by taking
+/// the first.
+fn predeclared_entry_frame_slot(
+    plan: &StaticTransitionPlan<'_>,
+    frame: PredeclaredFunctionId,
+    coordinate: ContinuationSourceCoordinate,
+) -> Result<Option<u32>, CraneliftBackendError> {
+    let members = continuation_owner_entry_sources(plan, frame)?;
+    let mut found = None;
+    for (position, member) in members.iter().enumerate() {
+        if member.coordinate != coordinate {
+            continue;
+        }
+        if found.is_some() {
+            return Err(planner_error(
+                "a predeclared entry frame declares two members for one continuation coordinate, \
+                 so the capture slot it would supply is ambiguous; \
+                 RT-CONTSRC-PRODUCER-LOCAL D3b refuses rather than taking the first",
+            ));
+        }
+        found = Some(position);
+    }
+    found
+        .map(|position| {
+            u32::try_from(position)
+                .map_err(|_| planner_capacity_error("predeclared entry frame slot exhausted"))
+        })
+        .transpose()
+}
+
+/// **`D3b` (alias repair) — THE NEAREST EXACT ALIAS**, the one total rule that
+/// selects a lexical position, shared by the planner that issues the claim and
+/// the consumer that revalidates it.
+///
+/// ⭐⭐ **Why this is not the banned "first match", stated where the rule lives.**
+/// The ban exists because choosing among candidates *never proved equivalent*
+/// silently picks one of several different values. Here every candidate is
+/// proved to be the same semantic value **before** ordering is consulted at all:
+/// eligibility is exact equality of the complete
+/// [`ContinuationSourceSlotAuthority`], and the discriminator is **eligibility,
+/// not ordering**. Ordering only canonicalizes among proved aliases.
+///
+/// The proof comes from the authority's own algebra, not from an assumption:
+/// [`ContinuationValueSourceAuthority::join`] unions and **deduplicates complete
+/// records**, so
+///
+/// - `Closed([S])` means every represented path yields exactly source slot `S`;
+/// - `Closed([S, T])` means the value is ambiguous between distinct sources and
+///   is **not** an exact alias, even though it contains `S`;
+/// - two positions each holding `Closed([S])` are proved aliases of one semantic
+///   source, whatever names lowering later assigns them.
+///
+/// ⛔ **The retired law, named so it is not reconstructed.** This previously
+/// required the coordinate to occur **exactly once** and refused two positions as
+/// ambiguous. That was measured false against `let y = x`: a non-`Effect` `Let`
+/// pushes the bound expression's own authority, so one root identity lawfully
+/// occupies two bindings. The old law conflated *"does this position certainly
+/// hold `S`"* with *"is it the only position that does"*; `D3b` needs the first
+/// and never the second.
+///
+/// ⛔ Eligibility is the **complete** record — coordinate, carrier, ownership,
+/// storage owner and referent affinity. A position carrying the same coordinate
+/// under a different contract is a different value and does not qualify.
+fn nearest_exact_alias(
+    requested: &ContinuationSourceSlotAuthority,
+    seat_environment: &[ContinuationValueSourceAuthority],
+) -> Result<u32, CraneliftBackendError> {
+    let mut eligible: Vec<u32> = Vec::new();
+    // Two witnesses kept apart on purpose: they make the three refusals below
+    // distinguishable, so a control naming one cannot pass by tripping another.
+    let mut ambiguous = false;
+    let mut contract_mismatch = false;
+    for (index, value) in seat_environment.iter().enumerate() {
+        let ContinuationValueSourceAuthority::Closed(sources) = value else {
+            continue;
+        };
+        let index = u32::try_from(index).map_err(|_| {
+            planner_capacity_error("continuation lexical environment index exhausted")
+        })?;
+        match sources.as_slice() {
+            // ⭐ Exactly `Closed([S])`, compared as the WHOLE record.
+            [only] if only == requested => eligible.push(index),
+            [only] if only.coordinate == requested.coordinate => contract_mismatch = true,
+            many if many.iter().any(|source| source.coordinate == requested.coordinate) => {
+                ambiguous = true;
+            }
+            _ => {}
+        }
+    }
+    // ⛔ `min`, written as a fold over the whole eligible set rather than as an
+    // early exit from the loop above. The two agree today because the scan is
+    // ascending -- and that is exactly why the total rule is spelled out here:
+    // an early `break` would read as "take the first", and a later reordering of
+    // the scan would silently change the answer.
+    if let Some(selected) = eligible.iter().copied().min() {
+        return Ok(selected);
+    }
+    if ambiguous {
+        return Err(planner_error(
+            "the emission seat holds this continuation coordinate only inside an ambiguous \
+             source set (a Closed([S, T]) join), which does not prove any position certainly \
+             yields the requested value; RT-CONTSRC-PRODUCER-LOCAL D3b requires an exact \
+             singleton and refuses rather than selecting a position that may yield another \
+             source",
+        ));
+    }
+    if contract_mismatch {
+        return Err(planner_error(
+            "the emission seat holds this continuation coordinate under a different carrier, \
+             ownership, storage owner or referent affinity, so it is a different value with the \
+             same root identity; RT-CONTSRC-PRODUCER-LOCAL D3b matches the complete source-slot \
+             authority and refuses rather than indexing on the coordinate alone",
+        ));
+    }
+    Err(planner_error(
+        "a continuation coordinate is not present in the lexical environment in force at the \
+         emission seat, so the value is not immediately available there; this fails closed \
+         rather than reverse-searching for a position that happens to hold a similar value",
+    ))
+}
+
+/// **`D3b` re-cut, the `CurrentLexical` arm** — select the nearest exact alias of
+/// one requested source slot in the emission seat's environment.
+///
+/// ⭐ **Either root arm reaches here, and that is the `D3c` correction.** The
+/// seat environment is seeded by `continuation_owner_entry_sources`, whose
+/// members carry `EntryAbi` coordinates, and then walked forward with binders
+/// prepended. So an entry value's lexical position is found by the same rule
+/// that finds a producer-local one — which is exactly why the old "an entry root
+/// takes its ABI position" shortcut was wrong.
+fn current_lexical_availability(
+    requested: &ContinuationSourceSlotAuthority,
+    emission_owner: PredeclaredFunctionId,
+    producer_result_origin: StaticOriginId,
+    lexical_environment_origin: StaticOriginId,
+    emission_origin: StaticOriginId,
+    seat_environment: &[ContinuationValueSourceAuthority],
+) -> Result<ContinuationEnvironmentDraft, CraneliftBackendError> {
+    Ok(ContinuationEnvironmentDraft::CurrentLexical {
+        emission_owner,
+        producer_result_origin,
+        emission_origin,
+        lexical_environment_origin,
+        nearest_alias_index: nearest_exact_alias(requested, seat_environment)?,
+    })
+}
+
+/// **`D3b` re-cut — build the two consumer-specific availability views.**
+///
+/// ⛔ The `emitter` argument names the frame that will *emit* this call, and it
+/// is the only thing consulted. Nothing here reads a root coordinate to decide
+/// which environment a value lives in — that coupling is precisely what `D3c`
+/// falsified.
 fn exact_continuation_projection(
+    plan: &StaticTransitionPlan<'_>,
     environment: &ContinuationProducerEnvironment,
     ordinary_parameters: u32,
+    emitter: &ContinuationEmitterFrame<'_>,
 ) -> Result<Vec<ContinuationInputProjection>, CraneliftBackendError> {
+    // The emission seat's lexical environment is derived at most once per edge,
+    // and only where the direct-emission consumer will actually read it.
+    let mut seat_environment: Option<(StaticOriginId, Vec<ContinuationValueSourceAuthority>)> =
+        None;
     environment
         .inputs
         .iter()
@@ -3089,12 +7301,131 @@ fn exact_continuation_projection(
             let ordinal = u32::try_from(ordinal).map_err(|_| {
                 planner_capacity_error("continuation projection ordinal exhausted")
             })?;
+            let availability = match emitter {
+                // ⭐⭐ **The `D3c` correction, and the whole point of the re-cut.**
+                // A predeclared emitter's direct-emission consumer reads the
+                // retained lexical environment at the seat. So EVERY input --
+                // entry-rooted or producer-local alike -- takes a
+                // `CurrentLexical` claim whose index comes from the forward
+                // walk. ⛔ An entry root does NOT take its ABI position here;
+                // that shortcut was measured wrong at nonzero binder depth.
+                ContinuationEmitterFrame::Predeclared(emission_owner) => {
+                    let (lexical_environment_origin, seat) = match &seat_environment {
+                        Some(seat) => seat,
+                        None => seat_environment.insert(
+                            continuation_emission_seat_environment(plan, environment)?,
+                        ),
+                    };
+                    let claim = current_lexical_availability(
+                        input,
+                        *emission_owner,
+                        environment.producer_result_origin,
+                        *lexical_environment_origin,
+                        environment.producer_construct_origin,
+                        seat,
+                    )?;
+                    // ⭐⭐ **The capture view, built against a DIFFERENT
+                    // environment of the same frame — this is the re-cut's whole
+                    // claim, made concrete.**
+                    //
+                    // The direct-emission consumer above reads this predeclared
+                    // frame's retained LEXICAL environment, so it takes a
+                    // nearest-alias index. The capture-append consumer reads the
+                    // same frame's ENTRY ABI RUN, so it takes that run's
+                    // position. `D3c` measured those two numbers diverging at
+                    // nonzero binder depth — which is exactly why one field could
+                    // not serve both, and why each is derived from its own
+                    // environment here rather than one being computed from the
+                    // other.
+                    //
+                    // ⛔ `None` when the frame declares no member: fails closed.
+                    // Nothing invents a position, and no fallback reads the
+                    // direct-emission index as a frame slot.
+                    let capture = predeclared_entry_frame_slot(
+                        plan,
+                        *emission_owner,
+                        input.coordinate,
+                    )?
+                    .map(|declared_slot| ContinuationEnvironmentDraft::EntryFrame {
+                        frame: ContinuationFrameRequirement::Predeclared(*emission_owner),
+                        declared_slot,
+                    });
+                    ContinuationAvailabilityDraft {
+                        direct_emission: Some(claim),
+                        context_capture: capture,
+                    }
+                }
+                // The emitting frame is a generated execution context. Its
+                // captures ARE the enclosing specialization's continuation
+                // inputs, in ordinal order, laid out after its parameter run.
+                //
+                // ⛔ Membership is by the **whole coordinate**, exactly once.
+                // Matching on a position, or on an owner/position pair, would
+                // let a local binding and an entry position collide by carrying
+                // the same integer.
+                ContinuationEmitterFrame::GeneratedContext {
+                    enclosing,
+                    worker_body_origin,
+                    context_parameters,
+                    enclosing_inputs,
+                } => {
+                    let position = enclosing_inputs
+                        .iter()
+                        .position(|enclosing| enclosing.coordinate == input.coordinate)
+                        .ok_or_else(|| {
+                            planner_error(
+                                "a continuation input's coordinate is not among the enclosing \
+                                 specialization's continuation inputs, so the generated emission \
+                                 context declares no member for it; this fails closed rather than \
+                                 falling back to a root position, which would read whatever the \
+                                 raw body happened to hold there",
+                            )
+                        })?;
+                    if enclosing_inputs
+                        .iter()
+                        .filter(|enclosing| enclosing.coordinate == input.coordinate)
+                        .count()
+                        != 1
+                    {
+                        return Err(planner_error(
+                            "a generated emission context declares two members for one \
+                             continuation coordinate, so its declared slot is ambiguous; \
+                             RT-CONTSRC-PRODUCER-LOCAL D3b refuses rather than taking the first",
+                        ));
+                    }
+                    let position = u32::try_from(position).map_err(|_| {
+                        planner_capacity_error("continuation immediate slot exhausted")
+                    })?;
+                    let declared_slot =
+                        context_parameters.checked_add(position).ok_or_else(|| {
+                            planner_capacity_error(
+                                "continuation immediate slot position exhausted",
+                            )
+                        })?;
+                    let claim = ContinuationEnvironmentDraft::EntryFrame {
+                        frame: ContinuationFrameRequirement::GeneratedContext {
+                            enclosing: *enclosing,
+                            worker_body_origin: *worker_body_origin,
+                        },
+                        declared_slot,
+                    };
+                    // ⭐ The SAME claim serves both consumers here, and that is
+                    // sound for one reason only: a generated context's direct
+                    // emission and its capture append read the same frame -- its
+                    // own operand run. ⛔ It is written twice rather than shared
+                    // through one field, so a later divergence between the two
+                    // consumers is a local edit and not a silent reinterpretation.
+                    ContinuationAvailabilityDraft {
+                        direct_emission: Some(claim),
+                        context_capture: Some(claim),
+                    }
+                }
+            };
             Ok(ContinuationInputProjection {
+                availability,
                 producer_owner: environment.producer_owner,
                 consumer_owner: environment.consumer_owner,
-                source_owner: input.source_owner,
-                source_abi_position: input.source_abi_position,
-                source: input.source,
+                coordinate: input.coordinate,
                 ordinal,
                 carrier: input.carrier,
                 ownership: input.ownership,
@@ -3166,6 +7497,44 @@ fn exact_continuation_ordinary_parameters(
         .map_err(|_| planner_capacity_error("continuation ordinary arity exhausted"))
 }
 
+/// Copy exactly one component of an `EntryAbi` coordinate from `source` into
+/// `target`, for the `AC-2` omission matrix.
+///
+/// ⛔ Panics on a producer-local coordinate. The matrix proves a field is
+/// load-bearing by neutralizing it and observing the two keys become equal; a
+/// silent no-op would leave them unequal and be read as proof.
+#[cfg(test)]
+fn copy_entry_coordinate_component(
+    target: &mut ContinuationSourceCoordinate,
+    source: &ContinuationSourceCoordinate,
+    component: ContinuationProjectionOmission,
+) {
+    let (
+        ContinuationSourceCoordinate::EntryAbi {
+            source_owner: from_owner,
+            source_abi_position: from_position,
+            source: from_source,
+        },
+        ContinuationSourceCoordinate::EntryAbi {
+            source_owner: to_owner,
+            source_abi_position: to_position,
+            source: to_source,
+        },
+    ) = (source, target)
+    else {
+        panic!(
+            "the AC-2 omission matrix reached a producer-local coordinate; it would have \
+             neutralized nothing and reported the field load-bearing anyway"
+        );
+    };
+    match component {
+        ContinuationProjectionOmission::SourceOwner => *to_owner = *from_owner,
+        ContinuationProjectionOmission::SourceAbiPosition => *to_position = *from_position,
+        ContinuationProjectionOmission::Source => *to_source = *from_source,
+        other => panic!("{other:?} is not a coordinate component"),
+    }
+}
+
 #[cfg(test)]
 fn continuation_keys_equal_under_mutation(
     left: &ContinuationSpecializationKey,
@@ -3195,13 +7564,21 @@ fn continuation_keys_equal_under_mutation(
                     ContinuationProjectionOmission::ConsumerOwner => {
                         target.consumer_owner = source.consumer_owner
                     }
-                    ContinuationProjectionOmission::SourceOwner => {
-                        target.source_owner = source.source_owner
+                    // `D1` — the three source components now live inside the
+                    // `EntryAbi` arm, so the copy-back reaches into it. ⛔ A
+                    // producer-local coordinate PANICS rather than silently
+                    // copying nothing: a no-op here would leave the two keys
+                    // unequal and the control would report "distinguished"
+                    // while having applied no mutation at all.
+                    ContinuationProjectionOmission::SourceOwner
+                    | ContinuationProjectionOmission::SourceAbiPosition
+                    | ContinuationProjectionOmission::Source => {
+                        copy_entry_coordinate_component(
+                            &mut target.coordinate,
+                            &source.coordinate,
+                            field,
+                        )
                     }
-                    ContinuationProjectionOmission::SourceAbiPosition => {
-                        target.source_abi_position = source.source_abi_position
-                    }
-                    ContinuationProjectionOmission::Source => target.source = source.source,
                     ContinuationProjectionOmission::Ordinal => target.ordinal = source.ordinal,
                     ContinuationProjectionOmission::Carrier => target.carrier = source.carrier,
                     ContinuationProjectionOmission::Ownership => {
@@ -3271,7 +7648,11 @@ fn intern_specialization(
     // The immutable key is installed before the caller performs any recursive
     // discovery. This ordering is the fixed point's decreasing measure.
     interned.insert(key.clone(), id);
-    units.push(PlannedContinuationSpecialization { id, key });
+    units.push(PlannedContinuationSpecialization {
+        id,
+        key,
+        finalized_availability: Vec::new(),
+    });
     Ok((id, true))
 }
 
@@ -3279,11 +7660,91 @@ fn intern_specialization(
 struct ContinuationDiscovery {
     continuation_origin: StaticOriginId,
     result_root: StaticOriginId,
+    /// **`D5a` — the enclosing generated emission context, retained across
+    /// descent.**
+    ///
+    /// ⛔ This field is the correction. The fixed point used to descend into
+    /// `worker.body_origin` carrying only the two origins, so the next
+    /// iteration re-read the raw occurrence owner and lost the specialization
+    /// that had selected and invoked that worker. Retaining it here is what
+    /// makes "descending into the selected worker body from an interned
+    /// specialization retains that specialization as the immediate emission
+    /// owner" a fact of the traversal rather than something a later lookup has
+    /// to reconstruct — which it provably cannot do.
+    ///
+    /// `None` at a top-level `ComputationalMatch` root: there is no enclosing
+    /// generated context, so the emission owner is the raw occurrence owner.
+    enclosing_specialization: Option<ContinuationSpecializationId>,
 }
 
 #[cfg(test)]
 thread_local! {
     static WEAKEN_CONTINUATION_DECREASING_MEASURE: Cell<bool> = const { Cell::new(false) };
+    static DUPLICATE_DESCENT_AS_TOP_LEVEL: Cell<bool> = const { Cell::new(false) };
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8l2` — the ordinary-envelope population
+/// defects.**
+///
+/// ⛔ Every one is a shape a wrong derivation would actually produce, not an
+/// invented corruption. [`Self::DensePrefix`] is exactly what this method
+/// emitted before `D8l2`, so the control that reds on it is a regression test
+/// for the defect `D8l1` measured.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) enum EnvelopeDefect {
+    Exact,
+    /// Select a recursive position at the field count, which no plan produces.
+    SelectionOutOfRange,
+    /// Drop the last nonrecursive field.
+    Omit,
+    /// Repeat the first nonrecursive field in the last slot, so the length is
+    /// right and the set is not.
+    Duplicate,
+    /// The pre-`D8l2` derivation: envelope indices emitted as source positions.
+    DensePrefix,
+    /// Every field present, in reverse source order.
+    WrongOrder,
+}
+
+#[cfg(test)]
+thread_local! {
+    static ENVELOPE_DEFECT: Cell<EnvelopeDefect> = const { Cell::new(EnvelopeDefect::Exact) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn set_envelope_defect(defect: EnvelopeDefect) {
+    ENVELOPE_DEFECT.with(|cell| cell.set(defect));
+}
+
+#[cfg(test)]
+fn envelope_defect() -> EnvelopeDefect {
+    ENVELOPE_DEFECT.with(Cell::get)
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8a` — instantiate the second emission owner.**
+///
+/// Armed, every descent into a selected worker body is pushed a **second** time
+/// with `enclosing_specialization: None`, so the same nested producer
+/// `Construct` occurrences are also discovered as though they sat at a top-level
+/// computational frame. Those discoveries intern real specializations, through
+/// the real interning path, whose four source coordinates are identical to the
+/// genuine ones and whose emission owner is `Predeclared` instead of
+/// `Specialization`.
+///
+/// ⛔ This is the only way to instantiate the second owner, and that is the
+/// measurement rather than a limitation of the instrument: production cannot
+/// produce it. `continuation_result_origins` does not descend into
+/// `Closure`/`LexicalClosure`, and every descent root is a closure's body child,
+/// so for one `continuation_origin` the seed walk and each descent walk cover
+/// **disjoint** occurrence subtrees. A producer `Construct` inside a worker body
+/// is therefore reachable from exactly one discovery, and its emission owner is
+/// a function of its source coordinates. Arming this hook removes precisely that
+/// disjointness — nothing else — which is what makes the resulting refusal
+/// attributable to the owner and not to some other damage.
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn set_continuation_descent_owner_duplication(armed: bool) {
+    DUPLICATE_DESCENT_AS_TOP_LEVEL.with(|cell| cell.set(armed));
 }
 
 fn build_continuation_specialization_plan(
@@ -3292,6 +7753,7 @@ fn build_continuation_specialization_plan(
     (
         Vec<PlannedContinuationSpecialization>,
         Vec<PlannedContinuationSpecializationCall>,
+        Vec<PlannedContinuationContext>,
     ),
     CraneliftBackendError,
 > {
@@ -3301,6 +7763,9 @@ fn build_continuation_specialization_plan(
             pending.push(ContinuationDiscovery {
                 continuation_origin: occurrence.static_origin,
                 result_root: plan.semantic.child_origin(occurrence.static_origin, 0)?,
+                // A top-level computational frame has no enclosing generated
+                // context; its producers emit from their raw occurrence owner.
+                enclosing_specialization: None,
             });
         }
     }
@@ -3315,7 +7780,7 @@ fn build_continuation_specialization_plan(
     let mut steps = 0usize;
     let mut visited = BTreeSet::new();
     let mut interned = BTreeMap::new();
-    let mut units = Vec::new();
+    let mut units: Vec<PlannedContinuationSpecialization> = Vec::new();
     let mut calls = BTreeSet::new();
     let mut sequences = BTreeMap::<
         (PredeclaredFunctionId, StaticOriginId, StaticOriginId),
@@ -3405,10 +7870,96 @@ fn build_continuation_specialization_plan(
                         discovery.continuation_origin,
                     )?
                     else {
+                        // ⛔⛔ **`D7` checkpoint `1c` HARD STOP -- this `continue`
+                        // is the omission site, and it is NOT closed.**
+                        //
+                        // The candidate above is already a derived
+                        // recursive-position worker with a built provenance.
+                        // Dropping it here removes it from the `#26`
+                        // result-flow population, so its closure has nothing to
+                        // be claimed by and reaches the late generic `Closure`
+                        // arm -- which is exactly the fall-through the frame's
+                        // matrix-omission law forbids, and exactly the framed
+                        // witness (closure `381` / body `375`, `Vis` parent
+                        // `386`, constructor-field position `1`).
+                        //
+                        // ⛔ **Refusing here with existing authority is not
+                        // possible, and that is a measurement, not a
+                        // preference.** Scoping the refusal to a real planned
+                        // member -- the only planner-issued discriminator there
+                        // is, `AbiUnitDefinition::ClosureBody`'s defining
+                        // occurrence -- reds 23 green `ken-runtime` fixtures.
+                        // Every one of them is in the SAME state as the witness:
+                        // a real member, at a recursive position of an exact
+                        // continuation producer, declined for an open source
+                        // value environment, with zero interned
+                        // specializations. The one candidate that IS separable
+                        // -- `contspec_open_and_ambiguous_sources_refuse_only_
+                        // the_candidate`'s closure `13`, declined on one edge
+                        // and interned on another -- is separable by a test that
+                        // does not separate the other twenty-two.
+                        //
+                        // ⇒ The narrowing that would admit the green fixtures
+                        // and refuse `381` needs a predicate this plane does not
+                        // have. The frame calls a third production predicate a
+                        // hard stop; the concrete edge is returned instead of
+                        // widened. The member-population law below IS enforced,
+                        // and it is the converse direction of the same law.
                         continue;
+                    };
+                    let emission_owner = match discovery.enclosing_specialization {
+                        Some(enclosing) => ContinuationEmissionOwner::Specialization(enclosing),
+                        None => ContinuationEmissionOwner::Predeclared(
+                            producer_environment.producer_owner,
+                        ),
+                    };
+                    // The immediate-availability resolution, taken from the
+                    // SAME enclosing specialization that settled the emission
+                    // owner above. ⛔ Owned before the key is built: the
+                    // enclosing unit is read out of `units` here so the
+                    // immutable borrow ends before `intern_specialization`
+                    // takes it mutably.
+                    let enclosing_context = match discovery.enclosing_specialization {
+                        None => None,
+                        Some(enclosing) => {
+                            let enclosing_unit =
+                                units.get(enclosing.0 as usize).ok_or_else(|| {
+                                    planner_error(
+                                        "a descent names an enclosing specialization that was \
+                                         never interned",
+                                    )
+                                })?;
+                            Some((
+                                enclosing,
+                                // ⭐ The body origin half of the pair contexts
+                                // are interned on, taken from the enclosing
+                                // unit's own key so the frame identity is the
+                                // interning key rather than a restatement of it.
+                                enclosing_unit.key.worker.body_origin,
+                                generated_context_parameters(&enclosing_unit.key.worker)?,
+                                enclosing_unit.key.continuation_inputs.clone(),
+                            ))
+                        }
+                    };
+                    let emitter = match &enclosing_context {
+                        None => ContinuationEmitterFrame::Predeclared(
+                            producer_environment.producer_owner,
+                        ),
+                        Some((
+                            enclosing,
+                            worker_body_origin,
+                            context_parameters,
+                            enclosing_inputs,
+                        )) => ContinuationEmitterFrame::GeneratedContext {
+                            enclosing: *enclosing,
+                            worker_body_origin: *worker_body_origin,
+                            context_parameters: *context_parameters,
+                            enclosing_inputs,
+                        },
                     };
                     let key = ContinuationSpecializationKey {
                         producer_owner: producer_environment.producer_owner,
+                        emission_owner,
                         producer_result_origin: producer_environment.producer_result_origin,
                         producer_construct_origin: producer_environment.producer_construct_origin,
                         producer_alternative: u32::try_from(alternative).map_err(|_| {
@@ -3422,8 +7973,10 @@ fn build_continuation_specialization_plan(
                         worker: worker.clone(),
                         ordinary_parameters,
                         continuation_inputs: exact_continuation_projection(
+                            plan,
                             &producer_environment,
                             ordinary_parameters,
+                            &emitter,
                         )?,
                     };
                     let (target, inserted) =
@@ -3437,6 +7990,7 @@ fn build_continuation_specialization_plan(
                     let call = PlannedContinuationSpecializationCall {
                         token: ContinuationSpecializationCallToken {
                             producer_owner,
+                            emission_owner,
                             producer_result_origin: discovery.result_root,
                             producer_construct_origin,
                             producer_alternative: u32::try_from(alternative).map_err(|_| {
@@ -3454,10 +8008,29 @@ fn build_continuation_specialization_plan(
                     }
                     if inserted {
                         // The key is already interned when its body can add work.
+                        //
+                        // ⭐ `D5a`: the descent now carries `target` as the
+                        // enclosing generated emission context. Everything the
+                        // nested producer will need — the continuation inputs
+                        // this specialization already holds — lives in that
+                        // context, and the raw worker body's own owner cannot
+                        // reach them. Dropping it here is exactly the defect
+                        // `evt_609am4v7cdt5b` ruled on.
                         pending.push(ContinuationDiscovery {
                             continuation_origin: discovery.continuation_origin,
                             result_root: worker.body_origin,
+                            enclosing_specialization: Some(target),
                         });
+                        // `D8a` — the same descent, as though it were top level.
+                        // See `set_continuation_descent_owner_duplication`.
+                        #[cfg(test)]
+                        if DUPLICATE_DESCENT_AS_TOP_LEVEL.with(Cell::get) {
+                            pending.push(ContinuationDiscovery {
+                                continuation_origin: discovery.continuation_origin,
+                                result_root: worker.body_origin,
+                                enclosing_specialization: None,
+                            });
+                        }
                     }
                 }
             }
@@ -3465,7 +8038,87 @@ fn build_continuation_specialization_plan(
     }
     let calls = calls.into_iter().collect::<Vec<_>>();
     validate_continuation_specialization_closure(&interned, &units, &calls)?;
-    Ok((units, calls))
+    let contexts = intern_generated_contexts(&units, &calls)?;
+    Ok((units, calls, contexts))
+}
+
+/// The `Parameter` run of the generated context that executes one specialization
+/// worker: the raw worker's declared arity plus its capture count.
+///
+/// ⭐ Read off the **worker provenance**, not off the raw unit's ABI descriptor.
+/// That is deliberate and it is the same pair the caller already supplies:
+/// `call_static_worker` builds its operands as `declared_arity` explicit
+/// arguments followed by the stored captures, so a context whose parameter run
+/// is derived from the same two numbers accepts that exact operand prefix by
+/// construction. Deriving it from the raw descriptor instead would make the
+/// context's shape depend on a second authority that the call site never reads.
+fn generated_context_parameters(
+    worker: &ContinuationWorkerProvenance,
+) -> Result<u32, CraneliftBackendError> {
+    let captures = u32::try_from(worker.captures.len())
+        .map_err(|_| planner_capacity_error("continuation worker capture count exhausted"))?;
+    worker
+        .declared_arity
+        .checked_add(captures)
+        .ok_or_else(|| planner_capacity_error("generated context parameter run exhausted"))
+}
+
+/// **`D5a` — intern the generated producer execution contexts, AFTER the fixed
+/// point.**
+///
+/// One context per `(enclosing_specialization, worker_body_origin)` reached by a
+/// call whose emission owner is a `Specialization`. ⛔ Not one per descent: a
+/// worker body the fixed point walked into but that emits nothing gets no
+/// context, because nothing would ever call it.
+///
+/// **The same raw worker reached under two continuation identities yields two
+/// distinct contexts** — the key leads with the enclosing specialization, so two
+/// identities cannot collapse onto one widened definition. That is the ruling's
+/// requirement stated as a key, not as a check.
+fn intern_generated_contexts(
+    units: &[PlannedContinuationSpecialization],
+    calls: &[PlannedContinuationSpecializationCall],
+) -> Result<Vec<PlannedContinuationContext>, CraneliftBackendError> {
+    let mut contexts: Vec<PlannedContinuationContext> = Vec::new();
+    let mut interned = BTreeMap::new();
+    for call in calls {
+        let ContinuationEmissionOwner::Specialization(enclosing) = call.token.emission_owner
+        else {
+            continue;
+        };
+        let worker_body_origin = call.token.producer_result_origin;
+        if interned.contains_key(&(enclosing, worker_body_origin)) {
+            continue;
+        }
+        let enclosing_unit = units.get(enclosing.0 as usize).ok_or_else(|| {
+            planner_error("a causal call names an emission owner that was never interned")
+        })?;
+        // The context executes the enclosing specialization's OWN selected
+        // worker body. A call claiming otherwise would be asking a context to
+        // supply captures for a body it does not run, so this rejects rather
+        // than interning a context nothing can lawfully call.
+        if enclosing_unit.key.worker.body_origin != worker_body_origin {
+            return Err(planner_error(
+                "a causal call's producer result origin is not the enclosing specialization's \
+                 selected worker body",
+            ));
+        }
+        let id = ContinuationContextId(
+            u32::try_from(contexts.len())
+                .map_err(|_| planner_capacity_error("generated context identity exhausted"))?,
+        );
+        contexts.push(PlannedContinuationContext {
+            id,
+            finalized_availability: Vec::new(),
+            enclosing_specialization: enclosing,
+            worker_body_origin,
+            raw_owner: call.token.producer_owner,
+            parameters: generated_context_parameters(&enclosing_unit.key.worker)?,
+            captures: enclosing_unit.key.continuation_inputs.clone(),
+        });
+        interned.insert((enclosing, worker_body_origin), id);
+    }
+    Ok(contexts)
 }
 
 fn validate_continuation_specialization_closure(
@@ -3517,12 +8170,268 @@ fn validate_continuation_specialization_closure(
     Ok(())
 }
 
+/// **`cfg(test)`-only corruption of the planned static-worker MEMBER
+/// population** — the two compile-valid ways a real member goes missing.
+///
+/// ⭐ Two settings and not one, because a member can be wrong by **not being
+/// there** and by **being there as something else**, and neither mutation
+/// produces the other's plan. `Reclassify` is the one a positive assertion is
+/// most likely to agree with by accident: the unit is still present, still
+/// declared, still has a function, and only its definition arm says it is not
+/// this worker's body.
+///
+/// ⛔ Applied to the descriptor population **after** it is derived and
+/// **before** the plan validates, so what is measured is a planner refusal on a
+/// real plan state -- not a checker fed a hand-built argument.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum StaticWorkerMemberMutation {
+    Exact,
+    /// Drop the emittable unit that defines the planned member's body.
+    OmitMember,
+    /// Keep the unit, but define it as a scheduling entry instead.
+    ReclassifyMember,
+    /// Keep the unit and its arm, but attribute it to a different closure.
+    RedirectDefiningOccurrence,
+    /// Keep the member exactly where it is, and change the contract it declares.
+    MisdeclareMemberContract,
+}
+
+#[cfg(test)]
+thread_local! {
+    static STATIC_WORKER_MEMBER_MUTATION: std::cell::Cell<StaticWorkerMemberMutation> =
+        const { std::cell::Cell::new(StaticWorkerMemberMutation::Exact) };
+}
+
+/// Run `body` with the planned static-worker member population corrupted.
+///
+/// ⛔ No restore-on-unwind guard: a panic inside the scope is the fixture
+/// failing, the cell is thread-local, and Rust runs each test on its own
+/// thread, so a panicking row cannot leak the setting into a sibling.
+#[cfg(test)]
+fn with_static_worker_member_mutation<R>(
+    mutation: StaticWorkerMemberMutation,
+    body: impl FnOnce() -> R,
+) -> R {
+    STATIC_WORKER_MEMBER_MUTATION.with(|cell| cell.set(mutation));
+    let result = body();
+    STATIC_WORKER_MEMBER_MUTATION.with(|cell| cell.set(StaticWorkerMemberMutation::Exact));
+    result
+}
+
+/// Corrupt the emittable unit that defines the FIRST planned specialization's
+/// worker body, leaving every other unit -- including every `ClosureBody` that
+/// no specialization names -- exactly as the planner derived it.
+///
+/// ⭐ Scoped to the exact member on purpose. A mutation that swept every
+/// `ClosureBody` would red under this law and under nothing else, and would
+/// therefore be unable to show that ordinary closures are untouched by it.
+#[cfg(test)]
+fn apply_static_worker_member_mutation(plan: &mut StaticTransitionPlan<'_>) {
+    let mutation = STATIC_WORKER_MEMBER_MUTATION.with(std::cell::Cell::get);
+    if mutation == StaticWorkerMemberMutation::Exact {
+        return;
+    }
+    let Some(specialization) = plan.continuation_specializations.first() else {
+        return;
+    };
+    let closure_origin = specialization.key.worker.closure_origin;
+    let defines_member = |definition: &AbiUnitDefinition| {
+        matches!(
+            definition,
+            AbiUnitDefinition::ClosureBody { defining_origin, .. }
+                if *defining_origin == closure_origin
+        )
+    };
+    match mutation {
+        StaticWorkerMemberMutation::Exact => {}
+        StaticWorkerMemberMutation::OmitMember => {
+            plan.abi
+                .descriptors
+                .retain(|descriptor| !defines_member(&descriptor.definition));
+        }
+        StaticWorkerMemberMutation::ReclassifyMember => {
+            for descriptor in &mut plan.abi.descriptors {
+                if defines_member(&descriptor.definition) {
+                    descriptor.definition = AbiUnitDefinition::SchedulingEntry {
+                        ingress: AbiSchedulingIngress::Empty,
+                    };
+                }
+            }
+        }
+        StaticWorkerMemberMutation::RedirectDefiningOccurrence => {
+            for descriptor in &mut plan.abi.descriptors {
+                if defines_member(&descriptor.definition) {
+                    if let AbiUnitDefinition::ClosureBody {
+                        defining_origin, ..
+                    } = &mut descriptor.definition
+                    {
+                        *defining_origin = StaticOriginId(defining_origin.0.wrapping_add(1));
+                    }
+                }
+            }
+        }
+        StaticWorkerMemberMutation::MisdeclareMemberContract => {
+            for descriptor in &mut plan.abi.descriptors {
+                if defines_member(&descriptor.definition) {
+                    descriptor.header.parameters = descriptor.header.parameters.wrapping_add(1);
+                }
+            }
+        }
+    }
+}
+
+/// Whether an emittable unit names this closure occurrence as its defining
+/// occurrence -- the planner's own answer to *"is this a real static-worker
+/// member?"*.
+///
+/// ⛔ Keyed on the DEFINING OCCURRENCE, not on the worker's body origin.
+/// Measured: those are different coordinates. A specialization's
+/// `worker.body_origin` is the closure's child-0 occurrence, while an
+/// `AbiDescriptor::origin` is the unit's seed -- the target of the closure's
+/// `StaticBody` edge. They coincide only when a body's occurrence is also its
+/// scheduling entry, and the `px8j` fixture is a live counter-example (closure
+/// `29` names body `18`; its unit's origin is `28`). Joining on them produced a
+/// false planning refusal on a green fixture.
+fn closure_defines_a_planned_member(
+    plan: &StaticTransitionPlan<'_>,
+    closure_origin: StaticOriginId,
+) -> bool {
+    plan.abi.descriptors.iter().any(|descriptor| {
+        matches!(
+            descriptor.definition,
+            AbiUnitDefinition::ClosureBody { defining_origin, .. }
+                if defining_origin == closure_origin
+        )
+    })
+}
+
+/// **`RT-DECL-CLOSURE-PORT` `D7` checkpoint `1c` — THE MATRIX-OMISSION LAW, at
+/// the planning boundary.**
+///
+/// ⭐⭐ **A real planned static-worker member that is omitted or misclassified
+/// must red HERE.** The frame states the law directly: such a member *"must FAIL
+/// IN PLANNING, and may NOT fall through to the late generic `Closure`
+/// refusal."* Checkpoint 1's
+/// `validate_retained_callable_capture_contract` is a **pre-emission** gate --
+/// correct, and later than the law. It also treats `worker_templates`
+/// membership as necessary and insufficient, which is exactly right and exactly
+/// why it cannot be this check: **every** emittable body is in that map, so
+/// membership does not distinguish an exact member from an ordinary closure.
+///
+/// ⭐ **The discriminator is the specialization population, and it already
+/// exists.** Measured on the linked row: four `ClosureBody` units, and exactly
+/// one of them named by a `ContinuationSpecialization`'s worker. That one is the
+/// exact planner-proved member; the other three are ordinary closures which the
+/// frame says must *still* reach the generic arm. So the law's subject is
+/// precisely "named by a specialization", and its obligation is that the unit
+/// population contain that member, defined by that closure, under that contract.
+///
+/// ⛔ **Nothing is minted and nothing is widened.** Both sides are populations
+/// the planner already closed: `continuation_specializations`, whose worker
+/// provenance names `(closure_origin, body_origin, declared_arity, captures)`,
+/// and `abi.descriptors`, whose `ClosureBody` arm already records its
+/// `defining_origin`. This is a cross-population closure over two existing
+/// derivations -- the same shape as the substrate-preallocation closure beside
+/// it -- not a new identity, lane, disposition or ABI field.
+///
+/// ⛔ **The join is on the DEFINING CLOSURE OCCURRENCE, not on the worker's body
+/// origin, and that correction was measured rather than reasoned.** A
+/// specialization's `worker.body_origin` is the closure's child-`0` occurrence;
+/// an `AbiDescriptor::origin` is the unit's seed, the target of the closure's
+/// `StaticBody` edge. They coincide only when a body's occurrence is also its
+/// scheduling entry. Joining on them refused the green `px8j` fixture, whose
+/// closure `29` names body `18` while its unit's origin is `28`.
+///
+/// The two ways the member can be wrong, named separately:
+///
+/// | failure | what it means |
+/// |---|---|
+/// | no emittable unit defines this worker's closure | the member is **omitted or misclassified**: it is gone, it is not a closure body, or it belongs to another closure -- one fact to a join on the defining occurrence |
+/// | the unit's declared parameters/captures disagree with the worker | the member is present, correctly classified and correctly attributed, under a **different contract** than the specialization was interned against |
+///
+/// ⛔⛔ **This is the CONVERSE direction of the frame's law, and it does not
+/// close the framed gap.** It says every interned specialization has its member.
+/// The framed witness is the other direction -- a real member with *no*
+/// specialization at all -- and its omission site is the declined candidate in
+/// `build_continuation_specialization_plan`, which carries the hard stop. Read
+/// that comment before treating this as the whole of `1c`.
+fn validate_static_worker_member_population(
+    plan: &StaticTransitionPlan<'_>,
+) -> Result<(), CraneliftBackendError> {
+    for specialization in &plan.continuation_specializations {
+        let worker = &specialization.key.worker;
+        // Uniqueness is checked HERE rather than over the whole descriptor
+        // population, because the law's subject is this member. A global
+        // duplicate sweep would be a different, broader claim about the ABI
+        // plane, and asserting it from this function would make a failure
+        // report the wrong cause.
+        let mut members = plan.abi.descriptors.iter().filter(|descriptor| {
+            matches!(
+                descriptor.definition,
+                AbiUnitDefinition::ClosureBody { defining_origin, .. }
+                    if defining_origin == worker.closure_origin
+            )
+        });
+        let Some(member) = members.next() else {
+            return Err(planner_error(
+                "a planned continuation specialization names a static-worker closure that no \
+                 emittable unit defines, so the exact member is omitted from the planned \
+                 population and that closure could only reach the generic closure arm",
+            ));
+        };
+        if members.next().is_some() {
+            return Err(planner_error(
+                "two emittable units define one static-worker closure occurrence, so the planned \
+                 specialization could not name either member unambiguously",
+            ));
+        }
+        if member.header.parameters != worker.declared_arity {
+            return Err(planner_error(
+                "a planned static-worker member declares a different parameter count than the \
+                 specialization interned against it",
+            ));
+        }
+        if member.header.captures as usize != worker.captures.len() {
+            return Err(planner_error(
+                "a planned static-worker member declares a different capture count than the \
+                 specialization interned against it",
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn validate_continuation_specialization_plan(
     plan: &StaticTransitionPlan<'_>,
 ) -> Result<(), CraneliftBackendError> {
-    let (expected_units, expected_calls) = build_continuation_specialization_plan(plan)?;
-    if plan.continuation_specializations != expected_units
+    let (expected_units, expected_calls, expected_contexts) =
+        build_continuation_specialization_plan(plan)?;
+    // ⛔⛔ **The comparison is against the DERIVATION, and `D3b`'s stage-2
+    // finalization is not part of it.**
+    //
+    // This validator's whole strength is exact equality against a fresh
+    // re-derivation, and that must not be weakened. But `finalized_availability`
+    // is stamped *after* the derivation closes, from the interned contexts —
+    // a re-derivation cannot reproduce it and is not supposed to. Comparing it
+    // would make this fire on the stamping rather than on any disagreement about
+    // what was derived, which is exactly what it did when finalization first
+    // landed: 83 tests red, none of them about the plan being wrong.
+    //
+    // ⭐ Cleared on a clone rather than skipped field-by-field, so a field added
+    // to either record later is compared by default. Only what is explicitly
+    // named here is exempt.
+    let mut landed_units = plan.continuation_specializations.clone();
+    for unit in &mut landed_units {
+        unit.finalized_availability.clear();
+    }
+    let mut landed_contexts = plan.continuation_contexts.clone();
+    for context in &mut landed_contexts {
+        context.finalized_availability.clear();
+    }
+    if landed_units != expected_units
         || plan.continuation_specialization_calls != expected_calls
+        || landed_contexts != expected_contexts
     {
         return Err(planner_error(
             "continuation specialization plan is not the exact closed derivation",
@@ -3561,13 +8470,17 @@ impl<'src> Planner<'src> {
                 semantic: SemanticPlane::default(),
                 root_occurrence: None,
                 declaration_occurrences: BTreeMap::new(),
+                declaration_call_targets: BTreeMap::new(),
                 trap_catalog: Vec::new(),
                 source_occurrences: Vec::new(),
                 join_results: Vec::new(),
                 case_emissions: Vec::new(),
+                aggregate_ownership: Vec::new(),
+                host_effect_seats: Vec::new(),
                 occurrence_authorities: Vec::new(),
                 continuation_specializations: Vec::new(),
                 continuation_specialization_calls: Vec::new(),
+                continuation_contexts: Vec::new(),
             },
             store_interner: BTreeMap::new(),
             next_source: 0,
@@ -3707,23 +8620,143 @@ impl<'src> Planner<'src> {
         &mut self,
         declaration_entries: &BTreeMap<String, StaticNodeId>,
     ) -> Result<(), CraneliftBackendError> {
+        // ⭐ `D4`: resolve each declaration's target ONCE, before any edge is
+        // added. The class is a property of the **declaration**, not of a
+        // reference to it, so two references to one symbol cannot disagree —
+        // and a symbol with no reference at all is still resolved, so a
+        // malformed closure seed fails in planning rather than only when
+        // somebody happens to call it.
+        let mut targets: BTreeMap<&str, (StaticNodeId, DeclarationCallTargetClass)> =
+            BTreeMap::new();
+        for (symbol, entry) in declaration_entries {
+            let resolved = self.declaration_call_target(symbol, *entry)?;
+            targets.insert(symbol.as_str(), resolved);
+        }
         let calls = self
             .plan
             .source_occurrences
             .iter()
             .flatten()
             .filter_map(|occurrence| match occurrence.expr {
-                RuntimeExpr::DeclarationRef { symbol } => declaration_entries
+                RuntimeExpr::DeclarationRef { symbol } => targets
                     .get(symbol.as_str())
                     .copied()
-                    .map(|target| (StaticNodeId(occurrence.static_origin.0), target)),
+                    .map(|(target, class)| {
+                        (StaticNodeId(occurrence.static_origin.0), target, class)
+                    }),
                 _ => None,
             })
             .collect::<Vec<_>>();
-        for (caller, callee) in calls {
+        for (caller, callee, class) in calls {
             self.edge(caller, callee, EdgeKind::DeclarationCall)?;
+            // Keyed by the REFERENCE occurrence, which is the same key the
+            // resolved call record is looked up by in lowering. One reference
+            // cannot acquire two classes: `source_occurrences` is dense by
+            // origin, so each reference is visited once.
+            if self
+                .plan
+                .declaration_call_targets
+                .insert(StaticOriginId(caller.0), class)
+                .is_some()
+            {
+                return Err(planner_error(
+                    "one declaration-reference occurrence resolved two call target classes",
+                ));
+            }
         }
         Ok(())
+    }
+
+    /// **`RT-DECL-CLOSURE-PORT` `D4` — the selective retarget, and the only
+    /// place it is decided.**
+    ///
+    /// ⛔ **This is not a blanket retarget, and the difference is load-bearing.**
+    /// A non-closure transparent declaration's scheduling entry *is* its unit —
+    /// a legitimately zero-input thunk — so moving its `DeclarationCall` edge
+    /// would break every declaration call the corpus already makes. Only a
+    /// `Closure` / `LexicalClosure` seed owns a second, declaration-owned unit
+    /// to move to.
+    ///
+    /// The discriminator is read from the declaration's **planned occurrence**,
+    /// not from the entry's shape or from a reverse search for a body: those
+    /// two `RuntimeExpr` arms are exactly the pair that emits an
+    /// `EdgeKind::StaticBody` edge, which is what makes "is a closure seed" and
+    /// "has one forward static-body edge" the same fact stated twice. ⇒ Both are
+    /// asserted, so a plan where they disagree fails in planning.
+    fn declaration_call_target(
+        &self,
+        symbol: &str,
+        entry: StaticNodeId,
+    ) -> Result<(StaticNodeId, DeclarationCallTargetClass), CraneliftBackendError> {
+        let occurrence = self
+            .plan
+            .declaration_occurrences
+            .get(symbol)
+            .copied()
+            .ok_or_else(|| {
+                planner_error("a planned transparent declaration has no occurrence origin")
+            })?;
+        let seed = self
+            .plan
+            .source_occurrences
+            .get(occurrence.0 as usize)
+            .and_then(Option::as_ref)
+            .map(|planned| {
+                matches!(
+                    planned.expr,
+                    RuntimeExpr::Closure { .. } | RuntimeExpr::LexicalClosure { .. }
+                )
+            })
+            .ok_or_else(|| {
+                planner_error("a planned transparent declaration has no source occurrence")
+            })?;
+
+        let mut body = None;
+        for edge in &self.plan.edges {
+            if edge.kind != EdgeKind::StaticBody || edge.from != entry {
+                continue;
+            }
+            if body.is_some() {
+                return Err(planner_error(
+                    "a transparent declaration entry has two forward static body edges",
+                ));
+            }
+            body = Some(edge.to);
+        }
+        match (seed, body) {
+            (true, Some(body)) => {
+                // The mutations act HERE, on a decision the consistency law
+                // above has already accepted -- a mutation applied to the
+                // discriminator itself would only ever trip that law, and would
+                // measure the law instead of the retarget.
+                #[cfg(test)]
+                match D4_DECLARATION_TARGET_MUTATION.with(std::cell::Cell::get) {
+                    D4DeclarationTargetMutation::Exact => {}
+                    D4DeclarationTargetMutation::NeverRetarget => {
+                        return Ok((entry, DeclarationCallTargetClass::SchedulingEntry));
+                    }
+                    D4DeclarationTargetMutation::AnyStaticBody => {
+                        let any = self
+                            .plan
+                            .edges
+                            .iter()
+                            .find(|edge| edge.kind == EdgeKind::StaticBody)
+                            .map(|edge| edge.to)
+                            .expect("this arm has at least one static body edge");
+                        return Ok((any, DeclarationCallTargetClass::CallableDeclaration));
+                    }
+                }
+                Ok((body, DeclarationCallTargetClass::CallableDeclaration))
+            }
+            (false, None) => Ok((entry, DeclarationCallTargetClass::SchedulingEntry)),
+            (true, None) => Err(planner_error(
+                "a closure-seed transparent declaration has no forward static body edge to its \
+                 callable unit",
+            )),
+            (false, Some(_)) => Err(planner_error(
+                "a non-closure transparent declaration entry has a forward static body edge",
+            )),
+        }
     }
 
     /// Files this occurrence's term under the origin the planner just gave it.
@@ -4269,6 +9302,7 @@ impl<'src> Planner<'src> {
             &self.plan.nodes,
             &self.plan.edges,
             &self.plan.entries,
+            self.plan.root_entry,
             &self.plan.semantic_sources,
             &self.plan.semantic_material,
         )?;
@@ -4303,25 +9337,78 @@ impl<'src> Planner<'src> {
             .root_entry
             .ok_or_else(|| planner_error("plan has no root scheduling entry"))?;
         self.plan.root_ingress = root_ingress;
+        // `RT-DECL-CLOSURE-PORT` `D2` — the declaration occurrences are the
+        // discriminator that splits a `StaticBody` target into a callable
+        // declaration unit or an anonymous closure body. They come from the one
+        // loop that plans transparent declarations, so the ABI plane cannot
+        // classify a unit as declaration-owned unless the planner actually
+        // planned that declaration.
+        let declaration_origins: BTreeSet<StaticOriginId> =
+            self.plan.declaration_occurrences.values().copied().collect();
         self.plan.abi = build_abi_plane(
             &self.plan.semantic,
             &self.plan.nodes,
             &self.plan.semantic_sources,
             &self.plan.edges,
             &self.plan.entries,
+            &declaration_origins,
             root_entry,
             root_ingress,
         )?;
-        let (continuation_specializations, continuation_specialization_calls) =
-            build_continuation_specialization_plan(&self.plan)?;
+        let (
+            continuation_specializations,
+            continuation_specialization_calls,
+            continuation_contexts,
+        ) = build_continuation_specialization_plan(&self.plan)?;
         self.plan.continuation_specializations = continuation_specializations;
         self.plan.continuation_specialization_calls = continuation_specialization_calls;
+        self.plan.continuation_contexts = continuation_contexts;
         validate_continuation_specialization_plan(&self.plan)?;
         install_continuation_specialization_abi(
             &mut self.plan.abi,
             &self.plan.continuation_specializations,
         )?;
+        // `D5a`: the generated contexts' own ABI, in its own arenas. ⛔ Installed
+        // AFTER the specialization ABI and into separate vectors, never appended
+        // to `continuation_descriptors` -- that population is exactly the
+        // continuation-callee partition, and admitting a caller-side context
+        // there would make one identity domain readable as the other.
+        install_continuation_context_abi(&mut self.plan.abi, &self.plan.continuation_contexts)?;
+        // `D3b` STAGE 2 — every context id now exists, so every structural frame
+        // requirement can be resolved to exactly one identity.
+        //
+        // ⛔ **Placed AFTER validation deliberately.** The validator re-derives
+        // the whole continuation plan and compares it for exact equality; a
+        // finalized sibling field stamped before that runs is state the
+        // re-derivation cannot produce, so the comparison would fail on the
+        // stamping rather than on any real disagreement. Finalization is a
+        // post-derivation publication step, not part of the derivation.
+        //
+        // ⭐ Still before anything can publish a view: `continuation_units` and
+        // `continuation_contexts` both require the ABI installed above, so the
+        // earliest possible view is built after this line.
+        finalize_continuation_availability_plan(&mut self.plan)?;
         self.plan.join_results = build_join_result_plan(&self.plan, functionized_units)?;
+        // `D7` — the aggregate occurrence population is built HERE, last, and
+        // deliberately not beside the occurrence authorities it also reads.
+        //
+        // Two inputs make the position load-bearing, and only one of them was
+        // obvious. The meet is taken over the per-child lifetimes in
+        // `occurrence_authorities`, so it cannot precede those. It is ALSO
+        // taken over each child's planned result representation, which is
+        // `join_results` and is not built until this line — a child the
+        // emitter will materialize as a native scalar pair has no referent at
+        // all, and reading the lifetime without the representation makes every
+        // call-shaped child look arena-owned.
+        self.plan.aggregate_ownership = build_aggregate_ownership_plan(&self.plan)?;
+        validate_aggregate_ownership_plan(&self.plan, &self.plan.aggregate_ownership)?;
+        // ⛔ After `join_results` for the same reason the ownership plan is: a
+        // seat's consumer phase is a fact about the child's planned result
+        // representation, which does not exist until that line.
+        self.plan.host_effect_seats = build_host_effect_seat_plan(&self.plan)?;
+        validate_host_effect_seat_plan(&self.plan, &self.plan.host_effect_seats)?;
+        #[cfg(test)]
+        apply_static_worker_member_mutation(&mut self.plan);
         self.plan.validate()?;
         Ok(self.plan)
     }
@@ -4661,6 +9748,37 @@ impl<'src> StaticTransitionPlan<'src> {
         self.semantic.child_origin(parent, position)
     }
 
+    /// The planner's exact emission verdict for one ordinary `Match` case.
+    ///
+    /// `Reachable` when the scrutinee's producer set is `Open`, or is
+    /// `Closed(S)` and contains this case's canonical constructor identity;
+    /// `Eliminated` when it is `Closed(S)` and does not. The derivation lives in
+    /// `build_case_emission_plan` and is validated against a re-derivation, so
+    /// this is a projection of an already-closed fact.
+    ///
+    /// Lowering asks an occurrence-and-ordinal keyed QUESTION and receives a
+    /// verdict it cannot mint: `case_emissions`, `semantic` and the producer-set
+    /// derivation all stay private, so an emitter can obtain this answer and
+    /// cannot derive a different one. It returns no source term, so it cannot
+    /// widen the single `-> Result<&'src RuntimeExpr` route.
+    ///
+    /// `None` means the origin is not a planned ordinary `Match` occurrence --
+    /// a `ComputationalMatch` has no record here. That is a refusal to answer,
+    /// never a default to `Reachable`.
+    pub(in crate::cranelift_backend) fn case_emission_status(
+        &self,
+        match_origin: StaticOriginId,
+        ordinal: usize,
+    ) -> Result<Option<CaseEmissionStatus>, CraneliftBackendError> {
+        let ordinal =
+            u32::try_from(ordinal).map_err(|_| planner_error("case-emission ordinal exhausted"))?;
+        Ok(self
+            .case_emissions
+            .iter()
+            .find(|record| record.match_origin == match_origin && record.ordinal == ordinal)
+            .map(|record| record.status))
+    }
+
     /// Consume the planner-owned result contract for one source join.
     ///
     /// The token is keyed only by the opaque origin. Diagnostic labels and
@@ -4908,6 +10026,541 @@ impl<'src> StaticTransitionPlan<'src> {
         self.semantic.case_constructor_identity(origin, case_index)
     }
 
+    /// **`D7` — the ruled allocation lane for one aggregate producer.**
+    ///
+    /// ⛔ **Absence is a loud failure, never a default.** An aggregate the
+    /// planner never issued a record for is one whose lifetime meet was never
+    /// taken, and answering `PersistentGround` for it would reinstate exactly
+    /// the unproven persistent lane this record exists to replace — silently,
+    /// and only for the occurrences the population happened to miss.
+    ///
+    /// ⚠ The `shape` argument is a cross-check, not a lookup key. The caller
+    /// knows which aggregate it is emitting; if that disagrees with the record
+    /// at this origin, one of the two is reading the wrong occurrence and the
+    /// lane is meaningless either way.
+    pub(in crate::cranelift_backend) fn aggregate_allocation(
+        &self,
+        origin: StaticOriginId,
+        shape: PlannedAggregateShape,
+    ) -> Result<PlannedAggregateAllocation, CraneliftBackendError> {
+        let record = self
+            .aggregate_ownership
+            .iter()
+            .find(|record| record.producer == AggregateOccurrenceProducer::Source(origin))
+            .ok_or_else(|| {
+                planner_error("aggregate producer has no planned ownership record")
+            })?;
+        if record.shape != shape {
+            return Err(planner_error(
+                "aggregate producer disagrees with its planned ownership shape",
+            ));
+        }
+        Ok(record.allocation)
+    }
+
+    /// The occurrence identity of one **source** aggregate producer.
+    ///
+    /// This is the only way lowering obtains an identity for a source
+    /// `Construct`/`Record`, and it is asked at the producer occurrence — where
+    /// the answer is well defined — not at the emission site, where it is not.
+    ///
+    /// Absence is a loud failure for the same reason the lane's absence is: an
+    /// occurrence the planner never interned is one whose meet was never taken.
+    pub(in crate::cranelift_backend) fn source_aggregate_occurrence(
+        &self,
+        origin: StaticOriginId,
+        shape: PlannedAggregateShape,
+    ) -> Result<AggregateOccurrenceId, CraneliftBackendError> {
+        let record = self
+            .aggregate_ownership
+            .iter()
+            .find(|record| record.producer == AggregateOccurrenceProducer::Source(origin))
+            .ok_or_else(|| planner_error("aggregate producer has no planned ownership record"))?;
+        if record.shape != shape {
+            return Err(planner_error(
+                "aggregate producer disagrees with its planned ownership shape",
+            ));
+        }
+        Ok(record.id)
+    }
+
+    /// The occurrence identity of one **compiler-synthesized** aggregate use.
+    ///
+    /// ⛔ The key is `owner + seat + path + full role`, never the role alone. A
+    /// synthesized aggregate has no occurrence in the program to be keyed by,
+    /// and a role repeats within one seat's tree — `ResourceKind` three times —
+    /// so the path is what separates the uses.
+    ///
+    /// Every allocation-reachable use has a record, site-bound ones included.
+    /// Absence here is a loud failure, not the ordinary answer for a role whose
+    /// children come from the emission site.
+    pub(in crate::cranelift_backend) fn synthesized_aggregate_occurrence(
+        &self,
+        owner: ContinuationEmissionOwner,
+        seat: StaticOriginId,
+        path: &SynthesizedAggregatePath,
+        role: SynthesizedConstructorRole,
+    ) -> Result<AggregateOccurrenceId, CraneliftBackendError> {
+        self.synthesized_aggregate_record(owner, seat, path, role)
+            .map(|record| record.id)
+    }
+
+    /// The record of one synthesized use, found by the full four-part key.
+    ///
+    /// ⛔ The path is part of the LOOKUP, not a field checked afterwards. A
+    /// lookup that matched on owner/seat/role and then verified the path would
+    /// find the first of three `ResourceKind` uses and reject the other two;
+    /// matching on all four finds each one's own record.
+    fn synthesized_aggregate_record(
+        &self,
+        owner: ContinuationEmissionOwner,
+        seat: StaticOriginId,
+        path: &SynthesizedAggregatePath,
+        role: SynthesizedConstructorRole,
+    ) -> Result<&PlannedAggregateOwnership, CraneliftBackendError> {
+        self.aggregate_ownership
+            .iter()
+            .find(|record| match &record.producer {
+                AggregateOccurrenceProducer::SynthesizedUse {
+                    owner: record_owner,
+                    seat: record_seat,
+                    path: record_path,
+                    role: record_role,
+                } => {
+                    *record_owner == owner
+                        && *record_seat == seat
+                        && record_path == path
+                        && *record_role == role
+                }
+                AggregateOccurrenceProducer::Source(_) => false,
+            })
+            .ok_or_else(|| {
+                planner_error("synthesized aggregate use has no planned ownership record")
+            })
+    }
+
+    /// The declared child model of one modelled synthesized role.
+    ///
+    /// The recipe and the lowering code that builds these aggregates are two
+    /// statements of one shape. Handing the emitter the model -- rather than
+    /// only its length -- is what lets it check that each operand it actually
+    /// holds is the KIND the recipe assumed when it took the meet.
+    ///
+    /// Arity alone is not sufficient and was not claimed to be: a recipe that
+    /// says `Immediate` where the emitter passes a referent-bearing child has
+    /// the right count and the wrong lane, and the aggregate is allocated
+    /// persistent over an operand that can be arena-owned.
+    /// The tree node one path names at one effect seat, whether or not it is
+    /// allocation-reachable.
+    ///
+    /// ⭐ This is what lets a **dynamic alternative** be reconciled against the
+    /// tree. An alternative HAS its own path-keyed ownership record and takes
+    /// its allocation lane from it, exactly as a fixed constructor does; what
+    /// it does not have is a parent's declared child model to be reached
+    /// through, because a dynamic set's members are not ordered fields of a
+    /// constructor. So its ordered fields are read from the tree here, and an
+    /// emitter that put `ResourceTraceIdentity` at `ResourceReleaseFailed`
+    /// field 2 instead of field 1 would otherwise pass unchallenged while
+    /// carrying the wrong occurrence.
+    ///
+    /// A path that names no node, or names one that is not a fixed
+    /// constructor, is a loud failure: the emitter and the tree disagree about
+    /// the shape of the thing being built.
+    pub(in crate::cranelift_backend) fn synthesized_tree_node(
+        &self,
+        seat: StaticOriginId,
+        path: &SynthesizedAggregatePath,
+    ) -> Result<(SynthesizedConstructorRole, &'static [SynthesizedAggregateNode]),
+        CraneliftBackendError>
+    {
+        let operation = self.host_effect_operation(seat)?;
+        let roles = self.semantic.synthesized_io_error_roles();
+        match self.synthesized_tree_walk(operation, path)? {
+            SynthesizedTreeResolution::Node(SynthesizedAggregateNode::Fixed {
+                role,
+                children,
+            }) => Ok((SynthesizedConstructorRole::Fixed(role), children)),
+            SynthesizedTreeResolution::IoErrorAlternative(position) => {
+                let role = roles.get(position as usize).copied().ok_or_else(|| {
+                    planner_error(
+                        "synthesized aggregate path names an IOError alternative the closed \
+                         inventory does not have",
+                    )
+                })?;
+                Ok((
+                    SynthesizedConstructorRole::IoError(role),
+                    io_error_alternative_children(position as usize, roles.len()),
+                ))
+            }
+            SynthesizedTreeResolution::Node(_) => Err(planner_error(
+                "synthesized aggregate path does not name a constructor node",
+            )),
+        }
+    }
+
+    /// Walk one path from an operation's tree root to the node it names.
+    ///
+    /// Split out from [`Self::synthesized_tree_node`] because two callers need
+    /// different things at the end of the same walk: one wants the constructor
+    /// at the path, the other wants the alternative POPULATION at it. Sharing
+    /// the walk is what keeps the step-kind law stated once.
+    fn synthesized_tree_walk(
+        &self,
+        operation: ken_host::HostOpV1,
+        path: &SynthesizedAggregatePath,
+    ) -> Result<SynthesizedTreeResolution, CraneliftBackendError> {
+        let mut node = host_effect_recipe_tree(operation).node(path.root);
+        for (depth, step) in path.steps.iter().enumerate() {
+            // The `IOError` set's alternatives are minted by the planner, so
+            // they are resolved from the inventory rather than from a static
+            // child list. This is a terminal step: an `IOError` alternative is
+            // nullary or carries one scalar, and neither is a node a further
+            // step can enter.
+            if let SynthesizedAggregateNode::Dynamic(SynthesizedDynamicSet::IoErrors) = node {
+                let SynthesizedAggregateStep::Alternative(position) = step else {
+                    return Err(planner_error(
+                        "synthesized aggregate path takes a field step into the IOError set",
+                    ));
+                };
+                if depth + 1 != path.steps.len() {
+                    return Err(planner_error(
+                        "synthesized aggregate path continues past an IOError alternative, \
+                         which has no constructor-valued child",
+                    ));
+                }
+                return Ok(SynthesizedTreeResolution::IoErrorAlternative(*position));
+            }
+            node = match (node, step) {
+                (
+                    SynthesizedAggregateNode::Fixed { children, .. },
+                    SynthesizedAggregateStep::Field(position),
+                ) => *children.get(*position as usize).ok_or_else(|| {
+                    planner_error("synthesized aggregate path names a field the tree does not have")
+                })?,
+                (
+                    SynthesizedAggregateNode::Dynamic(SynthesizedDynamicSet::Alternatives(
+                        alternatives,
+                    )),
+                    SynthesizedAggregateStep::Alternative(position),
+                ) => *alternatives.get(*position as usize).ok_or_else(|| {
+                    planner_error(
+                        "synthesized aggregate path names an alternative the tree does not have",
+                    )
+                })?,
+                // ⛔ A field step into a dynamic set, or an alternative step
+                // into a fixed constructor, is not a path this tree has. The
+                // step kinds are what make that a refusal rather than an index
+                // that happens to be in range.
+                _ => {
+                    return Err(planner_error(
+                        "synthesized aggregate path takes a step the node it is at cannot take",
+                    ));
+                }
+            };
+        }
+        Ok(SynthesizedTreeResolution::Node(node))
+    }
+
+    /// **A DIFFERENT live effect seat running the SAME host operation.**
+    ///
+    /// ⭐ Same operation means the same synthesized recipe tree, so the sibling
+    /// shares this seat's roles, paths and shapes exactly. That is what makes
+    /// an A/B out of it: the only coordinate that differs between the two is
+    /// which occurrence in the program is being lowered, and every other input
+    /// to the record lookup is identical by construction.
+    ///
+    /// ⛔ Never an invalid or non-`Effect` origin. A refusal driven by one of
+    /// those would be a refusal about seat VALIDITY, which is a different and
+    /// much weaker claim than the one the discriminator makes.
+    #[cfg(test)]
+    pub(in crate::cranelift_backend) fn sibling_effect_seat(
+        &self,
+        seat: StaticOriginId,
+    ) -> Option<StaticOriginId> {
+        let operation = match self.source_occurrence(seat) {
+            Ok(RuntimeExpr::Effect { operation, .. }) => operation.clone(),
+            _ => return None,
+        };
+        let mut stack = vec![self.root_static_origin().ok()?];
+        let mut seen = 0usize;
+        while let Some(origin) = stack.pop() {
+            seen += 1;
+            if seen > 4096 {
+                return None;
+            }
+            if origin != seat
+                && matches!(
+                    self.source_occurrence(origin),
+                    Ok(RuntimeExpr::Effect { operation: other, .. }) if *other == operation
+                )
+            {
+                return Some(origin);
+            }
+            let mut position = 0;
+            while let Ok(child) = self.child_static_origin(origin, position) {
+                stack.push(child);
+                position += 1;
+            }
+        }
+        None
+    }
+
+    /// **`RT-DECL-CLOSURE-PORT` `D7` — a READ-ONLY projection of one planned
+    /// aggregate ownership record, reached by its opaque occurrence identity.**
+    ///
+    /// ⭐ The key is the occurrence, never a coordinate. That is the whole
+    /// point: a consumer that holds a template holds its producer's identity,
+    /// and this turns that identity into the planner's own facts without the
+    /// consumer knowing where the producer sat or being able to search for it.
+    ///
+    /// ⛔ Read-only, and deliberately not a `&PlannedAggregateOwnership`. The
+    /// record is the planner's; handing out a reference to it would let a
+    /// consumer pattern-match its way to facts this projection has not chosen
+    /// to publish, and a later field would silently become emitter-visible.
+    pub(in crate::cranelift_backend) fn aggregate_record_view(
+        &self,
+        id: AggregateOccurrenceId,
+    ) -> Result<PlannedAggregateView<'_>, CraneliftBackendError> {
+        let record = self.aggregate_ownership.get(id.0 as usize).ok_or_else(|| {
+            planner_error("aggregate occurrence identity is outside this plan's population")
+        })?;
+        // ⚠ The identity indexes the arena, so the record found must AGREE
+        // that it is the one asked for. A record whose own `id` differs would
+        // mean the arena's order and its contents had diverged, which nothing
+        // downstream could see.
+        if record.id != id {
+            return Err(planner_error(
+                "planned aggregate record disagrees with the identity it was found by",
+            ));
+        }
+        Ok(PlannedAggregateView { record })
+    }
+
+    /// The closed planner population `P`, for the whole-pass relation closeout.
+    pub(in crate::cranelift_backend) fn aggregate_ownership_records(
+        &self,
+    ) -> &[PlannedAggregateOwnership] {
+        &self.aggregate_ownership
+    }
+
+    /// The closed planned seat population, for the whole-pass seat closeout.
+    pub(in crate::cranelift_backend) fn host_effect_seat_records(&self) -> &[PlannedEffectSeat] {
+        &self.host_effect_seats
+    }
+
+    /// **The planned slot population of ONE effect occurrence.**
+    ///
+    /// ⛔ This is what a visit's completeness is measured against, so it is
+    /// derived from the population rather than from the occurrence's argument
+    /// list: a visit that read every argument it happened to lower would be
+    /// complete by construction.
+    pub(in crate::cranelift_backend) fn host_effect_seat_slots(
+        &self,
+        effect_origin: StaticOriginId,
+    ) -> BTreeSet<EffectSeatSlot> {
+        self.host_effect_seats
+            .iter()
+            .filter(|record| record.effect_origin == effect_origin)
+            .map(|record| record.slot)
+            .collect()
+    }
+
+    /// **Claim the ONE planned record for an exact seat.**
+    ///
+    /// ⛔ Keyed on the occurrence and the slot, never on the operation alone: a
+    /// lookup by operation would answer for whichever occurrence of that
+    /// operation came first, so one effect's proof would authorize another's
+    /// consumption. A seat with no record is a loud refusal, not a fallback —
+    /// it means the emitter reached a seat planning never derived.
+    pub(in crate::cranelift_backend) fn host_effect_seat(
+        &self,
+        effect_origin: StaticOriginId,
+        slot: EffectSeatSlot,
+    ) -> Result<PlannedEffectSeat, CraneliftBackendError> {
+        self.host_effect_seats
+            .iter()
+            .find(|record| record.effect_origin == effect_origin && record.slot == slot)
+            .copied()
+            .ok_or_else(|| {
+                planner_error(format!(
+                    "host effect occurrence {effect_origin:?} has no planned seat at {slot:?}"
+                ))
+            })
+    }
+
+    /// **The planner's closed, ordered alternative population at one path.**
+    ///
+    /// ⭐ This exists so the emitter can be checked for **equality** rather than
+    /// for prefix agreement. Iterating the emitter's own alternative vector and
+    /// resolving each position proves only that the alternatives it *did* build
+    /// are the right ones; a vector missing its last alternative — or empty —
+    /// agrees with every prefix of the planned population and passes. A planner
+    /// tree with two `ResourceKind` alternatives then accepts an emitter
+    /// carrying only alternative 0, and the missing allocation is invisible
+    /// everywhere.
+    ///
+    /// ⛔ **Not "invisible until a later closeout" — the earlier text said
+    /// that, and it was wrong.** The whole-pass close states `image(R) ⊆ P`,
+    /// not equality, because `P` authorizes rather than obliges and an unused
+    /// record is lawful. So the ledger cannot distinguish a truncated emitter
+    /// from a record this compilation simply had no body for, and the exact
+    /// cardinality can never be deferred to it.
+    ///
+    /// ⛔ So the count comes from HERE and never from the emitter.
+    ///
+    /// The path must name a dynamic node; anything else is a shape
+    /// disagreement rather than a population one and is refused as such.
+    pub(in crate::cranelift_backend) fn synthesized_dynamic_alternatives(
+        &self,
+        seat: StaticOriginId,
+        path: &SynthesizedAggregatePath,
+    ) -> Result<Vec<SynthesizedConstructorRole>, CraneliftBackendError> {
+        self.synthesized_alternative_population(seat, path)?
+            .ok_or_else(|| {
+                planner_error("synthesized aggregate path does not name a dynamic alternative set")
+            })
+    }
+
+    /// **The alternative population at a path, with ABSENCE typed apart from
+    /// FAILURE.**
+    ///
+    /// ⭐ `Ok(None)` means the path **lawfully resolved** to a node that is not
+    /// a dynamic set — a constructor, a scalar, a site operand, or an absent
+    /// arm. `Err` means the question could not be answered at all: the seat is
+    /// missing or is not an `Effect`, the walk left the tree, an `IOError`
+    /// position is outside the closed inventory, or the population is
+    /// malformed.
+    ///
+    /// ⛔ **Those are not the same answer and a caller may not merge them.** A
+    /// root reconciliation that wrote `.ok()` here turned every one of those
+    /// failures into "the planner plans no set at this root", so a non-dynamic
+    /// emitted root then matched the absent case and was accepted. That is a
+    /// missing-authority default in a function whose whole contract is that
+    /// neither direction may be defaulted — and no shape or truncation mutation
+    /// can find it, because both of those keep the lookup working.
+    fn synthesized_alternative_population(
+        &self,
+        seat: StaticOriginId,
+        path: &SynthesizedAggregatePath,
+    ) -> Result<Option<Vec<SynthesizedConstructorRole>>, CraneliftBackendError> {
+        let operation = self.host_effect_operation(seat)?;
+        match self.synthesized_tree_walk(operation, path)? {
+            SynthesizedTreeResolution::Node(node) => match node {
+                SynthesizedAggregateNode::Dynamic(SynthesizedDynamicSet::Alternatives(
+                    alternatives,
+                )) => alternatives
+                    .iter()
+                    .map(|alternative| match alternative {
+                        SynthesizedAggregateNode::Fixed { role, .. } => {
+                            Ok(SynthesizedConstructorRole::Fixed(*role))
+                        }
+                        // ⛔ A malformed population is a FAILURE, not an
+                        // absence: an alternative that is not a constructor
+                        // allocates nothing and the set cannot be stated.
+                        _ => Err(planner_error(
+                            "a dynamic aggregate alternative is not a constructor, so it \
+                             allocates nothing",
+                        )),
+                    })
+                    .collect::<Result<Vec<_>, _>>()
+                    .map(Some),
+                SynthesizedAggregateNode::Dynamic(SynthesizedDynamicSet::IoErrors) => Ok(Some(
+                    self.semantic
+                        .synthesized_io_error_roles()
+                        .iter()
+                        .map(|role| SynthesizedConstructorRole::IoError(*role))
+                        .collect(),
+                )),
+                // ⭐ A LAWFUL non-set. The path resolved; the node it named
+                // simply is not a dynamic set. This is the only absence, and it
+                // is the one a caller may act on.
+                SynthesizedAggregateNode::Fixed { .. }
+                | SynthesizedAggregateNode::Scalar { .. }
+                | SynthesizedAggregateNode::SiteOperand(_)
+                | SynthesizedAggregateNode::Absent => Ok(None),
+            },
+            // An alternative is a member of a set, not a set. A path that names
+            // one where a set was asked for is a disagreement about the shape
+            // of the tree, not a lawful absence.
+            SynthesizedTreeResolution::IoErrorAlternative(_) => Err(planner_error(
+                "synthesized aggregate path names an IOError alternative, not a set",
+            )),
+        }
+    }
+
+    /// [`Self::synthesized_alternative_population`] at a host-result ROOT.
+    ///
+    /// Named separately because the two callers want different things from the
+    /// same answer: a dynamic CHILD is declared dynamic by its parent's child
+    /// model, so `Ok(None)` there is a tree inconsistency and
+    /// `synthesized_dynamic_alternatives` turns it into an error. A ROOT has
+    /// nothing above it declaring its kind, so `Ok(None)` is the ordinary
+    /// answer for the arms that build a constructor or nothing at all.
+    pub(in crate::cranelift_backend) fn synthesized_root_alternative_population(
+        &self,
+        seat: StaticOriginId,
+        path: &SynthesizedAggregatePath,
+    ) -> Result<Option<Vec<SynthesizedConstructorRole>>, CraneliftBackendError> {
+        self.synthesized_alternative_population(seat, path)
+    }
+
+    /// The host operation of one `Effect` seat.
+    fn host_effect_operation(
+        &self,
+        seat: StaticOriginId,
+    ) -> Result<ken_host::HostOpV1, CraneliftBackendError> {
+        let occurrence = self
+            .source_occurrences
+            .get(seat.0 as usize)
+            .and_then(|slot| slot.as_ref())
+            .ok_or_else(|| planner_error("synthesized aggregate seat is not an occurrence"))?;
+        match occurrence.expr {
+            RuntimeExpr::Effect { operation, .. } => Ok(*operation),
+            _ => Err(planner_error(
+                "synthesized aggregate seat is not a host effect",
+            )),
+        }
+    }
+
+    pub(in crate::cranelift_backend) fn synthesized_aggregate_children(
+        &self,
+        owner: ContinuationEmissionOwner,
+        seat: StaticOriginId,
+        path: &SynthesizedAggregatePath,
+        role: SynthesizedConstructorRole,
+    ) -> Result<&'static [SynthesizedAggregateNode], CraneliftBackendError> {
+        self.synthesized_aggregate_record(owner, seat, path, role)?
+            .declared_children
+            .ok_or_else(|| {
+                planner_error("synthesized aggregate use has a record but no child model")
+            })
+    }
+
+    /// The ruled allocation lane of an already-interned aggregate occurrence.
+    ///
+    /// The identity carries the answer from the producer to the emitter across
+    /// a traversal that loses the origin. There is deliberately no fallible
+    /// lookup by emission origin here: an identity this plan issued always
+    /// resolves, and an identity it did not issue cannot be constructed.
+    pub(in crate::cranelift_backend) fn aggregate_allocation_at(
+        &self,
+        occurrence: AggregateOccurrenceId,
+        shape: PlannedAggregateShape,
+    ) -> Result<PlannedAggregateAllocation, CraneliftBackendError> {
+        let record = self
+            .aggregate_ownership
+            .get(occurrence.0 as usize)
+            .ok_or_else(|| {
+                planner_error("aggregate occurrence identity is outside this plan's population")
+            })?;
+        if record.shape != shape {
+            return Err(planner_error(
+                "aggregate producer disagrees with its planned ownership shape",
+            ));
+        }
+        Ok(record.allocation)
+    }
+
     /// The artifact-static constructor identity of a `Construct` occurrence —
     /// the producer side of [`Self::case_constructor_identity`] (`D2`).
     pub(in crate::cranelift_backend) fn constructor_symbol_identity(
@@ -4979,6 +10632,21 @@ impl<'src> StaticTransitionPlan<'src> {
         self.declaration_occurrences.get(symbol).copied()
     }
 
+    /// **`RT-DECL-CLOSURE-PORT` `D4`** — which class of unit this
+    /// `DeclarationRef` occurrence's call edge targets.
+    ///
+    /// ⛔ `None` is a real answer and must not be defaulted: a reference with no
+    /// recorded class had no `DeclarationCall` edge planned for it, so there is
+    /// no call to emit and no class to guess. Substituting
+    /// [`DeclarationCallTargetClass::SchedulingEntry`] here would restore
+    /// exactly the empty-input call this record exists to prevent.
+    pub(in crate::cranelift_backend) fn declaration_call_target_class(
+        &self,
+        reference: StaticOriginId,
+    ) -> Option<DeclarationCallTargetClass> {
+        self.declaration_call_targets.get(&reference).copied()
+    }
+
     pub(in crate::cranelift_backend) fn trap_identity(
         &self,
         trap: &RuntimeTrap,
@@ -5012,7 +10680,8 @@ impl<'src> StaticTransitionPlan<'src> {
     /// unit order.**
     ///
     /// ⛔ **This does not derive the population and must never be made to.** The
-    /// set is `plan.entries` ∪ every `EdgeKind::StaticBody` **target**, already
+    /// set is `plan.entries` ∪ every `EdgeKind::StaticBody` **target** minus
+    /// every `D2a` declaration-owned pair, already
     /// seeded and validated by `B2O` (`semantic_ir.rs`
     /// `validate_function_units`) and already given one descriptor apiece by
     /// `B2R`. This walks `self.abi.descriptors` and projects; it re-seeds
@@ -5125,6 +10794,14 @@ impl<'src> StaticTransitionPlan<'src> {
             if edge.kind != EdgeKind::StaticBody {
                 continue;
             }
+            // `D2a`: a declaration-owned pair's relation is a definition, not a
+            // call, so it mints no endpoint record here either. ⛔ Asked of the
+            // semantic plane rather than decided here — the owner
+            // classification has one home, and this file is pinned not to name
+            // it.
+            if self.semantic.is_declaration_owned_static_body(edge)? {
+                continue;
+            }
             match shape_of(edge.from) {
                 Some(semantic_ir::RuntimeExprShape::Closure)
                 | Some(semantic_ir::RuntimeExprShape::LexicalClosure) => {}
@@ -5196,6 +10873,301 @@ impl<'src> StaticTransitionPlan<'src> {
                 ),
         );
         Ok(calls)
+    }
+
+    /// **`RT-DECL-CLOSURE-PORT` `D5a` checkpoint 1 — the raw worker bodies that
+    /// are TEMPLATE-ONLY.**
+    ///
+    /// Architect ruling `evt_5a0q3m9tnkh8e`. "Unchanged ordinary `fn2` ABI"
+    /// preserves the raw worker's **descriptor and source binding** so a
+    /// generated context can validate and lower the same body. It does not
+    /// require *defining* that body in an environment known to lack the
+    /// continuation inputs. The governing population is the **post-retarget
+    /// executable call graph**, and this method derives it.
+    ///
+    /// A body is template-only exactly when **every** route into it is
+    /// superseded by a generated context:
+    ///
+    /// | route into body `B` | superseded when |
+    /// |---|---|
+    /// | a specialization `S` whose selected worker body is `B` | a generated context exists for `(S, B)` |
+    /// | a `StaticBody` or `Declaration` call edge targeting `B` | ⛔ **not at this checkpoint** — see below |
+    ///
+    /// ⛔ **"A context exists" is NOT a global suppression predicate**, and the
+    /// shape above is what stops it becoming one: a mixed caller population --
+    /// one specialization retargeted and another not, or any surviving call
+    /// edge -- leaves at least one unsuperseded route and keeps the raw
+    /// `Function`. The ruling names that case explicitly.
+    ///
+    /// ## ⚠ Why a `StaticBody` edge is not superseded HERE — MEASURED, and it
+    /// refutes the obvious argument
+    ///
+    /// The tempting reasoning: a `StaticBody` edge into `B` is `B`'s *seeding*
+    /// edge, its closure occurrence `c` satisfies `child_origin(c, 0) == B`, and
+    /// `child_origin` is injective in `c` -- so if a specialization selects `B`
+    /// it selected *that* occurrence, and the edge and the worker call look like
+    /// two records of one route. ⇒ Supersede the edge with the worker call.
+    ///
+    /// **That conclusion is false, and the witness measures it.** One closure
+    /// occurrence can be realized **twice in one caller**: once as a
+    /// `StaticWorkerBinding` stored into the producer constructor (which becomes
+    /// the worker call, and retargets), and once as a **carried computational
+    /// re-entry** --
+    /// `lower_carried_computational_match` -> `lower_source_machine` ->
+    /// `lower_source_machine_with_continuation` ->
+    /// `call_declared_recursive_position_unit`, which calls `B` **directly**
+    /// through the graph-derived target. Suppressing the edge left that call
+    /// with no target and refused with *"retained body has no graph-derived call
+    /// target in this unit"*.
+    ///
+    /// ⇒ The injectivity is real; the inference from it is not. Same occurrence,
+    /// two emitted calls, and only one of them retargets. **A call edge
+    /// therefore counts as a live route at this checkpoint**, which is the
+    /// conservative direction: the cost of being wrong here is an emitted body
+    /// that refuses, not a call to a function that does not exist.
+    ///
+    /// ## ⭐ Checkpoint 4 step 2 — the census re-run, now that the binding exists
+    ///
+    /// The paragraph above was written when nothing retargeted the carried
+    /// invocation, and it said so: *"no edge is superseded yet"*, not *"no edge
+    /// can ever be"*. Step 1 built the binding, so this is the promised re-run.
+    ///
+    /// **What is permanent is that the source edge and its provenance are never
+    /// deleted. What moves is the exact emitted callee.** A `StaticBody` edge
+    /// into `B` has exactly two realizations, and they are now both accounted
+    /// for:
+    ///
+    /// | realization | retargets when |
+    /// |---|---|
+    /// | the specialization's static worker call | a generated context exists for `(S, B)` |
+    /// | the carried source-machine invocation resuming `S`'s match at `S`'s position | [`Self::carried_invocation_context`] binds one |
+    ///
+    /// ⇒ The edge is superseded exactly when **every** specialization selecting
+    /// `B` binds a context through that same method — the one the emission seam
+    /// itself calls, so the census and the emitter cannot drift into two
+    /// derivations that disagree.
+    ///
+    /// ⛔ Still not a global suppression predicate: a `Declaration` edge, or one
+    /// specialization without a context, leaves an unsuperseded route and keeps
+    /// `B` in branch one with its permanent raw closure refusal governing that
+    /// route.
+    pub(in crate::cranelift_backend) fn template_only_worker_bodies(
+        &self,
+    ) -> Result<BTreeSet<StaticOriginId>, CraneliftBackendError> {
+        let contexts = self.continuation_contexts()?;
+        if contexts.is_empty() {
+            // Total and fast: with no generated context nothing is superseded,
+            // which is the entire pre-`D5a` program population.
+            return Ok(BTreeSet::new());
+        }
+        let units = self.continuation_units()?;
+        let edges = self.emittable_call_edges()?;
+        let mut template_only = BTreeSet::new();
+        // Only a body some context actually names can be superseded. Starting
+        // from the contexts rather than from every unit keeps the candidate set
+        // exactly the population the retarget touches.
+        let candidates = contexts
+            .iter()
+            .map(|context| context.worker_body_origin())
+            .collect::<BTreeSet<_>>();
+        for body in candidates {
+            let selecting = units
+                .iter()
+                .filter(|unit| unit.worker_body_origin() == body)
+                .collect::<Vec<_>>();
+            if selecting.is_empty() {
+                // A context whose body no specialization selects is a planner
+                // contradiction, not a licence to suppress.
+                return Err(planner_error(
+                    "a generated context names a worker body that no specialization selects",
+                ));
+            }
+            let every_specialization_retargeted = selecting.iter().all(|unit| {
+                contexts.iter().any(|context| {
+                    context.enclosing_specialization() == unit.id()
+                        && context.worker_body_origin() == body
+                })
+            });
+            if !every_specialization_retargeted {
+                // The mixed caller population the ruling names: at least one
+                // specialization still calls the raw worker.
+                continue;
+            }
+            // Every selecting specialization must also bind a generated context
+            // for the CARRIED invocation, through the same planner method the
+            // emission seam calls. This is what supersedes the `StaticBody`
+            // edge's second realization -- the one that, before step 1 existed,
+            // was measured to keep this body executable.
+            let mut carried_bound = true;
+            for unit in &selecting {
+                if self
+                    .carried_invocation_context(
+                        unit.continuation_origin(),
+                        unit.recursive_position(),
+                        body,
+                    )?
+                    .is_none()
+                {
+                    carried_bound = false;
+                }
+            }
+            if !carried_bound {
+                continue;
+            }
+            // A `Declaration` edge is an ordinary direct call and no context
+            // stands in for it, so one surviving here keeps the body in branch
+            // one. A `StaticBody` edge is superseded by the two retargets
+            // above.
+            if edges.iter().any(|edge| {
+                edge.callee_origin() == body && edge.kind() == EmittableCallKind::Declaration
+            }) {
+                continue;
+            }
+            // ⛔ `D8b` withdrew a third clause here — retain a body some
+            // composed-call requirement names. It was correct on the planner's
+            // own terms and refused one plane later: defining the retained raw
+            // body transfers a constructor carrying a raw closure child across
+            // the unit boundary, which is the permanent raw closure refusal this
+            // very method names above. A composed-call target makes no claim on
+            // this population, so nothing replaces it.
+            template_only.insert(body);
+        }
+        Ok(template_only)
+    }
+
+    /// **`D5a` checkpoint 1 — the units that receive a declared and defined
+    /// `Function`.**
+    ///
+    /// [`Self::emittable_units`] stays the **descriptor / provenance / template**
+    /// population and is unchanged; this is the **executable** subset. ⛔ The two
+    /// must not be conflated in the other direction either: declaring from here
+    /// and defining from `emittable_units` (or the reverse) is exactly the
+    /// undefined-phantom the ruling forbids, so both the declaration pass and the
+    /// definition pass read this one method.
+    pub(in crate::cranelift_backend) fn executable_units(
+        &self,
+    ) -> Result<Vec<EmittableUnit<'_>>, CraneliftBackendError> {
+        let template_only = self.template_only_worker_bodies()?;
+        Ok(self
+            .emittable_units()?
+            .into_iter()
+            .filter(|unit| !template_only.contains(&unit.origin()))
+            .collect())
+    }
+
+    /// **`D5a` checkpoint 1 — the call edges that survive the retarget.**
+    ///
+    /// An edge into a template-only body is the seeding edge whose realization
+    /// retargeted; resolving it would demand a `FuncId` for a unit that has no
+    /// emitted `Function`, and fabricating one is the failure
+    /// `UnitBundle::function`'s `Option` exists to expose.
+    pub(in crate::cranelift_backend) fn executable_call_edges(
+        &self,
+    ) -> Result<Vec<EmittableCallEdge>, CraneliftBackendError> {
+        let template_only = self.template_only_worker_bodies()?;
+        Ok(self
+            .emittable_call_edges()?
+            .into_iter()
+            .filter(|edge| !template_only.contains(&edge.callee_origin()))
+            .collect())
+    }
+
+    /// **`RT-DECL-CLOSURE-PORT` `D5a` checkpoint 3 — the computational-match
+    /// origins that have a planner-issued source-machine recursive
+    /// predecessor.**
+    ///
+    /// Architect ruling `evt_5a0q3m9tnkh8e` §2: *"Final match-case reachability
+    /// must be the union of the initial selection and every planner-issued
+    /// source-machine recursive predecessor. An initial static selection may
+    /// disposition a case only when no planned recursive/dynamic predecessor
+    /// can select it."*
+    ///
+    /// A match named as the `continuation_origin` of a planner-issued causal
+    /// call has exactly that: the call's **return edge** comes back into the
+    /// match, and control resumes there with a value the initial scrutinee did
+    /// not determine.
+    ///
+    /// ⛔ Derived from the planner's own causal-call projection, not from
+    /// anything lowering observed. That matters because the defect is precisely
+    /// that lowering's *observed* selections are incomplete — the initial
+    /// scrutinee selects one case and the recursive return can select another,
+    /// so an authority built from observation cannot see the second.
+    pub(in crate::cranelift_backend) fn source_machine_recursive_predecessor_origins(
+        &self,
+    ) -> Result<BTreeSet<StaticOriginId>, CraneliftBackendError> {
+        Ok(self
+            .continuation_calls()?
+            .iter()
+            .map(|call| call.continuation_origin())
+            .collect())
+    }
+
+    /// **`RT-DECL-CLOSURE-PORT` `D5a` checkpoint 4 step 1 — the generated
+    /// context one carried source-machine invocation must call.**
+    ///
+    /// Selected by the invocation's **retained source coordinates**: the exact
+    /// computational-match origin it resumes, the ruled recursive position it
+    /// occupies, and the worker body it names. ⛔ **Not** by body origin alone,
+    /// not by ABI shape, not by "a context exists", and never by first match —
+    /// the resolution below requires the candidate set to be a singleton and
+    /// rejects otherwise.
+    ///
+    /// ## The four outcomes, because two of them look alike
+    ///
+    /// | candidates | contexts among them | result |
+    /// |---|---|---|
+    /// | none | — | `None` — an ordinary invocation. This is every pre-`D5a` program, and the raw target is correct |
+    /// | some | none | `None` — the mixed population: this worker is still called raw here |
+    /// | some | exactly one | `Some(context)` — the ruled retarget |
+    /// | some | more than one | ⛔ hard stop |
+    ///
+    /// ⚠ The two `None`s are deliberately the same answer, because the caller's
+    /// action is the same: emit the raw target. They differ in *why*, and the
+    /// difference matters only to a reader, so it is documented rather than
+    /// encoded as a variant a consumer could branch on and get wrong.
+    ///
+    /// ⛔ **A source edge, predecessor or provenance is never deleted by this.**
+    /// It answers which `Function` one already-planned emitted call transfers
+    /// to; the call, its edge and its causal ancestry are untouched.
+    pub(in crate::cranelift_backend) fn carried_invocation_context(
+        &self,
+        continuation_origin: StaticOriginId,
+        recursive_position: u32,
+        worker_body_origin: StaticOriginId,
+    ) -> Result<Option<ContinuationContextId>, CraneliftBackendError> {
+        let units = self.continuation_units()?;
+        let candidates = units
+            .iter()
+            .filter(|unit| {
+                unit.continuation_origin() == continuation_origin
+                    && unit.recursive_position() == recursive_position
+                    && unit.worker_body_origin() == worker_body_origin
+            })
+            .collect::<Vec<_>>();
+        if candidates.is_empty() {
+            return Ok(None);
+        }
+        let contexts = self.continuation_contexts()?;
+        let mut bound = BTreeSet::new();
+        for candidate in &candidates {
+            for context in &contexts {
+                if context.enclosing_specialization() == candidate.id()
+                    && context.worker_body_origin() == worker_body_origin
+                {
+                    bound.insert(context.id());
+                }
+            }
+        }
+        let mut bound = bound.into_iter();
+        let first = bound.next();
+        if bound.next().is_some() {
+            return Err(planner_error(
+                "a carried source-machine invocation's retained source coordinates bind more than \
+                 one generated context; one emitted call cannot transfer to two functions, and \
+                 choosing either would make lowering the authority for a fact planning owns",
+            ));
+        }
+        Ok(first)
     }
 
     pub(in crate::cranelift_backend) fn root_emittable_unit(
@@ -5286,12 +11258,124 @@ impl<'src> StaticTransitionPlan<'src> {
                 Ok(ContinuationUnitView {
                     id: planned.id,
                     key: &planned.key,
+                    finalized: &planned.finalized_availability,
                     header: descriptor.header,
                     slots,
                     inputs,
                 })
             })
             .collect()
+    }
+
+    /// **`D5a` — every planner-interned generated producer execution context.**
+    ///
+    /// Revalidates plan/ABI agreement the same way [`Self::continuation_units`]
+    /// does, and by the same argument: the join is **by identity**, indexing the
+    /// descriptors by the id they declare, so an identical reordering of both
+    /// sides does not pass.
+    pub(in crate::cranelift_backend) fn continuation_contexts(
+        &self,
+    ) -> Result<Vec<ContinuationContextView<'_>>, CraneliftBackendError> {
+        if self.abi.context_descriptors.len() != self.continuation_contexts.len() {
+            return Err(planner_error(
+                "generated context ABI descriptor count disagrees with the planned context \
+                 population",
+            ));
+        }
+        let mut by_id: BTreeMap<
+            ContinuationContextId,
+            &abi::AbiContinuationContextDescriptor,
+        > = BTreeMap::new();
+        for descriptor in &self.abi.context_descriptors {
+            if by_id.insert(descriptor.context, descriptor).is_some() {
+                return Err(planner_error(
+                    "two generated context ABI descriptors declare the same context identity",
+                ));
+            }
+        }
+        self.continuation_contexts
+            .iter()
+            .map(|planned| {
+                let descriptor = *by_id.get(&planned.id).ok_or_else(|| {
+                    planner_error(
+                        "a planned generated context has no ABI descriptor declaring its identity",
+                    )
+                })?;
+                let slots = dense_slice(&self.abi.context_slots, descriptor.slots)
+                    .ok_or_else(|| {
+                        planner_error("generated context slot range is outside the plane")
+                    })?;
+                let inputs = dense_slice(&self.abi.context_inputs, descriptor.inputs)
+                    .ok_or_else(|| {
+                        planner_error("generated context input range is outside the plane")
+                    })?;
+                if inputs.len() != planned.captures.len() {
+                    return Err(planner_error(
+                        "generated context input authority count disagrees with the planner's \
+                         ordered capture projection",
+                    ));
+                }
+                Ok(ContinuationContextView {
+                    planned,
+                    finalized: &planned.finalized_availability,
+                    header: descriptor.header,
+                    slots,
+                    inputs,
+                })
+            })
+            .collect()
+    }
+
+    /// The generated context that emits on behalf of one specialization, if that
+    /// specialization's worker body has one.
+    ///
+    /// ⛔ Selected by the **enclosing specialization and the exact body origin**,
+    /// both supplied by the caller. Nothing here searches for a plausible
+    /// context, and `None` means the ordinary raw-worker target is correct — it
+    /// is not a licence to pick one.
+    pub(in crate::cranelift_backend) fn continuation_context_for(
+        &self,
+        enclosing: ContinuationSpecializationId,
+        worker_body_origin: StaticOriginId,
+    ) -> Result<Option<ContinuationContextView<'_>>, CraneliftBackendError> {
+        let contexts = self.continuation_contexts()?;
+        // `D5a` checkpoint 4 step 3 -- the duplicate reaching mutation, applied
+        // to the POPULATION this loop walks and not to the stop below.
+        //
+        // ⚠ It has to be applied here. The planner interns contexts on this
+        // very key, so a duplicate is unreachable through any plan it will
+        // build; the only way to ask whether the collision stop works is to
+        // present the population it is written for. ⛔ Re-emitting the stop's
+        // own error under the mutation would have been a control that proves a
+        // hardcoded string propagates.
+        let mut order = (0..contexts.len()).collect::<Vec<_>>();
+        #[cfg(test)]
+        if crate::cranelift_backend::lowering::d5a_route_mutation()
+            == crate::cranelift_backend::lowering::D5aRouteMutation::DuplicateContextBinding
+        {
+            crate::cranelift_backend::lowering::record_d5a_route_application();
+            order.extend(0..contexts.len());
+        }
+        let mut found = None;
+        for index in order {
+            let context = &contexts[index];
+            if context.enclosing_specialization() == enclosing
+                && context.worker_body_origin() == worker_body_origin
+            {
+                if found.is_some() {
+                    return Err(planner_error(
+                        "two generated contexts claim one specialization and worker body",
+                    ));
+                }
+                found = Some(index);
+            }
+        }
+        Ok(found.map(|index| {
+            contexts
+                .into_iter()
+                .nth(index)
+                .expect("an index taken from this same population")
+        }))
     }
 
     /// Every already-validated continuation call token, with the full producer
@@ -5320,6 +11404,7 @@ impl<'src> StaticTransitionPlan<'src> {
                 if unit.key.producer_construct_origin != token.producer_construct_origin
                     || unit.key.producer_alternative != token.producer_alternative
                     || unit.key.producer_owner != token.producer_owner
+                    || unit.key.emission_owner != token.emission_owner
                     || unit.key.producer_result_origin != token.producer_result_origin
                 {
                     return Err(planner_error(
@@ -5375,6 +11460,569 @@ impl<'src> StaticTransitionPlan<'src> {
             }
         }
         Ok(found)
+    }
+
+    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D7a` — the planner-issued composed worker
+    /// view.**
+    ///
+    /// Keyed by the four facts a composed eliminator frame actually holds: the
+    /// **producer `Construct` occurrence** it is building, the
+    /// **computational-frame origin** it is lowering, the **selected
+    /// alternative**, and one member of that case's **ruled recursive
+    /// positions**. It answers with the full worker provenance the continuation
+    /// unit uses — closure occurrence, raw body, declared arity, ordered capture
+    /// provenance, and route eligibility.
+    ///
+    /// ⭐ **This is the same causal coordinate tuple
+    /// [`Self::continuation_call_binding_for`] already selects on, and that is
+    /// the point.** The producer `Construct` origin is not a tag, a sequence, an
+    /// owner heuristic, a specialization id, or a second identity bolted on to
+    /// break a tie; it is the field that says *which occurrence is being
+    /// built*, and the composed path supplies it directly as
+    /// `deferred.construct_origin`.
+    ///
+    /// ⛔ **It is load-bearing, not belt-and-braces.** The other three fields are
+    /// all properties of the **source text**: one source computational match
+    /// specialized at two recursion layers shares its origin, its selected
+    /// alternative and its ruled recursive position across both layers, and the
+    /// producer `Construct` occurrence is the only thing that separates them.
+    /// Without this field the selector collides on every plan in this crate that
+    /// interns continuation specializations, which
+    /// [`d7a_the_three_field_selector_collides_where_the_four_field_selector_resolves`]
+    /// measures directly.
+    ///
+    /// ⇒ **Different workers under distinct construct origins are distinct
+    /// questions, not a conflict.** Two layers naming two workers is the
+    /// ordinary, lawful shape of nested specialization. Conflict is reserved for
+    /// two specializations answering *one* four-field selector with different
+    /// workers.
+    ///
+    /// [`d7a_the_three_field_selector_collides_where_the_four_field_selector_resolves`]:
+    ///     crate::cranelift_backend::lowering::core::tests::control
+    ///
+    /// ⛔ **This method is the whole point of `D7a`, so read what it forbids.**
+    /// A consumer that has this cannot need to walk the closure occurrence, read
+    /// a body's parameter count, measure an environment's length, or decide from
+    /// *whichever of the two targets happens to exist*. Every one of those is a
+    /// second authority for a fact the planner already interned, and each was
+    /// available before this method was and is what it retires.
+    ///
+    /// ## The four refusals, and why none of them is an `Option`
+    ///
+    /// Unlike [`Self::continuation_call_binding_for`], **zero answers is a
+    /// refusal, not a `None`.** The difference is what the two selectors mean.
+    /// That one asks *is this producer occurrence specialized at all*, and "no"
+    /// is the ordinary pre-specialization path taken by every program in the
+    /// pre-`D5a` population. This one is asked only about a position the planner
+    /// **already ruled recursive on a frame it already specialized**, so zero is
+    /// a contradiction between two planner facts and there is no lawful
+    /// alternative route for a caller to fall back to.
+    ///
+    /// | refusal | what it means |
+    /// |---|---|
+    /// | zero answers | no specialization claims this construct occurrence, frame, alternative and position |
+    /// | conflicting full identities | two do, and they disagree about the worker |
+    /// | wrong position / body / capture provenance | a key's own worker record fails its independent re-check |
+    /// | unexecutable raw target | the raw body is superseded, so a raw-route call has no `Function` to reach |
+    ///
+    /// ⚠ **The fourth is not defensive padding.** The selected recursive
+    /// argument's route is `RawWorker` unconditionally, so a superseded raw body
+    /// means this view would hand a consumer a target that has a descriptor and
+    /// no emitted `Function`. Refusing here is the same fail-closed direction
+    /// [`Self::executable_units`] takes, applied at the projection rather than
+    /// at the emission. ⛔ That refusal and the executable-unit population it
+    /// reads are `D7a2`'s subject and are deliberately untouched here.
+    ///
+    /// ⛔ **Agreement between several answers is lawful; equality is by full
+    /// identity.** Two specializations may still share all four fields — they
+    /// would differ only in emission owner, which this selector deliberately
+    /// does not carry — and if they name the *same* worker, the same eligibility
+    /// included, there is one answer and it is theirs. Only disagreement
+    /// refuses. Picking the first, the lowest, or any other sequence would make
+    /// the caller the authority for a fact the planner owns.
+    // `D7b` (one environment authority) and `D7c` (the callee consumer) are the
+    // production consumers, and both are held. Until one lands the only callers
+    // are this node's own tests, so the attribute below is load-bearing rather
+    // than habitual — and `D7b` is what retires it.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(in crate::cranelift_backend) fn composed_worker_view(
+        &self,
+        emission_owner: ContinuationEmissionOwner,
+        producer_construct_origin: StaticOriginId,
+        continuation_origin: StaticOriginId,
+        producer_alternative: u32,
+        recursive_position: u32,
+    ) -> Result<ComposedWorkerView, CraneliftBackendError> {
+        let answer = self.composed_worker_view_unreconciled(
+            emission_owner,
+            producer_construct_origin,
+            continuation_origin,
+            producer_alternative,
+            recursive_position,
+        )?;
+
+        // ⭐ Executability is checked on the RESOLVED answer, not per candidate,
+        // and the order is the design rather than a convenience. A group whose
+        // members disagree has no worker to ask this question about, so
+        // "ambiguous" is the primary defect and must be what a reader is told;
+        // asking each candidate first would report whichever member happened to
+        // be superseded and bury the ambiguity. Nothing is lost: agreement fixes
+        // the body origin, and executability is a function of the body alone.
+        //
+        // ⭐ `D7a2`: the population this reads is the **reconciled** one. The
+        // refusal itself is unchanged and still truthful — it fires exactly when
+        // the raw route has no `Function` to reach — but a body that a minted
+        // raw-target requirement retains is no longer superseded, so the same
+        // question now gets a different, and correct, answer.
+        if self
+            .template_only_worker_bodies()?
+            .contains(&answer.body_origin)
+        {
+            return Err(planner_error(
+                "the composed selector's raw worker body is template-only: every specialization \
+                 selecting it retargeted, so it keeps its descriptor and leaves the executable \
+                 population, and the raw route this view projects has no Function to reach",
+            ));
+        }
+        Ok(answer)
+    }
+
+    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D8b` — every planner-issued composed-call
+    /// target, one per `D8a` selector the planner interned.**
+    ///
+    /// Demand is derived from the **existence of a specialization at a
+    /// selector**, an already-interned planner fact. Nothing here reads a
+    /// reached lowerer, walks source, or consults an emitted shape.
+    ///
+    /// ⛔ **Unreconciled by construction, and that is the no-circularity rule.**
+    /// The view is taken from
+    /// [`Self::composed_worker_view_unreconciled`], so no target depends on an
+    /// executability answer. `D8c` owns that question, and it must be free to
+    /// answer it without the answer having already been assumed here — which is
+    /// exactly the loop `D7a2` closed and was withdrawn for.
+    ///
+    /// ⛔ A selector whose group does not resolve — conflicting workers, two
+    /// emission owners, failed provenance — mints **no** target and propagates
+    /// its refusal. A target names one exact callee; there is none to name when
+    /// the planner cannot say which.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(in crate::cranelift_backend) fn composed_call_targets(
+        &self,
+    ) -> Result<Vec<ComposedCallTarget>, CraneliftBackendError> {
+        let units = self.continuation_units()?;
+        let mut selectors = units
+            .iter()
+            .map(|unit| {
+                (
+                    unit.emission_owner(),
+                    unit.producer_construct_origin(),
+                    unit.continuation_origin(),
+                    unit.producer_alternative(),
+                    unit.recursive_position(),
+                )
+            })
+            .collect::<Vec<_>>();
+        selectors.sort_unstable();
+        selectors.dedup();
+
+        let mut targets = Vec::with_capacity(selectors.len());
+        for (owner, construct, frame, alternative, position) in selectors {
+            let worker = self.composed_worker_view_unreconciled(
+                owner,
+                construct,
+                frame,
+                alternative,
+                position,
+            )?;
+            // `D8h` — THE PAIRING, through the planner's own lookup.
+            //
+            // ⛔ The four arguments are this target's own causal coordinate and
+            // nothing else. No body, symbol, arity, source position or
+            // same-shaped constructor participates, and the sequence inside the
+            // identity is never seen here: `continuation_call_binding_for`
+            // returns the whole opaque value or refuses.
+            let call_identity = self
+                .continuation_call_binding_for(construct, frame, alternative, position)?
+                .ok_or_else(|| {
+                    planner_error(
+                        "a composed-call target's own causal coordinate selects no \
+                         continuation call binding, so there is no planner-issued identity to \
+                         pair it with. This fails closed rather than minting an unpaired \
+                         target: the two populations are interned together -- one call token \
+                         per interned specialization, at the same coordinate -- so a target \
+                         without a binding means those two have drifted, and a consumer handed \
+                         an unpaired target would have to invent the identity that is missing",
+                    )
+                })?;
+            // The FIFTH field, held rather than looked up. The lookup above is
+            // keyed on the four causal fields; the emission owner is the
+            // coordinate's remaining component, and the identity carries its
+            // own. ⭐ Comparing them is what makes the pairing five-field: two
+            // independently derived answers to "who emits this", from the
+            // interned unit and from the call token, must agree.
+            if call_identity.emission_owner() != owner {
+                return Err(planner_error(
+                    "a composed-call target's paired causal identity names a different \
+                     emission owner than the selector it was minted under, so the call token \
+                     and the interned unit disagree about who emits this call",
+                ));
+            }
+            targets.push(ComposedCallTarget {
+                emission_owner: owner,
+                producer_construct_origin: construct,
+                continuation_origin: frame,
+                producer_alternative: alternative,
+                recursive_position: position,
+                worker,
+                call_identity,
+            });
+        }
+
+        #[cfg(test)]
+        {
+            match COMPOSED_CALL_TARGET_DEFECT.with(Cell::get) {
+                ComposedCallTargetDefect::Exact => {}
+                ComposedCallTargetDefect::WrongBody => {
+                    // Point the first target at another target's body. ⛔ A
+                    // fabricated origin would be caught by the plane bounds
+                    // rather than by the law below, which would prove the wrong
+                    // guard.
+                    let other = targets
+                        .iter()
+                        .map(|target| target.worker.body_origin)
+                        .find(|body| *body != targets[0].worker.body_origin);
+                    if let Some(other) = other {
+                        targets[0].worker.body_origin = other;
+                    }
+                }
+                ComposedCallTargetDefect::TransplantConstruct => {
+                    let other = targets
+                        .iter()
+                        .map(|target| target.producer_construct_origin)
+                        .find(|construct| *construct != targets[0].producer_construct_origin);
+                    if let Some(other) = other {
+                        targets[0].producer_construct_origin = other;
+                    }
+                }
+                ComposedCallTargetDefect::SameSymbolIdentity => {
+                    // ⛔ SEARCHED, not hand-picked: the sibling is selected by
+                    // the very equality the forbidden rule would key on, so the
+                    // switch installs that rule's own answer.
+                    let symbol =
+                        self.constructor_symbol_identity(targets[0].producer_construct_origin)?;
+                    let mut sibling = None;
+                    for target in targets.iter().skip(1) {
+                        if self.constructor_symbol_identity(target.producer_construct_origin)?
+                            == symbol
+                        {
+                            sibling = Some(target.call_identity.clone());
+                            break;
+                        }
+                    }
+                    if let Some(sibling) = sibling {
+                        targets[0].call_identity = sibling;
+                    }
+                }
+            }
+        }
+        Ok(targets)
+    }
+
+    /// **`D8b` — the composed-call target law: selector agreement.**
+    ///
+    /// Returns the number of targets checked, so a caller can tell a real
+    /// population from an empty one.
+    ///
+    /// **One law, and it is on the unreconciled side.** Re-resolving a target's
+    /// own five-field selector must return the worker it carries. That catches
+    /// both minting defects, because both are one defect seen from two sides: a
+    /// callee attributed to a selector that does not resolve to it. Each names
+    /// real origins, so neither is visible to a check that only asks whether the
+    /// body exists.
+    ///
+    /// ⛔ **Three checks that were here are gone, and none of them should come
+    /// back in this form:**
+    ///
+    /// - *the carried body must be its worker's body* — read the field back
+    ///   through an accessor defined as that field, so it compared a value with
+    ///   itself. Killed by its own control in `D7a2`; the accessor is deleted
+    ///   too, so it cannot be written again by accident;
+    /// - *exact-set equality against the executable population* — an
+    ///   executability question, which is `D8c`'s and whose presence here was
+    ///   the circularity;
+    /// - *declaration and definition agree* — unexercised twice, measured both
+    ///   times, and deleted rather than carried a third time. Every body on
+    ///   these plans has an emittable descriptor by construction, and the only
+    ///   perturbation that would reach it is a fabricated origin, which the
+    ///   plane bounds catch instead.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(in crate::cranelift_backend) fn verify_composed_call_targets(
+        &self,
+    ) -> Result<usize, CraneliftBackendError> {
+        let targets = self.composed_call_targets()?;
+        for target in &targets {
+            let (owner, construct, frame, alternative, position) = target.selector();
+            let resolved = self.composed_worker_view_unreconciled(
+                owner,
+                construct,
+                frame,
+                alternative,
+                position,
+            )?;
+            if resolved != target.worker {
+                return Err(planner_error(
+                    "a composed-call target's own selector resolves to a different worker than \
+                     the target carries, so the callee was minted for one layer and attributed \
+                     to another",
+                ));
+            }
+            // `D8h` — the pairing law, the second half of the same claim.
+            //
+            // ⭐ Re-resolved from the target's OWN coordinate through the same
+            // planner lookup that minted it, and compared whole. ⛔ The
+            // comparison is on the opaque identity, so it holds the call-site
+            // sequence too without this code ever seeing it -- which is the
+            // property a sequence accessor would have destroyed.
+            let paired = self
+                .continuation_call_binding_for(construct, frame, alternative, position)?
+                .ok_or_else(|| {
+                    planner_error(
+                        "a composed-call target's own causal coordinate selects no continuation \
+                         call binding at verification, so the identity it carries cannot be the \
+                         one that coordinate names",
+                    )
+                })?;
+            if paired != target.call_identity {
+                return Err(planner_error(
+                    "a composed-call target carries a causal identity its own five-field \
+                     coordinate does not select, so the identity was attributed by something \
+                     other than the coordinate -- a constructor symbol, a worker body, an arity \
+                     or a source position would each produce exactly this",
+                ));
+            }
+            if target.call_identity.emission_owner() != owner {
+                return Err(planner_error(
+                    "a composed-call target's paired causal identity names a different emission \
+                     owner than its own selector",
+                ));
+            }
+        }
+        Ok(targets.len())
+    }
+
+    /// [`Self::composed_worker_view`] up to but **not including** the
+    /// executability check.
+    ///
+    /// ⛔ The split exists because `D7a2`'s raw-target requirements are derived
+    /// from these views, and the retained population is derived from those
+    /// requirements. Asking the reconciled question here would be a cycle:
+    /// *is this body executable* would depend on a requirement that depends on
+    /// this answer. Everything that makes the view **correct** — the selector,
+    /// the conflict rule, all three provenance re-checks — is on this side of
+    /// the split; only the population question is deferred.
+    fn composed_worker_view_unreconciled(
+        &self,
+        emission_owner: ContinuationEmissionOwner,
+        producer_construct_origin: StaticOriginId,
+        continuation_origin: StaticOriginId,
+        producer_alternative: u32,
+        recursive_position: u32,
+    ) -> Result<ComposedWorkerView, CraneliftBackendError> {
+        let units = self.continuation_units()?;
+
+        // ⛔ `D8b` amendment — an owner-collision refusal stood here and is
+        // deleted. `D8a` measured its population **impossible**, twice over:
+        // `continuation_result_origins` does not descend into closures and every
+        // descent root is a closure's body child, so the seed and descent walks
+        // cover disjoint subtrees; and removing that disjointness does not
+        // produce two owners, it produces the availability law's refusal at
+        // planning. A guard whose population the planner proves cannot exist is
+        // not a residual to carry -- it is a check that can never fail, and one
+        // more of those was already deleted from this node for the same reason.
+        //
+        // ⛔ The `emission_owner` field stays and its selector role is live:
+        // supplying an owner no unit carries reaches the zero-answer refusal
+        // below, and dropping it from the filter reds two rows.
+        let mut answer: Option<ComposedWorkerView> = None;
+        for unit in &units {
+            if unit.emission_owner() != emission_owner
+                || unit.producer_construct_origin() != producer_construct_origin
+                || unit.continuation_origin() != continuation_origin
+                || unit.producer_alternative() != producer_alternative
+                || unit.recursive_position() != recursive_position
+            {
+                continue;
+            }
+            let candidate = self.composed_worker_view_of(unit, recursive_position)?;
+            match &answer {
+                None => answer = Some(candidate),
+                Some(established) if *established == candidate => {}
+                Some(_) => {
+                    return Err(planner_error(
+                        "two continuation specializations answer one composed worker selector \
+                         with different full worker identities; one producer Construct \
+                         occurrence at one frame position has one static worker, and choosing \
+                         between them would make the caller the authority for a fact planning \
+                         owns",
+                    ));
+                }
+            }
+        }
+        let answer = answer.ok_or_else(|| {
+            planner_error(
+                "no continuation specialization claims this emission owner, producer Construct \
+                 occurrence, computational frame, selected alternative and ruled recursive \
+                 position, so there is no planner-issued worker provenance to project and \
+                 nothing may be reconstructed from the closure occurrence's shape instead",
+            )
+        })?;
+        Ok(answer)
+    }
+
+    /// One unit's contribution to [`Self::composed_worker_view`], with the three
+    /// provenance re-checks that method documents. ⛔ The executability check is
+    /// deliberately **not** here — it belongs to the resolved answer, for the
+    /// reason recorded at its site.
+    ///
+    /// ⭐ Each check is against a fact derived **independently** of the one it
+    /// validates, which is what makes it a check rather than a restatement:
+    /// the position against the selector the caller supplied, the body through
+    /// the sole child-origin production point rather than the children list that
+    /// recorded it, and the captures against the ABI-validated ordinary
+    /// envelope rather than against themselves.
+    fn composed_worker_view_of(
+        &self,
+        unit: &ContinuationUnitView<'_>,
+        recursive_position: u32,
+    ) -> Result<ComposedWorkerView, CraneliftBackendError> {
+        let worker = &unit.key.worker;
+
+        // Position provenance. The intern path already required this against
+        // the producer's argument list; here it is re-checked against the
+        // selector the caller supplied, which is a different source for the
+        // same number.
+        if worker.sibling_position != recursive_position {
+            return Err(planner_error(
+                "a continuation specialization's static worker sits at a different constructor \
+                 sibling position than the composed selector names",
+            ));
+        }
+
+        // Body provenance. `child_static_origin` is the sole production point
+        // for a child's static name; the key's `body_origin` was taken from the
+        // closure's recorded child authority. Comparing them is a real join, not
+        // a value compared with itself.
+        if self.child_static_origin(worker.closure_origin, 0)? != worker.body_origin {
+            return Err(planner_error(
+                "a continuation specialization's static worker body is not its own closure \
+                 occurrence's body child, so the raw target this view would project is not the \
+                 body that closure denotes",
+            ));
+        }
+
+        // Capture provenance, against the ruled ordinary envelope — which is
+        // itself recompared against the validated `Parameter` slot run before it
+        // is returned, so this reaches the ABI rather than stopping at the key.
+        let envelope = unit.ordinary_envelope()?;
+        let carried = envelope
+            .iter()
+            .filter_map(|role| match role {
+                ContinuationOrdinaryEnvelopeRole::WorkerCapture {
+                    ordinal,
+                    owner,
+                    closure_origin,
+                    source,
+                    lifetime,
+                } => Some((*ordinal, *owner, *closure_origin, *source, *lifetime)),
+                ContinuationOrdinaryEnvelopeRole::NonrecursiveConstructorField { .. } => None,
+            })
+            .collect::<Vec<_>>();
+        if carried.len() != worker.captures.len() {
+            return Err(planner_error(
+                "a continuation specialization's worker captures and its ruled ordinary \
+                 envelope's capture run are different lengths",
+            ));
+        }
+        for (position, (capture, carried)) in worker.captures.iter().zip(&carried).enumerate() {
+            if u32::try_from(position).ok() != Some(capture.ordinal)
+                || capture.closure_origin != worker.closure_origin
+                || (
+                    capture.ordinal,
+                    capture.owner,
+                    capture.closure_origin,
+                    capture.source,
+                    capture.lifetime,
+                ) != *carried
+            {
+                return Err(planner_error(
+                    "a continuation specialization's worker captures are not one exact ordered \
+                     envelope of its own closure occurrence",
+                ));
+            }
+        }
+
+        let route_eligibility = match self.continuation_context_for(unit.id(), worker.body_origin)? {
+            Some(context) => ComposedWorkerRouteEligibility::GeneratedContextIssued(context.id()),
+            None => ComposedWorkerRouteEligibility::RawOnly,
+        };
+
+        Ok(ComposedWorkerView {
+            closure_origin: worker.closure_origin,
+            body_origin: worker.body_origin,
+            declared_arity: worker.declared_arity,
+            captures: worker.captures.clone(),
+            route_eligibility,
+            recursive_position,
+        })
+    }
+
+    /// **`RT-DECL-CLOSURE-PORT` `D5a` — project already-issued causal authority
+    /// onto this owner's exact result edges.**
+    ///
+    /// This is **exposure, not discovery**. Every edge returned is a call the
+    /// planner already minted; the identity on it is resolved through the
+    /// existing four-field selector, so nothing here can create a binding that
+    /// [`Self::continuation_call_binding_for`] would not also return.
+    ///
+    /// ⛔ The owner is supplied by the caller and is the unit it is about to
+    /// define — it is never read back off a lowered value, a reached
+    /// occurrence, or an emitted shape. ⛔ There is no ordering preference and
+    /// no "first match": the population is returned whole, and a consumer that
+    /// cannot resolve it to one member must fail rather than choose (`D5a`
+    /// contract 3).
+    pub(in crate::cranelift_backend) fn continuation_result_edges_owned_by(
+        &self,
+        emission_owner: ContinuationEmissionOwner,
+    ) -> Result<Vec<ContinuationResultEdge>, CraneliftBackendError> {
+        let mut edges = Vec::new();
+        for call in self.continuation_calls()? {
+            // `D5a`: keyed on the EMISSION owner, never on provenance. A unit
+            // that merely contains the producer text is not thereby able to
+            // emit the call.
+            if call.emission_owner() != emission_owner {
+                continue;
+            }
+            let identity = self
+                .continuation_call_binding_for(
+                    call.producer_construct_origin(),
+                    call.continuation_origin(),
+                    call.producer_alternative(),
+                    call.recursive_position(),
+                )?
+                .ok_or_else(|| {
+                    planner_error(
+                        "a projected causal call has no binding under its own four-field \
+                         selector, so its result edge cannot be projected",
+                    )
+                })?;
+            edges.push(ContinuationResultEdge {
+                producer_result_origin: call.producer_result_origin(),
+                producer_construct_origin: call.producer_construct_origin(),
+                recursive_position: call.recursive_position(),
+                identity,
+            });
+        }
+        Ok(edges)
     }
 
     pub(in crate::cranelift_backend) fn emittable_units(
@@ -5435,6 +12083,21 @@ impl<'src> StaticTransitionPlan<'src> {
     }
 
     fn validate(&self) -> Result<(), CraneliftBackendError> {
+        // ⭐⭐ **`D7` checkpoint `1c` runs FIRST, and the position is argued.**
+        //
+        // Measured: dropping the member's descriptor is ALSO caught downstream,
+        // by the ABI plane's "descriptor population is not exact for the
+        // function unit partition". That refusal is true, is in planning, and
+        // names neither the member nor the law -- it reports a population size
+        // where the cause is a specific worker the specialization population
+        // still points at.
+        //
+        // ⛔ Running first preempts that check **only in the case this law is
+        // about**: a descriptor no specialization names still reaches the
+        // partition check unchanged, because this law never looks at it. A
+        // narrow, correctly-attributed refusal ahead of a broad one is the
+        // whole reason for stating the law separately.
+        validate_static_worker_member_population(self)?;
         if self.entries.is_empty() {
             return Err(planner_error("closed graph has no entry"));
         }
@@ -5632,6 +12295,7 @@ impl<'src> StaticTransitionPlan<'src> {
             &self.nodes,
             &self.edges,
             &self.entries,
+            self.root_entry,
             &self.semantic_sources,
             &self.semantic_material,
         )?;
@@ -5641,6 +12305,7 @@ impl<'src> StaticTransitionPlan<'src> {
             &self.semantic_sources,
             &self.edges,
             &self.entries,
+            &self.declaration_occurrences.values().copied().collect(),
             self.root_entry
                 .ok_or_else(|| planner_error("plan has no root scheduling entry"))?,
             self.root_ingress,
@@ -5648,6 +12313,8 @@ impl<'src> StaticTransitionPlan<'src> {
         self.validate_source_occurrence_table()?;
         validate_case_emission_plan(self, &self.case_emissions)?;
         validate_occurrence_authority_plan(self, &self.occurrence_authorities)?;
+        validate_aggregate_ownership_plan(self, &self.aggregate_ownership)?;
+        validate_host_effect_seat_plan(self, &self.host_effect_seats)?;
         validate_substrate_preallocation_closure(
             self,
             &self.case_emissions,
@@ -7009,6 +13676,7 @@ mod tests {
             &plan.nodes,
             &plan.edges,
             &plan.entries,
+            plan.root_entry,
             &reversed_sources,
             &plan.semantic_material,
         )
@@ -7035,6 +13703,7 @@ mod tests {
             &changed_frames,
             &plan.edges,
             &plan.entries,
+            plan.root_entry,
             &reversed_sources,
             &plan.semantic_material,
         )
@@ -7102,6 +13771,7 @@ mod tests {
                     &plan.nodes,
                     &plan.edges,
                     &plan.entries,
+                    plan.root_entry,
                     &plan.semantic_sources,
                     &plan.semantic_material,
                 )
@@ -7133,6 +13803,7 @@ mod tests {
                     &equal_plan.nodes,
                     &equal_plan.edges,
                     &equal_plan.entries,
+                    equal_plan.root_entry,
                     &equal_plan.semantic_sources,
                     &equal_plan.semantic_material,
                 )
@@ -7150,6 +13821,7 @@ mod tests {
                     &plan.nodes,
                     &plan.edges,
                     &plan.entries,
+                    plan.root_entry,
                     &plan.semantic_sources,
                     &plan.semantic_material,
                 )
@@ -7167,6 +13839,7 @@ mod tests {
                     &plan.nodes,
                     &plan.edges,
                     &plan.entries,
+                    plan.root_entry,
                     &plan.semantic_sources,
                     &plan.semantic_material,
                 )
@@ -7196,6 +13869,7 @@ mod tests {
                     &plan.nodes,
                     &plan.edges,
                     &plan.entries,
+                    plan.root_entry,
                     &plan.semantic_sources,
                     &plan.semantic_material,
                 )
@@ -7618,6 +14292,7 @@ mod tests {
                     &plan.nodes,
                     &plan.edges,
                     &plan.entries,
+                    plan.root_entry,
                     &plan.semantic_sources,
                     &plan.semantic_material,
                 )
@@ -7651,6 +14326,7 @@ mod tests {
                     &child_plan.nodes,
                     &child_plan.edges,
                     &child_plan.entries,
+                    child_plan.root_entry,
                     &child_plan.semantic_sources,
                     &child_plan.semantic_material,
                 )
@@ -7734,6 +14410,7 @@ mod tests {
                     &plan.nodes,
                     &plan.edges,
                     &plan.entries,
+                    plan.root_entry,
                     &plan.semantic_sources,
                     &plan.semantic_material,
                 )
@@ -8002,6 +14679,7 @@ mod tests {
                 &plan.nodes,
                 &plan.edges,
                 &plan.entries,
+                plan.root_entry,
                 &plan.semantic_sources,
                 &plan.semantic_material,
             )
@@ -8073,6 +14751,7 @@ mod tests {
                     &plan.nodes,
                     &plan.edges,
                     &plan.entries,
+                    plan.root_entry,
                     &plan.semantic_sources,
                     &plan.semantic_material,
                 )
@@ -8167,6 +14846,7 @@ mod tests {
                     &plan.nodes,
                     &plan.edges,
                     &plan.entries,
+                    plan.root_entry,
                     &plan.semantic_sources,
                     &plan.semantic_material,
                 )
@@ -8182,6 +14862,7 @@ mod tests {
                     &plan.nodes,
                     &plan.edges,
                     &plan.entries,
+                    plan.root_entry,
                     &plan.semantic_sources,
                     &plan.semantic_material,
                 )
@@ -8223,6 +14904,7 @@ mod tests {
                     &plan.nodes,
                     &plan.edges,
                     &plan.entries,
+                    plan.root_entry,
                     &plan.semantic_sources,
                     &plan.semantic_material,
                 )
@@ -8244,6 +14926,7 @@ mod tests {
                     &plan.nodes,
                     &plan.edges,
                     &plan.entries,
+                    plan.root_entry,
                     &plan.semantic_sources,
                     &plan.semantic_material,
                 )
@@ -9672,6 +16355,7 @@ mod tests {
                     &plan.nodes,
                     &redirected_edges,
                     &plan.entries,
+                    plan.root_entry,
                     &plan.semantic_sources,
                     &plan.semantic_material,
                 )
@@ -10009,6 +16693,7 @@ mod tests {
                 nodes,
                 edges,
                 entries,
+                plan.root_entry,
                 &plan.semantic_sources,
                 &plan.semantic_material,
             )
@@ -10072,6 +16757,7 @@ mod tests {
                 &plan.nodes,
                 &plan.edges,
                 &plan.entries,
+                plan.root_entry,
                 &plan.semantic_sources,
                 &plan.semantic_material,
             )
@@ -10562,6 +17248,7 @@ mod tests {
                 &plan.semantic_sources,
                 &plan.edges,
                 &plan.entries,
+                &plan.declaration_occurrences.values().copied().collect(),
                 plan.root_entry.expect("root entry"),
                 plan.root_ingress,
             )
@@ -10745,6 +17432,7 @@ mod tests {
                 &shallow.semantic_sources,
                 &shallow.edges,
                 &shallow.entries,
+                &shallow.declaration_occurrences.values().copied().collect(),
                 shallow.root_entry.expect("root entry"),
                 shallow.root_ingress,
             )
@@ -11001,6 +17689,23 @@ mod tests {
                 .iter()
                 .filter(|edge| edge.kind == EdgeKind::StaticBody)
                 .count();
+            // ⚠ `RT-DECL-CLOSURE-PORT` `D2a` subtracts the declaration-owned
+            // pairs from this relation. It is omitted here because every
+            // fixture in this set is planned with NO declarations
+            // (`declarations` is empty above), so there are no such pairs. ⛔
+            // The general form is enforced by
+            // `SemanticPlane::validate_function_units`, and the fixture that
+            // exercises the subtraction is
+            // `d2a_one_source_declaration_contributes_exactly_one_function`. If
+            // a declaration ever enters this fixture set, this assertion is
+            // where it will red — and the subtraction is the fix, not a
+            // re-baselined count.
+            assert!(
+                declarations.is_empty(),
+                "AC-10/AC-1: `{name}` -- this relation omits D2a's \
+                 declaration-owned-pair subtraction because the fixture set \
+                 carries no declarations"
+            );
             assert_eq!(
                 plan.abi.descriptors.len(),
                 plan.entries.len() + static_body,
@@ -11073,6 +17778,7 @@ mod tests {
                 &plan.semantic_sources,
                 &plan.edges,
                 &plan.entries,
+                &plan.declaration_occurrences.values().copied().collect(),
                 plan.root_entry.expect("root entry"),
                 plan.root_ingress,
             ) {
@@ -11147,6 +17853,7 @@ mod tests {
             &lexical_plan.semantic_sources,
             &lexical_plan.edges,
             &lexical_plan.entries,
+            &lexical_plan.declaration_occurrences.values().copied().collect(),
             lexical_plan.root_entry.expect("root entry"),
             lexical_plan.root_ingress,
         ) {
@@ -11405,6 +18112,7 @@ mod tests {
                     Some((ingress, unit.header().parameters))
                 }
                 AbiUnitDefinition::ClosureBody { .. }
+                | AbiUnitDefinition::CallableDeclaration { .. }
                 | AbiUnitDefinition::ContinuationSpecialization { .. } => None,
             })
             .collect::<Vec<_>>();
@@ -11460,7 +18168,14 @@ mod tests {
             .expect("validated units")
             .into_iter()
             .filter_map(|unit| match unit.definition() {
-                AbiUnitDefinition::ClosureBody { .. } => Some(unit.header().captures),
+                // `D2`: grouped WITH `ClosureBody`, not with the `None` arm.
+                // These fixtures plan no declarations, so this changes nothing
+                // today -- but a declaration added later would otherwise have
+                // its captures silently dropped from the measured population.
+                AbiUnitDefinition::ClosureBody { .. }
+                | AbiUnitDefinition::CallableDeclaration { .. } => {
+                    Some(unit.header().captures)
+                }
                 AbiUnitDefinition::SchedulingEntry { .. }
                 | AbiUnitDefinition::ContinuationSpecialization { .. } => None,
             })
@@ -11481,7 +18196,14 @@ mod tests {
             .expect("validated units")
             .into_iter()
             .filter_map(|unit| match unit.definition() {
-                AbiUnitDefinition::ClosureBody { .. } => Some(unit.header().captures),
+                // `D2`: grouped WITH `ClosureBody`, not with the `None` arm.
+                // These fixtures plan no declarations, so this changes nothing
+                // today -- but a declaration added later would otherwise have
+                // its captures silently dropped from the measured population.
+                AbiUnitDefinition::ClosureBody { .. }
+                | AbiUnitDefinition::CallableDeclaration { .. } => {
+                    Some(unit.header().captures)
+                }
                 AbiUnitDefinition::SchedulingEntry { .. }
                 | AbiUnitDefinition::ContinuationSpecialization { .. } => None,
             })
@@ -11490,6 +18212,781 @@ mod tests {
             capture_counts,
             vec![0],
             "an otherwise identical body without a free binding acquired a slot"
+        );
+    }
+
+    /// **`RT-DECL-CLOSURE-PORT` `D2` fixture — one program holding BOTH owners.**
+    ///
+    /// A transparent declaration whose body is a lexical closure seed, and a
+    /// separate anonymous lexical closure at the root. ⭐ Both are in the *same*
+    /// program on purpose: the property `D2` establishes is a **split**, and a
+    /// fixture carrying only the declaration cannot tell "classified by owner"
+    /// apart from "classified `CallableDeclaration` unconditionally".
+    fn d2_declaration_and_anonymous_closure() -> (RuntimeExpr, RuntimeDeclaration) {
+        // The declaration's own body: two captures, one parameter.
+        let declaration = RuntimeDeclaration {
+            symbol: "decl:fixture::d2".to_string(),
+            kind: RuntimeDeclarationKind::Transparent {
+                body: RuntimeExpr::LexicalClosure {
+                    captures: vec![RuntimeExpr::Var(0), RuntimeExpr::Var(1)],
+                    params: vec!["arg0".to_string()],
+                    body: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+                },
+            },
+            metadata: crate::RuntimeSymbolMetadata::empty(),
+        };
+        // The anonymous closure: a DIFFERENT arity, so an assertion cannot be
+        // satisfied by reading the wrong unit's header and still agreeing.
+        let root = RuntimeExpr::Call {
+            callee: Box::new(RuntimeExpr::LexicalClosure {
+                captures: vec![RuntimeExpr::Var(0)],
+                params: Vec::new(),
+                body: Box::new(RuntimeExpr::Value(RuntimeValue::Int(7.into()))),
+            }),
+            args: Vec::new(),
+        };
+        (root, declaration)
+    }
+
+    /// The definition arms of a `D2` plan, paired with each unit's declared
+    /// `(parameters, captures)`.
+    fn d2_units(plan: &StaticTransitionPlan<'_>) -> Vec<(AbiUnitDefinition, (u32, u32))> {
+        plan.emittable_units()
+            .expect("validated units")
+            .into_iter()
+            .map(|unit| {
+                (
+                    unit.definition(),
+                    (unit.header().parameters, unit.header().captures),
+                )
+            })
+            .collect()
+    }
+
+    /// **`D2` — a transparent closure-seed declaration owns its own callable
+    /// unit, and an anonymous closure in the same program does not.**
+    #[test]
+    fn d2_a_transparent_closure_seed_declaration_owns_a_callable_unit() {
+        let (root, declaration) = d2_declaration_and_anonymous_closure();
+        let mut declarations = BTreeMap::new();
+        declarations.insert("decl:fixture::d2", &declaration);
+        let plan = plan_static_transition_graph(&root, &declarations).expect("plannable");
+
+        let declaration_origin = plan
+            .declaration_occurrence_origin("decl:fixture::d2")
+            .expect("the transparent declaration has an occurrence origin");
+        let units = d2_units(&plan);
+
+        // The declaration's callable unit: owned by the DECLARATION's occurrence,
+        // carrying the closure's own arity. Asserted as an exact member rather
+        // than "some unit is a CallableDeclaration", so a unit owned by the
+        // wrong occurrence cannot satisfy it.
+        assert!(
+            units.contains(&(
+                AbiUnitDefinition::CallableDeclaration {
+                    declaration_origin,
+                    provenance: AbiCaptureProvenance::Lexical,
+                },
+                (1, 2),
+            )),
+            "D2: the declaration's closure-seed body must be a callable unit \
+             owned by the declaration, with the closure's own arity; got {units:?}"
+        );
+
+        // The discriminator: the anonymous closure stays an anonymous body. ⛔ Its
+        // defining origin is NOT the declaration's, and that is the whole content
+        // of "separately owned".
+        let anonymous = units
+            .iter()
+            .filter_map(|(definition, arity)| match definition {
+                AbiUnitDefinition::ClosureBody {
+                    defining_origin, ..
+                } => Some((*defining_origin, *arity)),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        let [(anonymous_origin, anonymous_arity)] = anonymous[..] else {
+            panic!("D2: expected exactly one anonymous ClosureBody unit, got {anonymous:?}");
+        };
+        assert_eq!(
+            anonymous_arity,
+            (0, 1),
+            "D2: the anonymous closure must keep its own arity, distinct from \
+             the declaration's -- reading the wrong unit's header would agree \
+             with the declaration's (1, 2) instead"
+        );
+        assert_ne!(
+            anonymous_origin, declaration_origin,
+            "D2: the anonymous closure body must not be owned by the declaration"
+        );
+    }
+
+    /// **`D2` causal control — the derivation, not the fixture, decides.**
+    ///
+    /// ⭐ Two mutations, and **each catches a defect the other cannot**. Ignoring
+    /// ownership reds only the positive arm; claiming universal ownership reds
+    /// only the discriminator. A single control here would leave one of the two
+    /// wrong derivations green, and both wrong derivations still compile.
+    #[test]
+    fn d2_the_owner_split_is_causal_in_both_directions() {
+        let (root, declaration) = d2_declaration_and_anonymous_closure();
+        let mut declarations = BTreeMap::new();
+        declarations.insert("decl:fixture::d2", &declaration);
+
+        let arms = |units: &[(AbiUnitDefinition, (u32, u32))]| {
+            let callable = units
+                .iter()
+                .filter(|(definition, _)| {
+                    matches!(definition, AbiUnitDefinition::CallableDeclaration { .. })
+                })
+                .count();
+            let bodies = units
+                .iter()
+                .filter(|(definition, _)| {
+                    matches!(definition, AbiUnitDefinition::ClosureBody { .. })
+                })
+                .count();
+            (callable, bodies)
+        };
+
+        let plan = plan_static_transition_graph(&root, &declarations).expect("plannable");
+        assert_eq!(
+            arms(&d2_units(&plan)),
+            (1, 1),
+            "D2: the fixture must hold exactly one unit of each owner"
+        );
+
+        // Mutation 1 -- the pre-port derivation. The declaration loses its unit.
+        let ignored = super::abi::D2_IGNORE_DECLARATION_OWNERSHIP.with(|flag| {
+            flag.set(true);
+            let plan = plan_static_transition_graph(&root, &declarations).expect("plannable");
+            let observed = arms(&d2_units(&plan));
+            flag.set(false);
+            observed
+        });
+        assert_eq!(
+            ignored,
+            (0, 2),
+            "D2: ignoring the owner discriminator must restore the pre-port \
+             classification -- if this stays (1, 1) the split is not derived \
+             from declaration ownership at all"
+        );
+
+        // Mutation 2 -- the opposite defect. The anonymous closure is captured
+        // by the new arm, which the positive assertion alone accepts happily.
+        let claimed = super::abi::D2_CLAIM_ALL_BODIES_DECLARATION_OWNED.with(|flag| {
+            flag.set(true);
+            let plan = plan_static_transition_graph(&root, &declarations).expect("plannable");
+            let observed = arms(&d2_units(&plan));
+            flag.set(false);
+            observed
+        });
+        assert_eq!(
+            claimed,
+            (2, 0),
+            "D2: claiming universal declaration ownership must swallow the \
+             anonymous closure -- the discriminator is what rejects this"
+        );
+    }
+
+    /// **`RT-DECL-CLOSURE-PORT` `D3` — the four transport classes are present
+    /// and typed at the declaration-owned callable-unit boundary.**
+    ///
+    /// Capture, parameter, result and trap, asserted as the **exact ordered slot
+    /// run** rather than as counts: a count agrees with a run that has the right
+    /// number of wrong slots.
+    #[test]
+    fn d3_the_callable_declaration_boundary_carries_typed_transport() {
+        let (root, declaration) = d2_declaration_and_anonymous_closure();
+        let mut declarations = BTreeMap::new();
+        declarations.insert("decl:fixture::d2", &declaration);
+        let plan = plan_static_transition_graph(&root, &declarations).expect("plannable");
+        let declaration_origin = plan
+            .declaration_occurrence_origin("decl:fixture::d2")
+            .expect("occurrence");
+
+        let unit = plan
+            .emittable_units()
+            .expect("validated units")
+            .into_iter()
+            .find(|unit| {
+                matches!(
+                    unit.definition(),
+                    AbiUnitDefinition::CallableDeclaration { declaration_origin: origin, .. }
+                        if origin == declaration_origin
+                )
+            })
+            .expect("the declaration owns a callable unit");
+
+        let run = unit
+            .slots()
+            .iter()
+            .map(|slot| (slot.kind, slot.carrier, slot.ordinal))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            run,
+            vec![
+                // the declared parameter
+                (AbiSlotKind::Parameter, AbiCarrier::ValueWord, 0),
+                // the lifted captures, in capture declaration order
+                (AbiSlotKind::Capture, AbiCarrier::ValueWord, 0),
+                (AbiSlotKind::Capture, AbiCarrier::ValueWord, 1),
+                // the result / control / trap / store convention
+                (AbiSlotKind::Result, AbiCarrier::ResultWord, 0),
+                (AbiSlotKind::Control, AbiCarrier::ControlWord, 0),
+                (AbiSlotKind::Trap, AbiCarrier::TrapWord, 0),
+                (AbiSlotKind::Store, AbiCarrier::StoreHandle, 0),
+            ],
+            "D3: the callable declaration boundary must carry typed parameter, \
+             capture, result and trap transport in ABI order"
+        );
+
+        // Ownership and storage owner are part of "typed", not decoration: a
+        // capture that transferred to the caller, or lived in the persistent
+        // store, would be a different transport with the same slot kinds.
+        for slot in unit.slots() {
+            let expected = match slot.kind {
+                AbiSlotKind::Parameter | AbiSlotKind::Capture | AbiSlotKind::Control
+                | AbiSlotKind::Trap => (AbiOwnership::OwnedByFrame, AbiStorageOwner::ActivationFrame),
+                AbiSlotKind::Result => (
+                    AbiOwnership::TransferredToCaller,
+                    AbiStorageOwner::ActivationFrame,
+                ),
+                AbiSlotKind::Store => (
+                    AbiOwnership::BorrowedForActivation,
+                    AbiStorageOwner::PersistentStore,
+                ),
+            };
+            assert_eq!(
+                (slot.ownership, slot.storage_owner),
+                expected,
+                "D3: {:?} slot crosses with the wrong ownership/storage owner",
+                slot.kind
+            );
+        }
+    }
+
+    /// **`RT-DECL-CLOSURE-PORT` `D3` — the SEED producer transports too, with
+    /// its own carrier.**
+    ///
+    /// ⭐ There are **two** `StaticBody` producers, `Closure` and
+    /// `LexicalClosure`, and they differ in exactly the axis under test: a seed
+    /// capture crosses as `GroundValueCarrier`, a lexical one as `ValueWord`. A
+    /// fixture exercising one producer leaves the other's transport unmeasured,
+    /// and "the ported declaration works" would then be a claim about half the
+    /// population.
+    #[test]
+    fn d3_a_seed_provenance_declaration_transports_with_its_own_carrier() {
+        let declaration = RuntimeDeclaration {
+            symbol: "decl:fixture::d3seed".to_string(),
+            kind: RuntimeDeclarationKind::Transparent {
+                body: RuntimeExpr::Closure {
+                    captures: vec!["decl:fixture::cap".to_string()],
+                    params: vec!["arg0".to_string()],
+                    body: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+                },
+            },
+            metadata: crate::RuntimeSymbolMetadata::empty(),
+        };
+        let mut declarations = BTreeMap::new();
+        declarations.insert("decl:fixture::d3seed", &declaration);
+        let plan = plan_static_transition_graph(&RuntimeExpr::Value(RuntimeValue::Bool(true)), &declarations)
+            .expect("plannable");
+        let declaration_origin = plan
+            .declaration_occurrence_origin("decl:fixture::d3seed")
+            .expect("occurrence");
+
+        let unit = plan
+            .emittable_units()
+            .expect("validated units")
+            .into_iter()
+            .find(|unit| {
+                matches!(
+                    unit.definition(),
+                    AbiUnitDefinition::CallableDeclaration { declaration_origin: origin, .. }
+                        if origin == declaration_origin
+                )
+            })
+            .expect("the seed declaration owns a callable unit");
+
+        assert_eq!(
+            unit.definition(),
+            AbiUnitDefinition::CallableDeclaration {
+                declaration_origin,
+                provenance: AbiCaptureProvenance::Seed,
+            },
+            "D3: a Closure-bodied declaration must own a SEED-provenance callable unit"
+        );
+        let captures = unit
+            .slots()
+            .iter()
+            .filter(|slot| slot.kind == AbiSlotKind::Capture)
+            .map(|slot| slot.carrier)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            captures,
+            vec![AbiCarrier::GroundValueCarrier],
+            "D3: a seed capture must cross as GroundValueCarrier, not as the \
+             lexical ValueWord -- the carrier is a function of provenance"
+        );
+    }
+
+    /// **`RT-DECL-CLOSURE-PORT` `D3` — `C4` actually REJECTS on a
+    /// declaration-owned unit, and the control proves that is not free.**
+    ///
+    /// ⭐ This is the one the leader named: routing `C4` through the shared
+    /// predicate in `D2` is only worth something if the exclusion genuinely
+    /// fires for the new arm. ⛔ A green suite cannot establish that — an
+    /// exclusion that silently stopped seeing these units also reports no
+    /// violation.
+    #[test]
+    fn d3_an_imported_capture_on_a_declaration_owned_unit_is_refused() {
+        // The imported EDGE: an imported value in a capture position, which is
+        // where it would have to cross a frame boundary and be given a carrier.
+        let declaration = RuntimeDeclaration {
+            symbol: "decl:fixture::d3".to_string(),
+            kind: RuntimeDeclarationKind::Transparent {
+                body: RuntimeExpr::LexicalClosure {
+                    captures: vec![RuntimeExpr::ImportedDeclarationRef {
+                        symbol: "decl:other::imported".to_string(),
+                        dependency: "pkg:other".to_string(),
+                        dependency_semantic_hash: "hash".to_string(),
+                    }],
+                    params: Vec::new(),
+                    body: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+                },
+            },
+            metadata: crate::RuntimeSymbolMetadata::empty(),
+        };
+        let mut declarations = BTreeMap::new();
+        declarations.insert("decl:fixture::d3", &declaration);
+        let root = RuntimeExpr::Value(RuntimeValue::Bool(true));
+
+        let refused = plan_static_transition_graph(&root, &declarations);
+        assert!(
+            refused.is_err(),
+            "D3/C4: an imported capture edge on a declaration-owned callable \
+             unit must be refused before it receives a callable descriptor"
+        );
+
+        // ⭐ The control. With `C4` restored to matching `ClosureBody` alone,
+        // the SAME program is accepted -- so the assertion above is caused by
+        // the shared predicate reaching the new arm, not by some other refusal
+        // that would have fired anyway.
+        let accepted_under_mutation =
+            super::abi::D3_C4_MATCHES_CLOSURE_BODY_ONLY.with(|flag| {
+                flag.set(true);
+                let outcome = plan_static_transition_graph(&root, &declarations).is_ok();
+                flag.set(false);
+                outcome
+            });
+        assert!(
+            accepted_under_mutation,
+            "D3/C4: the refusal must be CAUSED by C4 reaching the declaration-owned \
+             arm -- if the program is still refused with C4 narrowed back to \
+             ClosureBody, this test is measuring a different rejection and proves \
+             nothing about the population shrink"
+        );
+    }
+
+    /// **`RT-DECL-CLOSURE-PORT` `D4` fixture — one program holding BOTH target
+    /// classes, each actually referenced.**
+    ///
+    /// ⭐ A closure-seed declaration and a non-closure transparent declaration,
+    /// with a `DeclarationRef` to each, because `D4`'s property is a
+    /// **partition**. A fixture carrying only the closure seed cannot tell
+    /// "retargeted by seed class" apart from "retargeted unconditionally" — and
+    /// the unconditional reading is the hazard: a non-closure declaration's
+    /// entry *is* its unit, so moving its call breaks every declaration call
+    /// the corpus already makes.
+    ///
+    /// The two declarations carry different arities on purpose, so an assertion
+    /// cannot be satisfied by reading the wrong unit's header and still agree.
+    fn d4_both_target_classes() -> (RuntimeExpr, RuntimeDeclaration, RuntimeDeclaration) {
+        let closure_seed = RuntimeDeclaration {
+            symbol: "decl:fixture::d4::callable".to_string(),
+            kind: RuntimeDeclarationKind::Transparent {
+                body: RuntimeExpr::LexicalClosure {
+                    captures: vec![RuntimeExpr::Var(0), RuntimeExpr::Var(1)],
+                    params: vec!["arg0".to_string()],
+                    body: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+                },
+            },
+            metadata: crate::RuntimeSymbolMetadata::empty(),
+        };
+        let thunk = RuntimeDeclaration {
+            symbol: "decl:fixture::d4::thunk".to_string(),
+            kind: RuntimeDeclarationKind::Transparent {
+                body: RuntimeExpr::Value(RuntimeValue::Int(73.into())),
+            },
+            metadata: crate::RuntimeSymbolMetadata::empty(),
+        };
+        // ⭐ A THIRD closure, anonymous and at the root, carrying an arity that
+        // matches neither declaration. It is what makes "the static-body edge
+        // leaving THIS declaration's entry" distinguishable from "some
+        // static-body edge": with one closure in the program those two
+        // derivations agree, and a reverse body search would pass unnoticed.
+        let root = RuntimeExpr::Let {
+            value: Box::new(RuntimeExpr::Call {
+                callee: Box::new(RuntimeExpr::LexicalClosure {
+                    captures: Vec::new(),
+                    params: Vec::new(),
+                    body: Box::new(RuntimeExpr::Value(RuntimeValue::Int(7.into()))),
+                }),
+                args: Vec::new(),
+            }),
+            body: Box::new(RuntimeExpr::Let {
+                value: Box::new(RuntimeExpr::DeclarationRef {
+                    symbol: "decl:fixture::d4::callable".to_string(),
+                }),
+                body: Box::new(RuntimeExpr::DeclarationRef {
+                    symbol: "decl:fixture::d4::thunk".to_string(),
+                }),
+            }),
+        };
+        (root, closure_seed, thunk)
+    }
+
+    /// Every planned declaration call, as
+    /// `(recorded class, callee definition, callee (parameters, captures))`.
+    ///
+    /// ⭐ Joined through the **resolved call edge**, not through the recorded
+    /// class alone: the class is what the planner decided, and the descriptor is
+    /// where the decision landed. Reading only the class would let a correct
+    /// record sit above an edge that went somewhere else entirely.
+    fn d4_declaration_calls(
+        plan: &StaticTransitionPlan<'_>,
+    ) -> Vec<(
+        DeclarationCallTargetClass,
+        AbiUnitDefinition,
+        (u32, u32),
+    )> {
+        let units = plan.emittable_units().expect("validated units");
+        let mut calls = plan
+            .emittable_call_edges()
+            .expect("validated call edges")
+            .into_iter()
+            .filter(|edge| edge.kind() == EmittableCallKind::Declaration)
+            .map(|edge| {
+                let unit = units
+                    .iter()
+                    .find(|unit| unit.function() == edge.callee())
+                    .expect("a declaration call edge names an emittable unit");
+                (
+                    plan.declaration_call_target_class(edge.call_site_origin())
+                        .expect("a planned declaration call records its target class"),
+                    unit.definition(),
+                    (unit.header().parameters, unit.header().captures),
+                )
+            })
+            .collect::<Vec<_>>();
+        calls.sort_by_key(|(class, _, _)| *class);
+        calls
+    }
+
+    /// **`D4` — a closure-seed declaration's call reaches its declaration-owned
+    /// callable unit, and a non-closure declaration's call does NOT move.**
+    ///
+    /// Promise class: durable invariant. It is asserted as an equality over the
+    /// whole declaration-call population, so a third class, a lost call, or a
+    /// duplicated one all red — none of which a per-call `contains` would see.
+    #[test]
+    fn d4_the_declaration_call_partition_follows_the_seed_class() {
+        let (root, closure_seed, thunk) = d4_both_target_classes();
+        let mut declarations = BTreeMap::new();
+        declarations.insert("decl:fixture::d4::callable", &closure_seed);
+        declarations.insert("decl:fixture::d4::thunk", &thunk);
+        let plan = plan_static_transition_graph(&root, &declarations).expect("plannable");
+
+        let callable_origin = plan
+            .declaration_occurrence_origin("decl:fixture::d4::callable")
+            .expect("the closure-seed declaration has an occurrence origin");
+
+        assert_eq!(
+            d4_declaration_calls(&plan),
+            vec![
+                (
+                    DeclarationCallTargetClass::SchedulingEntry,
+                    AbiUnitDefinition::SchedulingEntry {
+                        ingress: abi::AbiSchedulingIngress::Empty,
+                    },
+                    (0, 0),
+                ),
+                (
+                    DeclarationCallTargetClass::CallableDeclaration,
+                    AbiUnitDefinition::CallableDeclaration {
+                        declaration_origin: callable_origin,
+                        provenance: AbiCaptureProvenance::Lexical,
+                    },
+                    (1, 2),
+                ),
+            ],
+            "D4: the closure-seed declaration's call must reach the unit that \
+             declares its one parameter and two captures, and the non-closure \
+             declaration's call must still reach its own zero-input scheduling \
+             entry"
+        );
+    }
+
+    // ─── RT-DECL-CLOSURE-PORT D2a — the function-unit population ───────────
+    //
+    // ⭐⭐ **One source declaration contributes ONE function.** Before `D2a` a
+    // closure-seed transparent declaration contributed two: its `StaticBody`
+    // target (the `D2` callable unit) and its own zero-input `SchedulingEntry`
+    // at the closure occurrence. The second has no lawful runtime meaning — it
+    // cannot call the callable unit without the missing parameters and
+    // captures, cannot return the closure, and cannot be a no-op without
+    // changing program meaning.
+
+    /// Every class in the ruled partition, in one program.
+    ///
+    /// ⚠ All four are present **and distinguishable**: the two declaration
+    /// closure forms differ in arity, and the anonymous closure differs from
+    /// both. A fixture carrying one closure cannot tell "the relation leaving
+    /// THIS declaration" from "some relation".
+    #[cfg(test)]
+    fn d2a_every_partition_class() -> (RuntimeExpr, Vec<RuntimeDeclaration>) {
+        let lexical = RuntimeDeclaration {
+            symbol: "decl:fixture::d2a::lexical".to_string(),
+            kind: RuntimeDeclarationKind::Transparent {
+                body: RuntimeExpr::LexicalClosure {
+                    captures: vec![RuntimeExpr::Value(RuntimeValue::Int(1.into()))],
+                    params: vec!["a".to_string()],
+                    body: Box::new(RuntimeExpr::Var(0)),
+                },
+            },
+            metadata: crate::RuntimeSymbolMetadata::empty(),
+        };
+        let seed = RuntimeDeclaration {
+            symbol: "decl:fixture::d2a::seed".to_string(),
+            kind: RuntimeDeclarationKind::Transparent {
+                body: RuntimeExpr::Closure {
+                    captures: Vec::new(),
+                    params: vec!["p".to_string(), "q".to_string()],
+                    body: Box::new(RuntimeExpr::Var(0)),
+                },
+            },
+            metadata: crate::RuntimeSymbolMetadata::empty(),
+        };
+        let thunk = RuntimeDeclaration {
+            symbol: "decl:fixture::d2a::thunk".to_string(),
+            kind: RuntimeDeclarationKind::Transparent {
+                body: RuntimeExpr::Value(RuntimeValue::Int(73.into())),
+            },
+            metadata: crate::RuntimeSymbolMetadata::empty(),
+        };
+        // The root, carrying an ANONYMOUS closure that must keep its own
+        // `ClosureBody` unit and its own emitted `StaticBody` call.
+        let root = RuntimeExpr::Let {
+            value: Box::new(RuntimeExpr::Call {
+                callee: Box::new(RuntimeExpr::LexicalClosure {
+                    captures: Vec::new(),
+                    params: Vec::new(),
+                    body: Box::new(RuntimeExpr::Value(RuntimeValue::Int(7.into()))),
+                }),
+                args: Vec::new(),
+            }),
+            body: Box::new(RuntimeExpr::Let {
+                value: Box::new(RuntimeExpr::DeclarationRef {
+                    symbol: "decl:fixture::d2a::lexical".to_string(),
+                }),
+                body: Box::new(RuntimeExpr::Let {
+                    value: Box::new(RuntimeExpr::DeclarationRef {
+                        symbol: "decl:fixture::d2a::seed".to_string(),
+                    }),
+                    body: Box::new(RuntimeExpr::DeclarationRef {
+                        symbol: "decl:fixture::d2a::thunk".to_string(),
+                    }),
+                }),
+            }),
+        };
+        (root, vec![lexical, seed, thunk])
+    }
+
+    /// The unit population as a sorted class census, plus the count of emitted
+    /// `StaticBody` **calls**.
+    #[cfg(test)]
+    fn d2a_population(plan: &StaticTransitionPlan<'_>) -> (Vec<&'static str>, usize) {
+        let mut classes = plan
+            .emittable_units()
+            .expect("validated units")
+            .into_iter()
+            .map(|unit| match unit.definition() {
+                AbiUnitDefinition::SchedulingEntry { .. } => "SchedulingEntry",
+                AbiUnitDefinition::CallableDeclaration { .. } => "CallableDeclaration",
+                AbiUnitDefinition::ClosureBody { .. } => "ClosureBody",
+                AbiUnitDefinition::ContinuationSpecialization { .. } => {
+                    "ContinuationSpecialization"
+                }
+            })
+            .collect::<Vec<_>>();
+        classes.sort_unstable();
+        let static_body_calls = plan
+            .emittable_call_edges()
+            .expect("validated call edges")
+            .into_iter()
+            .filter(|edge| edge.kind() == EmittableCallKind::StaticBody)
+            .count();
+        (classes, static_body_calls)
+    }
+
+    /// **`D2a` — the closed partition, stated as a population.**
+    #[test]
+    fn d2a_one_source_declaration_contributes_exactly_one_function() {
+        let (root, declarations) = d2a_every_partition_class();
+        let declarations = declarations
+            .iter()
+            .map(|declaration| (declaration.symbol.as_str(), declaration))
+            .collect::<BTreeMap<_, _>>();
+        let plan = plan_static_transition_graph_with_symbols(
+            &root,
+            &declarations,
+            &crate::NativeProcessSymbols::legacy_prelude(),
+            abi::AbiRootIngress::Value,
+            true,
+        )
+        .expect("the D2a fixture plans");
+        let (classes, static_body_calls) = d2a_population(&plan);
+        assert_eq!(
+            classes,
+            vec![
+                // the two closure declarations
+                "CallableDeclaration",
+                "CallableDeclaration",
+                // the anonymous closure at the root
+                "ClosureBody",
+                // the root, and the non-closure thunk declaration
+                "SchedulingEntry",
+                "SchedulingEntry",
+            ],
+            "D2a: root + thunk are the ONLY scheduling entries; each closure \
+             declaration contributes exactly one callable unit and no separate \
+             scheduling entry; the anonymous closure keeps its ClosureBody"
+        );
+        assert_eq!(
+            static_body_calls, 1,
+            "D2a: only the ANONYMOUS closure's static-body relation is an \
+             emitted call. A declaration-owned pair's relation is a \
+             definition/signature relation inside one unit, and emitting it as \
+             a call would reintroduce the phantom from the other side"
+        );
+        // Cross-plane one-for-one: the semantic partition, the ABI descriptors,
+        // and the declared function population must state the same result.
+        // ⛔ A repair that only skipped `emittable_units` would leave a phantom
+        // owner here, which is one of the four explicitly rejected half-measures.
+        assert_eq!(
+            plan.semantic.functions.len(),
+            classes.len(),
+            "D2a: the semantic function population must equal the ABI \
+             descriptor population exactly"
+        );
+    }
+
+    /// **`D2a` — the substitution is CAUSAL.**
+    #[test]
+    fn d2a_retaining_the_obsolete_scheduling_unit_restores_the_phantom() {
+        let (root, declarations) = d2a_every_partition_class();
+        let declarations = declarations
+            .iter()
+            .map(|declaration| (declaration.symbol.as_str(), declaration))
+            .collect::<BTreeMap<_, _>>();
+        let retained = with_d2a_population_mutation(
+            D2aPopulationMutation::RetainObsoleteSchedulingUnit,
+            || {
+                plan_static_transition_graph_with_symbols(
+                    &root,
+                    &declarations,
+                    &crate::NativeProcessSymbols::legacy_prelude(),
+                    abi::AbiRootIngress::Value,
+                    true,
+                )
+                .map(|plan| d2a_population(&plan).0)
+            },
+        );
+        let retained = retained.expect("the pre-D2a population still plans");
+        assert_eq!(
+            retained.iter().filter(|class| **class == "SchedulingEntry").count(),
+            4,
+            "D2a: with the substitution suppressed, BOTH closure declarations \
+             get their obsolete zero-input scheduling entry back — 4 entries \
+             where the ruled partition has 2. If this count did not move, the \
+             partition assertion above is not caused by D2a: {retained:?}"
+        );
+    }
+
+    /// **`D4` — the partition is CAUSAL in both directions.**
+    ///
+    /// ⭐ Two mutations, because one cannot defeat a split. Without
+    /// `NeverRetarget` the positive assertion above is consistent with the
+    /// retarget never having been installed on a plan that happened to agree;
+    /// without `AlwaysRetarget` it is consistent with a blanket retarget that
+    /// drags the thunk along and is only accidentally right about the closure
+    /// seed.
+    #[test]
+    fn d4_the_declaration_call_partition_is_causal_in_both_directions() {
+        let (root, closure_seed, thunk) = d4_both_target_classes();
+        let mut declarations = BTreeMap::new();
+        declarations.insert("decl:fixture::d4::callable", &closure_seed);
+        declarations.insert("decl:fixture::d4::thunk", &thunk);
+
+        let under = |mutation: D4DeclarationTargetMutation| {
+            D4_DECLARATION_TARGET_MUTATION.with(|cell| {
+                cell.set(mutation);
+                let outcome = plan_static_transition_graph(&root, &declarations)
+                    .map(|plan| d4_declaration_calls(&plan));
+                cell.set(D4DeclarationTargetMutation::Exact);
+                outcome
+            })
+        };
+
+        // Direction 1 -- the pre-`D4` world, and `D2a` has made it STRICTLY
+        // unreachable rather than merely wrong.
+        //
+        // ⭐ Before `D2a` this mutation planned: both calls landed on a
+        // zero-input scheduling entry, so the closure-seed reference called a
+        // thunk declaring none of its parameters or captures. That wrong-arity
+        // target was the thing `D4` removed. `D2a` removes the target itself —
+        // a closure-seed declaration's scheduling entry is no longer a function
+        // unit — so the same mutation now cannot be planned at all.
+        //
+        // ⚠ The assertion was updated because the mechanism got stronger, not
+        // because the control was re-fit to whatever the code now does: the
+        // direction being measured is unchanged (suppress the retarget, prove
+        // the positive partition was caused by the seed discriminator), and it
+        // is now measured by a refusal instead of by an arity.
+        let never = under(D4DeclarationTargetMutation::NeverRetarget);
+        let Err(CraneliftBackendError::Backend(BackendFailure::PlannerInvariant(reason))) = never
+        else {
+            panic!(
+                "D4/D2a: with the retarget suppressed the closure-seed call \
+                 targets a scheduling entry that D2a no longer seeds as a unit, \
+                 so planning must refuse it: {never:?}"
+            );
+        };
+        assert!(
+            reason.contains("declaration call edge target is not its function unit's seed"),
+            "D4/D2a: the refusal must name the missing unit seed. Any other \
+             invariant would leave the suppressed retarget unpinned: {reason}"
+        );
+
+        // Direction 2 -- the ruled-out reverse body search. It lands on the
+        // anonymous closure's body, which is a `ClosureBody` unit owned by
+        // nobody's declaration. ⛔ It must not merely produce a different
+        // partition: a declaration call to an anonymous closure body is not a
+        // lawful target at all, so planning refuses it.
+        let any = under(D4DeclarationTargetMutation::AnyStaticBody);
+        let Err(CraneliftBackendError::Backend(BackendFailure::PlannerInvariant(reason))) = any
+        else {
+            panic!(
+                "D4: a declaration call retargeted by reverse body search reaches \
+                 an anonymous closure body, which must be refused rather than \
+                 planned: {any:?}"
+            );
+        };
+        assert!(
+            reason.contains("neither a scheduling entry nor a callable declaration unit"),
+            "D4: the refusal must name the target CLASS -- a refusal for some \
+             other invariant would leave the wrong-owner target unpinned: {reason}"
         );
     }
 
@@ -12124,6 +19621,1268 @@ mod tests {
     ///
     /// GAP: the invocation aggregate carrier row is deliberately absent from
     /// Slice 0; this control proves only the dormant authority it will consume.
+    /// `D7` — one role at two producer seats is TWO non-aliasing occurrences.
+    ///
+    /// MEASURED: two records for one role at different seats are accepted and
+    /// carry different identities; two records naming the same `(seat, role)`
+    /// are rejected by name.
+    ///
+    /// CLAIMED: the occurrence domain is non-aliasing, so one seat's record
+    /// cannot authorize another seat's allocation.
+    ///
+    /// THE GAP: this drives hand-built records, so it proves the LAW and not
+    /// that the builder populates it correctly. The builder's own agreement is
+    /// the rebuild comparison in `validate_aggregate_ownership_plan`; what this
+    /// adds is that a violation would be caught rather than silently indexed.
+    #[test]
+    fn one_role_at_two_seats_is_two_non_aliasing_occurrences() {
+        let at = |id: u32,
+                  owner: ContinuationEmissionOwner,
+                  seat: u32,
+                  path: SynthesizedAggregatePath| {
+            PlannedAggregateOwnership {
+                id: AggregateOccurrenceId(id),
+                producer: AggregateOccurrenceProducer::SynthesizedUse {
+                    owner,
+                    seat: StaticOriginId(seat),
+                    path,
+                    role: SynthesizedConstructorRole::Fixed(
+                        SynthesizedFixedConstructorRole::Unit,
+                    ),
+                },
+                owner: None,
+                shape: PlannedAggregateShape::Constructor,
+                declared_children: Some(&[]),
+                children: Vec::new(),
+                meet: PlannedReferentLifetime::Persistent,
+                allocation: PlannedAggregateAllocation::PersistentGround,
+            }
+        };
+        let ok_root = SynthesizedAggregatePath::root(SynthesizedAggregateRoot::HostResultOk);
+        let record = |id: u32, owner: ContinuationEmissionOwner, seat: u32| {
+            at(id, owner, seat, ok_root.clone())
+        };
+        let unit_a = ContinuationEmissionOwner::Predeclared(PredeclaredFunctionId(0));
+        let unit_b = ContinuationEmissionOwner::Predeclared(PredeclaredFunctionId(1));
+        let generated = ContinuationEmissionOwner::Specialization(ContinuationSpecializationId(0));
+
+        // Same ROLE, different SEAT: two lawful occurrences.
+        let distinct = [record(0, unit_a, 11), record(1, unit_a, 12)];
+        validate_aggregate_producers_are_unique(&distinct)
+            .expect("one role at two seats is two occurrences, not a collision");
+        assert_ne!(
+            distinct[0].id, distinct[1].id,
+            "two occurrences must not share an identity, or the per-use key \
+             bought nothing over the per-role one it replaced"
+        );
+
+        // Same ROLE and same SEAT, different EMISSION OWNER: also two lawful
+        // occurrences. This is the `D5a` axis -- one body lowered by its
+        // predeclared unit and again inside a generated context is two
+        // emissions, and a key without the owner would alias them.
+        validate_aggregate_producers_are_unique(&[record(0, unit_a, 11), record(1, unit_b, 11)])
+            .expect("one seat under two predeclared owners is two occurrences");
+        validate_aggregate_producers_are_unique(&[record(0, unit_a, 11), record(1, generated, 11)])
+            .expect("predeclared and specialization emissions of one seat are distinct");
+
+        // ⭐ Same ROLE, same SEAT, same OWNER, different PATH: two lawful
+        // occurrences. This is the axis the path key exists for — three
+        // `ResourceKind` uses at one seat differ in nothing else, and without
+        // the path one record would have to serve all three.
+        validate_aggregate_producers_are_unique(&[
+            at(0, unit_a, 11, ok_root.alternative(4).field(0)),
+            at(1, unit_a, 11, ok_root.alternative(5).field(0)),
+            at(2, unit_a, 11, ok_root.alternative(5).field(1)),
+        ])
+        .expect("one role at three positions in one seat's tree is three occurrences");
+
+        // And the step KIND separates, not just the position: `field(0)` and
+        // `alternative(0)` are different paths, so a key that collapsed the two
+        // step kinds to a bare index would alias these two.
+        validate_aggregate_producers_are_unique(&[
+            at(0, unit_a, 11, ok_root.field(0)),
+            at(1, unit_a, 11, ok_root.alternative(0)),
+        ])
+        .expect("a field step and an alternative step at position 0 are distinct paths");
+
+        // Same SEAT, same role, same owner, SAME PATH: one use, so a second is
+        // a collision.
+        let collided = [record(0, unit_a, 11), record(1, unit_a, 11)];
+        let error = validate_aggregate_producers_are_unique(&collided)
+            .expect_err("two records for one use must reject");
+        assert!(
+            format!("{error:?}").contains("same producer"),
+            "the refusal must be the aliasing stop itself: {error:?}"
+        );
+    }
+
+    /// A seat-bearing fixture and its first emission owner.
+    ///
+    /// Every `D7` row below needs a real `Effect` occurrence, because the
+    /// corrected population resolves site-bound children against the seat's own
+    /// operand authority. A hand-built key cannot stand in for that.
+    fn d7_seat_fixture(
+        operation: ken_host::HostOpV1,
+        args: Vec<RuntimeExpr>,
+    ) -> (StaticTransitionPlan<'static>, StaticOriginId, ContinuationEmissionOwner) {
+        let expr = Box::leak(Box::new(RuntimeExpr::Effect {
+            family: "FS".to_string(),
+            operation,
+            capability: None,
+            args,
+        }));
+        let plan = plan_static_transition_graph(expr, &BTreeMap::new()).expect("plans");
+        let seat = plan
+            .source_occurrences
+            .iter()
+            .flatten()
+            .find(|occurrence| matches!(occurrence.expr, RuntimeExpr::Effect { .. }))
+            .expect("the fixture has an effect seat")
+            .static_origin;
+        let owner = *synthesized_seat_emission_owners(&plan, seat)
+            .expect("the seat has emission owners")
+            .first()
+            .expect("a seat is emitted by at least its own predeclared unit");
+        (plan, seat, owner)
+    }
+
+    /// Three `Int` operands — enough for `FsReadAt`'s buffer at position 2.
+    fn d7_three_operands() -> Vec<RuntimeExpr> {
+        (1..=3)
+            .map(|value| RuntimeExpr::Value(RuntimeValue::Int(value.into())))
+            .collect()
+    }
+
+    /// `D7` — a scalar node's owner set is derived from its EXACT disposition.
+    ///
+    /// MEASURED: a `spill: None` scalar yields exactly `{NoReferent}`; a
+    /// `spill: Some(_)` scalar yields `{NoReferent, PersistentStore}`; and
+    /// every scalar in the production tree agrees with the disposition its own
+    /// `Lowered` variant declares.
+    ///
+    /// CLAIMED: the recorded owner set is the child's exact evidence, read off
+    /// the spill field of the sole disposition authority — not a family-wide
+    /// answer that happens to reach the right lane.
+    ///
+    /// THE GAP: neither set contains `InvocationArena`, so **this distinction
+    /// changes no lane verdict today**. It is asserted because the sets are the
+    /// record's stated evidence and a merely-sufficient set is a false one.
+    #[test]
+    fn a_scalar_nodes_owner_set_comes_from_its_exact_spill_disposition() {
+        let (plan, seat, _) = d7_seat_fixture(ken_host::HostOpV1::FsWriteAt, d7_three_operands());
+
+        let spill_free = SynthesizedAggregateNode::Scalar {
+            tag: BoundaryTag::ImmediateBool,
+            spill: None,
+        };
+        assert_eq!(
+            node_referent_owners(&plan, seat, spill_free).expect("a spill-free scalar resolves"),
+            vec![BoundaryReferentOwner::NoReferent],
+            "a `Bool` never becomes a node at any magnitude, so `PersistentStore` \
+             is not among its possible owners"
+        );
+
+        for spilling in [
+            SynthesizedAggregateNode::native_int(),
+            SynthesizedAggregateNode::bounded_nat(),
+        ] {
+            assert_eq!(
+                node_referent_owners(&plan, seat, spilling)
+                    .expect("a spill-capable scalar resolves"),
+                vec![
+                    BoundaryReferentOwner::NoReferent,
+                    BoundaryReferentOwner::PersistentStore,
+                ],
+                "a wide {spilling:?} spills to a handle of its spill class, which \
+                 is a persistent-store referent"
+            );
+        }
+
+        // The two sets must actually differ, or the row is vacuous and would
+        // pass against the single family-wide answer it exists to reject.
+        assert_ne!(
+            node_referent_owners(&plan, seat, spill_free).expect("resolves"),
+            node_referent_owners(&plan, seat, SynthesizedAggregateNode::native_int())
+                .expect("resolves"),
+            "spill presence must change the recorded owner set, or recording the \
+             disposition bought nothing over the broad immediate family"
+        );
+
+        // Every scalar the production tree declares must name a disposition an
+        // emitter variant actually produces. This is the anti-drift half: the
+        // tree is a second statement of a shape the disposition authority owns.
+        for operation in measured_tree_operations() {
+            for node in every_tree_node(operation) {
+                if let SynthesizedAggregateNode::Scalar { tag, spill } = node {
+                    assert!(
+                        matches!(
+                            (tag, spill),
+                            (BoundaryTag::ImmediateBoundedNat, Some(BoundaryClass::Int))
+                                | (BoundaryTag::ImmediateInt, Some(BoundaryClass::Int))
+                        ),
+                        "{operation:?} declares a scalar {tag:?}/{spill:?} that no \
+                         emitter variant produces"
+                    );
+                }
+            }
+        }
+    }
+
+    /// **A site-bound child is RESOLVED against the seat, never pruned.**
+    ///
+    /// MEASURED: at a real `FsReadFile` seat, `OptionSome` — whose only child
+    /// is the seat's path operand — has a record, and so does `FileError`,
+    /// which contains it. At `FsReadAt`, `PrivateBufferSpan` and `ReadSome`
+    /// have records. The owner set recorded for the site-bound child equals the
+    /// one the seat's own operand occurrence yields.
+    ///
+    /// CLAIMED: site-dependence bounds the *role-invariant* meet, not the meet.
+    /// Every one of these is a real allocation production emits, so each gets
+    /// an exact site-bound record.
+    ///
+    /// THE GAP — this is the correction's whole subject, so it is worth saying
+    /// plainly what the previous spelling did. It pruned these four
+    /// constructors from `P` on the grounds that no role-invariant answer
+    /// existed. That is not the fail-closed direction: it left four
+    /// allocations that production emits with **no record at all**, which reads
+    /// as "refuses at allocation" and was in fact "allocates with the unproven
+    /// persistent lane, via the value-shape disposition".
+    #[test]
+    fn a_site_bound_child_is_resolved_against_the_seat_not_pruned() {
+        use SynthesizedAggregateRoot::{HostResultError as ERR, HostResultOk as OK};
+        use SynthesizedConstructorRole::Fixed;
+        use SynthesizedFixedConstructorRole as R;
+
+        // `OptionSome` and its parent `FileError`, at a file-operation seat.
+        let (plan, seat, owner) = d7_seat_fixture(
+            ken_host::HostOpV1::FsReadFile,
+            vec![RuntimeExpr::Value(RuntimeValue::Int(1.into()))],
+        );
+        let err = SynthesizedAggregatePath::root(ERR);
+        for (path, role) in [
+            (err.clone(), R::FileError),
+            (err.field(0), R::FileOperationRead),
+            (err.field(1), R::OptionSome),
+        ] {
+            plan.synthesized_aggregate_occurrence(owner, seat, &path, Fixed(role))
+                .unwrap_or_else(|error| {
+                    panic!("{role:?} at {path:?} must have a record, not be pruned: {error:?}")
+                });
+        }
+
+        // The site-bound child's recorded owners ARE the seat's operand's.
+        let record = plan
+            .synthesized_aggregate_record(owner, seat, &err.field(1), Fixed(R::OptionSome))
+            .expect("`OptionSome` has a record");
+        let authority = occurrence_authority(&plan, seat).expect("the seat has an authority");
+        let operand = authority
+            .children
+            .first()
+            .expect("the seat has its path operand");
+        assert_eq!(
+            record.children[0].owners,
+            aggregate_child_referent_owners(&plan, operand).expect("the operand resolves"),
+            "the site-bound child's evidence must BE the seat operand's, not a \
+             conservative stand-in for it"
+        );
+
+        // `PrivateBufferSpan` and `ReadSome`, at a positioned-read seat.
+        let (plan, seat, owner) =
+            d7_seat_fixture(ken_host::HostOpV1::FsReadAt, d7_three_operands());
+        let ok = SynthesizedAggregatePath::root(OK);
+        for (path, role) in [
+            (ok.alternative(1), R::ReadSome),
+            (ok.alternative(1).field(0), R::PrivateBufferSpan),
+            (ok.alternative(1).field(1), R::PrivateTransferCount),
+            (ok.alternative(0), R::ReadEof),
+        ] {
+            plan.synthesized_aggregate_occurrence(owner, seat, &path, Fixed(role))
+                .unwrap_or_else(|error| {
+                    panic!("{role:?} at {path:?} must have a record: {error:?}")
+                });
+        }
+    }
+
+    /// **An `Absent` node is never a child.**
+    ///
+    /// MEASURED: deriving owners for `Absent` in a child position is a planner
+    /// refusal, while the derivable node in the same position resolves.
+    ///
+    /// CLAIMED: `Absent` marks a host-result arm that builds no aggregate, and
+    /// it is a distinct arm from `SiteOperand` precisely so "nothing is built
+    /// here" cannot be read as "a child the site supplies".
+    ///
+    /// THE GAP: this drives the derivation directly; that the production tree
+    /// puts `Absent` only at roots is the tree's own shape.
+    #[test]
+    fn an_absent_node_is_never_a_child() {
+        let (plan, seat, _) = d7_seat_fixture(ken_host::HostOpV1::FsWriteAt, d7_three_operands());
+        assert!(
+            node_referent_owners(&plan, seat, SynthesizedAggregateNode::Absent).is_err(),
+            "an absent child means the tree claims an allocation whose operand \
+             is not built"
+        );
+        // The positive control: the same position with a real node resolves,
+        // so the refusal above is not "children never resolve".
+        assert!(
+            node_referent_owners(&plan, seat, SynthesizedAggregateNode::native_int()).is_ok(),
+            "a scalar in the same position must resolve, or the refusal is vacuous"
+        );
+    }
+
+    /// **A dynamic child's owners are the UNION of its alternatives'.**
+    ///
+    /// MEASURED: a two-alternative set whose members are both persistent yields
+    /// `{PersistentStore}`. The SAME set with one arena-capable alternative
+    /// yields a set containing `InvocationArena`, and a parent holding it is
+    /// `InvocationAggregate` rather than `PersistentGround`.
+    ///
+    /// CLAIMED: the value at a dynamic position is whichever alternative the
+    /// discriminator selects, so the parent must survive every one of them —
+    /// one invocation-capable alternative makes the parent invocation-owned.
+    ///
+    /// THE GAP: the arena-capable alternative is reached through a seat operand
+    /// that is a closure, because **no alternative in the production tree is
+    /// arena-capable today**. So this proves the UNION rule and the lane it
+    /// selects, not that any production parent takes the invocation lane
+    /// through a dynamic child. Without the escaping half the row would pass
+    /// equally for the flat `{PersistentStore}` answer it replaced, which is
+    /// why both halves are asserted against the same set shape.
+    #[test]
+    fn a_dynamic_childs_owners_are_the_union_of_its_alternatives() {
+        use SynthesizedAggregateNode as N;
+        use SynthesizedFixedConstructorRole as R;
+
+        // Operand 0 is a closure, which `derive_occurrence_lifetime` answers
+        // `ActivationOwned` for -- so `SiteOperand(0)` at this seat is the
+        // arena-capable leaf the production tree does not have.
+        let (plan, seat, _) = d7_seat_fixture(
+            ken_host::HostOpV1::FsWriteAt,
+            vec![
+                RuntimeExpr::LexicalClosure {
+                    captures: Vec::new(),
+                    params: vec!["x".to_string()],
+                    body: Box::new(unit()),
+                },
+                RuntimeExpr::Value(RuntimeValue::Int(2.into())),
+                RuntimeExpr::Value(RuntimeValue::Int(3.into())),
+            ],
+        );
+        assert!(
+            node_referent_owners(&plan, seat, N::SiteOperand(0))
+                .expect("the closure operand resolves")
+                .contains(&BoundaryReferentOwner::InvocationArena),
+            "the fixture's operand 0 must be arena-capable, or the escaping half              below is not testing anything"
+        );
+
+        // Both alternatives persistent.
+        const PERSISTENT: &[SynthesizedAggregateNode] = &[
+            N::nullary(R::ReadEof),
+            N::Fixed {
+                role: R::PrivateTransferCount,
+                children: &[N::bounded_nat(), N::bounded_nat()],
+            },
+        ];
+        assert_eq!(
+            node_referent_owners(
+                &plan,
+                seat,
+                N::Dynamic(SynthesizedDynamicSet::Alternatives(PERSISTENT))
+            )
+            .expect("an all-persistent set resolves"),
+            vec![BoundaryReferentOwner::PersistentStore],
+            "no alternative can be arena-owned, so the union is persistent"
+        );
+
+        // The SAME shape with one arena-capable alternative.
+        const ESCAPING: &[SynthesizedAggregateNode] = &[
+            N::nullary(R::ReadEof),
+            N::Fixed {
+                role: R::PrivateTransferCount,
+                children: &[N::SiteOperand(0)],
+            },
+        ];
+        let union = node_referent_owners(
+            &plan,
+            seat,
+            N::Dynamic(SynthesizedDynamicSet::Alternatives(ESCAPING)),
+        )
+        .expect("a set with an escaping alternative resolves");
+        assert!(
+            union.contains(&BoundaryReferentOwner::InvocationArena),
+            "one arena-capable alternative must reach the union, got {union:?}"
+        );
+
+        // And it must change the PARENT's lane, not merely its owner set.
+        const PARENT_PERSISTENT: &[SynthesizedAggregateNode] =
+            &[N::Dynamic(SynthesizedDynamicSet::Alternatives(PERSISTENT))];
+        const PARENT_ESCAPING: &[SynthesizedAggregateNode] =
+            &[N::Dynamic(SynthesizedDynamicSet::Alternatives(ESCAPING))];
+        assert_eq!(
+            fixed_node_selected_owner(&plan, seat, PARENT_PERSISTENT)
+                .expect("the persistent parent resolves"),
+            BoundaryReferentOwner::PersistentStore
+        );
+        assert_eq!(
+            fixed_node_selected_owner(&plan, seat, PARENT_ESCAPING)
+                .expect("the escaping parent resolves"),
+            BoundaryReferentOwner::InvocationArena,
+            "a parent whose dynamic child has ONE invocation-capable alternative              must take the invocation lane; answering persistent because the set              is shaped persistently would allocate it over a child that can be              shorter-lived than it"
+        );
+
+        // An empty alternative list is a refusal, not a vacuous persistent
+        // answer -- an empty owner set satisfies the escape test trivially.
+        assert!(
+            node_referent_owners(
+                &plan,
+                seat,
+                N::Dynamic(SynthesizedDynamicSet::Alternatives(&[]))
+            )
+            .is_err(),
+            "an alternative-less dynamic child must refuse rather than resolve              persistent by having nothing to check"
+        );
+    }
+
+    /// **`D7` — the flattening reproduces the MEASURED tree, alternatives
+    /// included.**
+    ///
+    /// MEASURED: instrumenting every `synthesized_constructor` and
+    /// `synthesized_dynamic_alternative` call with the kinds of its own
+    /// children, single-threaded, produced the edge set restated below. The
+    /// corrected flattening interns every constructor-valued node: fixed nodes,
+    /// every dynamic alternative at its ordered position, and every
+    /// planner-issued `IOError` role.
+    ///
+    /// CLAIMED: the tree in `host_effect_recipe_tree` is the structure the
+    /// emitter actually builds, the paths it flattens to are the positions
+    /// those uses occupy, and `P` now covers every allocation.
+    ///
+    /// THE GAP: this pins the flattening against **the measurement**, not
+    /// against the emitter. What keeps the emitter honest is the
+    /// per-construction reconciliation. `FsWriteFile` and `FsChangeMode` have
+    /// no fixture, so their rows are derived from the emitter's own operation
+    /// match rather than observed, and are marked below.
+    #[test]
+    fn the_flattening_reproduces_the_measured_tree() {
+        use ken_host::HostOpV1 as Op;
+        use SynthesizedAggregateRoot::{HostResultError as ERR, HostResultOk as OK};
+        use SynthesizedConstructorRole::Fixed;
+        use SynthesizedFixedConstructorRole as R;
+
+        let (plan, _, _) = d7_seat_fixture(Op::FsWriteAt, d7_three_operands());
+        let io_errors = plan.semantic.synthesized_io_error_roles().len();
+        assert!(
+            io_errors > 1,
+            "the closed IOError inventory must be non-trivial, or the alternative \
+             rows below are vacuous"
+        );
+
+        let path = |root, steps: &[SynthesizedAggregateStep]| SynthesizedAggregatePath {
+            root,
+            steps: steps.to_vec(),
+        };
+        let field = SynthesizedAggregateStep::Field;
+        let alt = SynthesizedAggregateStep::Alternative;
+
+        // The ten resource-surface alternatives, in the emitter's order.
+        let surface: Vec<(SynthesizedAggregatePath, SynthesizedConstructorRole)> = [
+            R::ResourceHostIo,
+            R::ResourceClosed,
+            R::ResourceMalformed,
+            R::ResourceRightNotHeld,
+            R::ResourceReleaseFailed,
+            R::ResourceKindMismatch,
+            R::ResourceBufferLimit,
+            R::ResourceInvalidOffset,
+            R::ResourceInvalidBounds,
+            R::ResourceNoProgress,
+        ]
+        .into_iter()
+        .enumerate()
+        .map(|(index, role)| (path(ERR, &[alt(index as u32)]), Fixed(role)))
+        .chain(
+            // `ResourceKind` at its THREE distinct parent paths, each with its
+            // own two alternatives. These are the repeated-role sites.
+            [
+                (4_u32, 0_u32),
+                (5, 0),
+                (5, 1),
+            ]
+            .into_iter()
+            .flat_map(|(alternative, position)| {
+                [R::ResourceKindFsHandle, R::ResourceKindBuffer]
+                    .into_iter()
+                    .enumerate()
+                    .map(move |(index, role)| {
+                        (
+                            path(
+                                ERR,
+                                &[alt(alternative), field(position), alt(index as u32)],
+                            ),
+                            Fixed(role),
+                        )
+                    })
+            }),
+        )
+        .chain(std::iter::once((
+            path(ERR, &[alt(4), field(1)]),
+            Fixed(R::ResourceTraceIdentity),
+        )))
+        .collect();
+
+        // The two `IOError` sets the resource surface reaches.
+        let surface_io: Vec<(SynthesizedAggregatePath, SynthesizedConstructorRole)> =
+            [(0_u32, 0_u32), (4, 2)]
+                .into_iter()
+                .flat_map(|(alternative, position)| {
+                    plan.semantic
+                        .synthesized_io_error_roles()
+                        .iter()
+                        .enumerate()
+                        .map(move |(index, role)| {
+                            (
+                                path(
+                                    ERR,
+                                    &[alt(alternative), field(position), alt(index as u32)],
+                                ),
+                                SynthesizedConstructorRole::IoError(*role),
+                            )
+                        })
+                })
+                .collect();
+
+        let file_error = |operation: R| -> Vec<(SynthesizedAggregatePath, SynthesizedConstructorRole)> {
+            let mut rows = vec![
+                (path(ERR, &[]), Fixed(R::FileError)),
+                (path(ERR, &[field(0)]), Fixed(operation)),
+                (path(ERR, &[field(1)]), Fixed(R::OptionSome)),
+            ];
+            rows.extend(
+                plan.semantic
+                    .synthesized_io_error_roles()
+                    .iter()
+                    .enumerate()
+                    .map(|(index, role)| {
+                        (
+                            path(ERR, &[field(2), alt(index as u32)]),
+                            SynthesizedConstructorRole::IoError(*role),
+                        )
+                    }),
+            );
+            rows
+        };
+        let console_error = || -> Vec<(SynthesizedAggregatePath, SynthesizedConstructorRole)> {
+            plan.semantic
+                .synthesized_io_error_roles()
+                .iter()
+                .enumerate()
+                .map(|(index, role)| {
+                    (
+                        path(ERR, &[alt(index as u32)]),
+                        SynthesizedConstructorRole::IoError(*role),
+                    )
+                })
+                .collect()
+        };
+        let unit = || vec![(path(OK, &[]), Fixed(R::Unit))];
+
+        let expected: Vec<(Op, Vec<(SynthesizedAggregatePath, SynthesizedConstructorRole)>)> = vec![
+            // Returns a `Bool` above the synthesis entirely.
+            (Op::ConsoleIsTerminal, vec![]),
+            (
+                Op::ConsoleWrite,
+                console_error().into_iter().chain(unit()).collect(),
+            ),
+            (
+                Op::ConsoleFlush,
+                console_error().into_iter().chain(unit()).collect(),
+            ),
+            (Op::FsReadFile, file_error(R::FileOperationRead)),
+            (Op::FsOpen, file_error(R::FileOperationRead)),
+            // ⚠ DERIVED, not observed — no fixture exercises these two. The
+            // `Unit` row is the emitter's `else` branch, which the flat use
+            // table this tree replaced had MISSED.
+            (
+                Op::FsWriteFile,
+                file_error(R::FileOperationWrite)
+                    .into_iter()
+                    .chain(unit())
+                    .collect(),
+            ),
+            (
+                Op::FsChangeMode,
+                file_error(R::FileOperationChangeMode)
+                    .into_iter()
+                    .chain(unit())
+                    .collect(),
+            ),
+            (
+                Op::BufferAllocate,
+                surface.iter().cloned().chain(surface_io.clone()).collect(),
+            ),
+            (
+                Op::BufferFreeze,
+                surface.iter().cloned().chain(surface_io.clone()).collect(),
+            ),
+            (
+                Op::FsHandleMetadata,
+                surface.iter().cloned().chain(surface_io.clone()).collect(),
+            ),
+            (
+                Op::ResourceRelease,
+                surface
+                    .iter()
+                    .cloned()
+                    .chain(surface_io.clone())
+                    .chain(unit())
+                    .collect(),
+            ),
+            (
+                Op::FsReadAt,
+                surface
+                    .iter()
+                    .cloned()
+                    .chain(surface_io.clone())
+                    .chain([
+                        (path(OK, &[alt(0)]), Fixed(R::ReadEof)),
+                        (path(OK, &[alt(1)]), Fixed(R::ReadSome)),
+                        (path(OK, &[alt(1), field(0)]), Fixed(R::PrivateBufferSpan)),
+                        (
+                            path(OK, &[alt(1), field(1)]),
+                            Fixed(R::PrivateTransferCount),
+                        ),
+                    ])
+                    .collect(),
+            ),
+            (
+                Op::FsWriteAt,
+                surface
+                    .iter()
+                    .cloned()
+                    .chain(surface_io.clone())
+                    .chain([
+                        (path(OK, &[]), Fixed(R::Wrote)),
+                        (path(OK, &[field(0)]), Fixed(R::PrivateTransferCount)),
+                    ])
+                    .collect(),
+            ),
+        ];
+
+        for (operation, rows) in &expected {
+            let flattened = flatten_allocation_reachable_uses(&plan, *operation)
+                .into_iter()
+                .map(|semantic_use| (semantic_use.path, semantic_use.role))
+                .collect::<BTreeSet<_>>();
+            let wanted = rows.iter().cloned().collect::<BTreeSet<_>>();
+            assert_eq!(
+                flattened, wanted,
+                "{operation:?}'s allocation-reachable population disagrees with \
+                 the measured tree"
+            );
+        }
+    }
+
+    /// **A repeated role at ONE seat gets DISTINCT REAL RECORDS.**
+    ///
+    /// MEASURED: at one `FsWriteAt` seat, `ResourceKindFsHandle` has three
+    /// records — under `ResourceReleaseFailed` field 0 and `ResourceKindMismatch`
+    /// fields 0 and 1 — with three distinct occurrence identities. The `IOError`
+    /// set likewise has two reachable positions on that tree, each with a full
+    /// set of per-role records.
+    ///
+    /// CLAIMED: `(owner, seat, path, role)` is injective where
+    /// `(owner, seat, role)` is not, and the separation now produces **records**
+    /// rather than only distinguishable keys.
+    ///
+    /// THE GAP: the previous spelling of this row asserted only that the six
+    /// sites had distinct *paths*, and said so — because under the fixed-only
+    /// population none of them had a record. That is exactly what the Architect
+    /// rejected. This row now reads the real population.
+    #[test]
+    fn a_repeated_role_at_one_seat_gets_distinct_real_records() {
+        use SynthesizedAggregateRoot::HostResultError as ERR;
+        use SynthesizedConstructorRole::Fixed;
+        use SynthesizedFixedConstructorRole as R;
+
+        let (plan, seat, owner) =
+            d7_seat_fixture(ken_host::HostOpV1::FsWriteAt, d7_three_operands());
+        let err = SynthesizedAggregatePath::root(ERR);
+
+        // The three `ResourceKind` parent paths, each interning its own two
+        // alternatives.
+        let kind_parents = [
+            err.alternative(4).field(0),
+            err.alternative(5).field(0),
+            err.alternative(5).field(1),
+        ];
+        let mut identities = BTreeSet::new();
+        for parent in &kind_parents {
+            for (position, role) in
+                [R::ResourceKindFsHandle, R::ResourceKindBuffer].iter().enumerate()
+            {
+                let occurrence = plan
+                    .synthesized_aggregate_occurrence(
+                        owner,
+                        seat,
+                        &parent.alternative(position as u32),
+                        Fixed(*role),
+                    )
+                    .unwrap_or_else(|error| {
+                        panic!("{role:?} under {parent:?} must have a REAL record: {error:?}")
+                    });
+                assert!(
+                    identities.insert(occurrence),
+                    "{role:?} under {parent:?} reused an identity, so one record \
+                     is authorizing two allocations"
+                );
+            }
+        }
+        assert_eq!(
+            identities.len(),
+            6,
+            "three parent paths x two alternatives is six non-aliasing records"
+        );
+
+        // Each reachable `IOError` set produces path-keyed `IoError(role)`
+        // records, and the two sets do not share one.
+        let roles = plan.semantic.synthesized_io_error_roles().to_vec();
+        let mut io_identities = BTreeSet::new();
+        for parent in [err.alternative(0).field(0), err.alternative(4).field(2)] {
+            for (position, role) in roles.iter().enumerate() {
+                let occurrence = plan
+                    .synthesized_aggregate_occurrence(
+                        owner,
+                        seat,
+                        &parent.alternative(position as u32),
+                        SynthesizedConstructorRole::IoError(*role),
+                    )
+                    .unwrap_or_else(|error| {
+                        panic!("IOError {position} under {parent:?} must have a record: {error:?}")
+                    });
+                assert!(
+                    io_identities.insert(occurrence),
+                    "IOError {position} under {parent:?} reused an identity"
+                );
+            }
+        }
+        assert_eq!(
+            io_identities.len(),
+            roles.len() * 2,
+            "two reachable IOError sets x the closed inventory is that many records"
+        );
+    }
+
+    /// **A path is not an index: the STEP KINDS carry information.**
+    ///
+    /// MEASURED: taking a `Field` step where the tree has a dynamic set, or an
+    /// `Alternative` step where it has a fixed constructor, is refused — even
+    /// when the position is in range. Collapsing, dropping or swapping a step
+    /// resolves to a different node or to nothing. A path continuing past an
+    /// `IOError` alternative is refused.
+    ///
+    /// CLAIMED: `SynthesizedAggregatePath` names at most one node, and the
+    /// mutations a hand-written path in `core.rs` could plausibly contain are
+    /// each caught rather than silently landing on a neighbour.
+    ///
+    /// THE GAP: this drives the resolver directly. That the *emitter's* paths
+    /// are right is a different claim, held by the construction-time
+    /// reconciliation.
+    #[test]
+    fn a_path_step_kind_is_load_bearing_not_an_index() {
+        use SynthesizedAggregateRoot::{HostResultError as ERR, HostResultOk as OK};
+        use SynthesizedConstructorRole::Fixed;
+        use SynthesizedFixedConstructorRole as R;
+
+        let (plan, seat, _) = d7_seat_fixture(ken_host::HostOpV1::FsWriteAt, d7_three_operands());
+        let err = SynthesizedAggregatePath::root(ERR);
+        let ok = SynthesizedAggregatePath::root(OK);
+
+        // The truth: `ResourceTraceIdentity` at alternative 4, field 1.
+        assert_eq!(
+            plan.synthesized_tree_node(seat, &err.alternative(4).field(1))
+                .expect("the measured path resolves")
+                .0,
+            Fixed(R::ResourceTraceIdentity)
+        );
+
+        // COLLAPSE — the same two positions with the alternative step dropped.
+        // Field 4 of a dynamic set is not a step that set can take.
+        plan.synthesized_tree_node(seat, &err.field(4).field(1))
+            .expect_err("a field step into a dynamic set must refuse");
+
+        // REMOVE — one step short lands on the alternative itself, which is a
+        // constructor, so this resolves to a DIFFERENT role rather than
+        // failing. That is exactly why the role is compared too.
+        assert_eq!(
+            plan.synthesized_tree_node(seat, &err.alternative(4))
+                .expect("the alternative itself is a node")
+                .0,
+            Fixed(R::ResourceReleaseFailed),
+            "a dropped step must not silently keep the same role"
+        );
+
+        // SWAP — the two step kinds exchanged.
+        plan.synthesized_tree_node(seat, &err.field(4).alternative(1))
+            .expect_err("an alternative step into a constructor must refuse");
+
+        // A sibling FIELD is a different node: field 0 of that alternative is
+        // the `ResourceKind` dynamic set, which is not a constructor itself.
+        plan.synthesized_tree_node(seat, &err.alternative(4).field(0))
+            .expect_err("a dynamic set is not a constructor node");
+
+        // UNPLANNED — a position past the end of the alternative list.
+        plan.synthesized_tree_node(seat, &err.alternative(10))
+            .expect_err("the resource surface has ten alternatives, 0 through 9");
+
+        // An `IOError` alternative is terminal: nothing below it is a
+        // constructor, so a path continuing past one names no node.
+        let io = err.alternative(0).field(0);
+        plan.synthesized_tree_node(seat, &io.alternative(0))
+            .expect("an IOError alternative is a node");
+        plan.synthesized_tree_node(seat, &io.alternative(0).field(0))
+            .expect_err("a path may not continue past an IOError alternative");
+        plan.synthesized_tree_node(
+            seat,
+            &io.alternative(u32::try_from(plan.semantic.synthesized_io_error_roles().len())
+                .expect("the inventory fits")),
+        )
+        .expect_err("a position past the closed IOError inventory must refuse");
+
+        // The two ROOTS are not interchangeable.
+        assert_eq!(
+            plan.synthesized_tree_node(seat, &ok)
+                .expect("the ok root of `FsWriteAt` is `Wrote`")
+                .0,
+            Fixed(R::Wrote)
+        );
+        assert_ne!(
+            plan.synthesized_tree_node(seat, &ok).map(|node| node.0).ok(),
+            plan.synthesized_tree_node(seat, &err).map(|node| node.0).ok(),
+            "the two arms must not resolve to the same node"
+        );
+    }
+
+    /// **The ABANDONED eager `IOError` template contributes neither `P` nor an
+    /// allocation — because it is no longer built.**
+    ///
+    /// MEASURED: no operation's tree names an `IOError` set at the bare error
+    /// root except the console operations, whose whole error value IS that set.
+    /// For the six resource-surface operations, `P` contains no record at the
+    /// error root, and `lower_process_host_effect` constructs the generic
+    /// template only inside the two branches that use it.
+    ///
+    /// CLAIMED: the template contributes no record and no event, and does so by
+    /// **not existing** rather than by being planned and proven unreachable.
+    ///
+    /// THE GAP: this is a statement about the tree and about `P`. That the
+    /// emitter no longer builds it eagerly is a source fact the reconciliation
+    /// enforces indirectly — an eagerly-built template would have to be given
+    /// some path, and the resource operations' trees have no `IOError` node at
+    /// the root to give it.
+    #[test]
+    fn an_abandoned_eager_template_contributes_neither_records_nor_allocation() {
+        use ken_host::HostOpV1 as Op;
+        use SynthesizedAggregateNode as N;
+        use SynthesizedAggregateRoot::HostResultError as ERR;
+
+        let (plan, _, _) = d7_seat_fixture(Op::FsWriteAt, d7_three_operands());
+        for operation in [
+            Op::FsHandleMetadata,
+            Op::ResourceRelease,
+            Op::BufferAllocate,
+            Op::BufferFreeze,
+            Op::FsReadAt,
+            Op::FsWriteAt,
+        ] {
+            let root = host_effect_recipe_tree(operation).node(ERR);
+            assert!(
+                !matches!(root, N::Dynamic(SynthesizedDynamicSet::IoErrors)),
+                "{operation:?} builds its own surface error, so the eager \
+                 template is abandoned and must not be at its error root"
+            );
+            assert!(
+                flatten_allocation_reachable_uses(&plan, operation)
+                    .iter()
+                    .all(|semantic_use| {
+                        semantic_use.path != SynthesizedAggregatePath::root(ERR)
+                    }),
+                "{operation:?} plans a record at the error root, which is the \
+                 abandoned template's position"
+            );
+        }
+
+        // The positive control: the operations that DO use the generic template
+        // have it exactly where the measurement put it. Without this, the rows
+        // above would pass for an implementation that never emits an `IOError`
+        // set at all.
+        assert!(
+            matches!(
+                host_effect_recipe_tree(Op::ConsoleWrite).node(ERR),
+                N::Dynamic(SynthesizedDynamicSet::IoErrors)
+            ),
+            "`ConsoleWrite`'s whole error value IS the generic template"
+        );
+        let file_children = match host_effect_recipe_tree(Op::FsReadFile).node(ERR) {
+            N::Fixed { children, .. } => children,
+            other => panic!("`FsReadFile`'s error root is `FileError`, got {other:?}"),
+        };
+        assert!(
+            matches!(
+                file_children[2],
+                N::Dynamic(SynthesizedDynamicSet::IoErrors)
+            ),
+            "`FileError` field 2 IS the generic template"
+        );
+    }
+
+    /// **A record's lookup key includes its PATH, not only its role.**
+    ///
+    /// MEASURED: at a real `FsWriteAt` seat, `ResourceKindFsHandle` resolves at
+    /// `error.alternative(4).field(0).alternative(0)` and refuses at every
+    /// other path — with the owner, seat and role held identical. The
+    /// population now genuinely COLLIDES on `(owner, seat, role)`: that role
+    /// has three records at one seat.
+    ///
+    /// CLAIMED: `synthesized_aggregate_record` matches on all four key parts,
+    /// so a path-keyed population cannot silently degrade to a role-keyed one.
+    ///
+    /// THE GAP — worth recording because it changed under the correction. Under
+    /// the earlier fixed-only population this row had to be driven by a
+    /// hand-built key, because no two records shared `(owner, seat, role)` and
+    /// dropping the path from the lookup left the suite green. With every
+    /// alternative interned, the collision is real and the production
+    /// population itself discriminates.
+    #[test]
+    fn a_records_lookup_key_includes_its_path_not_only_its_role() {
+        use SynthesizedAggregateRoot::{HostResultError as ERR, HostResultOk as OK};
+        use SynthesizedConstructorRole::Fixed;
+        use SynthesizedFixedConstructorRole as R;
+
+        let (plan, seat, owner) =
+            d7_seat_fixture(ken_host::HostOpV1::FsWriteAt, d7_three_operands());
+        let err = SynthesizedAggregatePath::root(ERR);
+
+        // The real collision: one role, one seat, three records.
+        let colliding = [
+            err.alternative(4).field(0).alternative(0),
+            err.alternative(5).field(0).alternative(0),
+            err.alternative(5).field(1).alternative(0),
+        ];
+        let resolved = colliding
+            .iter()
+            .map(|path| {
+                plan.synthesized_aggregate_occurrence(
+                    owner,
+                    seat,
+                    path,
+                    Fixed(R::ResourceKindFsHandle),
+                )
+                .expect("each of the three uses has its own record")
+            })
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            resolved.len(),
+            3,
+            "one role at one seat resolves to three DIFFERENT occurrences, which \
+             is only possible if the path is in the key"
+        );
+
+        // And paths that name no node refuse rather than falling back.
+        for wrong in [
+            err.alternative(4).field(0).alternative(7),
+            err.clone(),
+            SynthesizedAggregatePath::root(OK),
+        ] {
+            assert!(
+                plan.synthesized_aggregate_occurrence(
+                    owner,
+                    seat,
+                    &wrong,
+                    Fixed(R::ResourceKindFsHandle)
+                )
+                .is_err(),
+                "{wrong:?} must not resolve; owner, seat and role are identical, \
+                 so only the path can refuse it"
+            );
+        }
+
+        // The role is still part of the key too: the right path with the wrong
+        // role refuses. Without this, the rows above would pass for a lookup
+        // that matched on the path alone.
+        assert!(
+            plan.synthesized_aggregate_occurrence(owner, seat, &colliding[0], Fixed(R::Wrote))
+                .is_err(),
+            "the right path with the wrong role must refuse"
+        );
+    }
+
+    /// **The PLANNER owns the alternative population, count included.**
+    ///
+    /// MEASURED: at a real `FsWriteAt` seat the resource surface reports ten
+    /// ordered roles, `ResourceKind` reports its two, and a reachable `IOError`
+    /// set reports the whole closed inventory. A path that names a constructor,
+    /// an `IOError` alternative, or nothing at all is refused rather than
+    /// answering an empty population.
+    ///
+    /// CLAIMED: an emitter's alternative vector can be compared for EQUALITY
+    /// against this, so a truncated set is caught at construction.
+    ///
+    /// THE GAP — this is the correction's subject, so it is worth stating what
+    /// the previous spelling did. It iterated the emitter's own vector and
+    /// resolved each position, which rejects an EXTRA alternative (its path
+    /// does not exist) but accepts a MISSING final one, because a prefix agrees
+    /// with every position it has. The empty vector agreed with everything.
+    ///
+    /// ⛔ The gap statement that stood here added that a whole-pass
+    /// `image(R) = P` closeout *"would eventually surface the unused records"*.
+    /// It would not, and there is no such closeout: `P` is an authorization
+    /// population, the whole-pass close states `image(R) ⊆ P`, and a planned
+    /// record no event related is lawful. A truncated emitter and a lawfully
+    /// unused record are the same shape at the ledger, so this boundary has to
+    /// establish the equality itself rather than borrow it from a later pass.
+    ///
+    /// ⚠ The refusal on an empty population is what makes the count usable: a
+    /// zero-length expectation would make the emitter's own emptiness agree.
+    #[test]
+    fn the_planner_owns_the_ordered_alternative_population() {
+        use SynthesizedAggregateRoot::{HostResultError as ERR, HostResultOk as OK};
+        use SynthesizedConstructorRole::Fixed;
+        use SynthesizedFixedConstructorRole as R;
+
+        let (plan, seat, _) = d7_seat_fixture(ken_host::HostOpV1::FsWriteAt, d7_three_operands());
+        let err = SynthesizedAggregatePath::root(ERR);
+
+        assert_eq!(
+            plan.synthesized_dynamic_alternatives(seat, &err)
+                .expect("the error root is the resource surface"),
+            vec![
+                Fixed(R::ResourceHostIo),
+                Fixed(R::ResourceClosed),
+                Fixed(R::ResourceMalformed),
+                Fixed(R::ResourceRightNotHeld),
+                Fixed(R::ResourceReleaseFailed),
+                Fixed(R::ResourceKindMismatch),
+                Fixed(R::ResourceBufferLimit),
+                Fixed(R::ResourceInvalidOffset),
+                Fixed(R::ResourceInvalidBounds),
+                Fixed(R::ResourceNoProgress),
+            ],
+            "the surface population is ordered and closed, and its COUNT is the \
+             planner's rather than whatever the emitter built"
+        );
+
+        assert_eq!(
+            plan.synthesized_dynamic_alternatives(seat, &err.alternative(4).field(0))
+                .expect("`ResourceReleaseFailed` field 0 is the `ResourceKind` set"),
+            vec![Fixed(R::ResourceKindFsHandle), Fixed(R::ResourceKindBuffer)],
+        );
+
+        let roles = plan.semantic.synthesized_io_error_roles().to_vec();
+        assert!(roles.len() > 1, "the closed inventory must be non-trivial");
+        assert_eq!(
+            plan.synthesized_dynamic_alternatives(seat, &err.alternative(0).field(0))
+                .expect("`ResourceHostIo` field 0 is a reachable IOError set"),
+            roles
+                .iter()
+                .map(|role| SynthesizedConstructorRole::IoError(*role))
+                .collect::<Vec<_>>(),
+            "a reachable IOError set reports its whole closed inventory"
+        );
+
+        // ⛔ Every non-set path REFUSES rather than reporting an empty
+        // population. An empty expectation would make an emitter's own
+        // emptiness agree, which is the failure this row exists to exclude.
+        for wrong in [
+            err.alternative(4),                          // a constructor
+            err.alternative(4).field(1),                 // a constructor
+            err.alternative(0).field(0).alternative(0),  // an IOError ALTERNATIVE
+            err.alternative(12),                         // no node at all
+            SynthesizedAggregatePath::root(OK),          // `Wrote`, a constructor
+        ] {
+            assert!(
+                plan.synthesized_dynamic_alternatives(seat, &wrong).is_err(),
+                "{wrong:?} does not name an alternative set and must refuse, not \
+                 report an empty population"
+            );
+        }
+    }
+
+    /// **A lawful non-dynamic root and a FAILED lookup are different answers.**
+    ///
+    /// MEASURED: at a real `FsWriteAt` seat the error root reports a population
+    /// and the `ok` root — `Wrote`, a constructor — reports `Ok(None)`. At an
+    /// `FsReadFile` seat the `ok` root is `Absent` and also reports `Ok(None)`.
+    /// A seat that is not an `Effect` occurrence, and a path that leaves the
+    /// tree or names an `IOError` position outside the closed inventory, each
+    /// report `Err`.
+    ///
+    /// CLAIMED: absence is typed apart from failure, so a caller cannot act on
+    /// "the planner plans no set here" when what actually happened is that the
+    /// question could not be answered.
+    ///
+    /// THE GAP — and it is the reason this row exists. The root reconciliation
+    /// wrote `.ok()` on this query, which merged every failure into absence: a
+    /// non-dynamic emitted root then matched the absent case and was accepted,
+    /// a missing-authority default inside a function whose stated contract is
+    /// that neither direction may be defaulted. **No shape or truncation
+    /// mutation can find that**, because both keep the lookup working — which
+    /// is why the five root mutations were all green against it. The
+    /// distinguishing evidence is exactly the two halves below, and the
+    /// positive half matters as much as the negative: without it, the
+    /// correction would be satisfied by making every non-dynamic root fail.
+    #[test]
+    fn a_lawful_non_dynamic_root_is_not_a_failed_lookup() {
+        use SynthesizedAggregateRoot::{HostResultError as ERR, HostResultOk as OK};
+
+        let (plan, seat, _) = d7_seat_fixture(ken_host::HostOpV1::FsWriteAt, d7_three_operands());
+        let err = SynthesizedAggregatePath::root(ERR);
+        let ok = SynthesizedAggregatePath::root(OK);
+
+        // Dynamic root: a population.
+        assert_eq!(
+            plan.synthesized_root_alternative_population(seat, &err)
+                .expect("the error root resolves")
+                .expect("the error root is the resource surface")
+                .len(),
+            10
+        );
+
+        // ⭐ LAWFULLY non-dynamic: `Wrote` is a constructor, so the answer is a
+        // resolved absence rather than a failure.
+        assert_eq!(
+            plan.synthesized_root_alternative_population(seat, &ok)
+                .expect("the ok root resolves lawfully"),
+            None,
+            "a constructor root is a resolved non-set, not a failed lookup"
+        );
+
+        // The same for an arm that builds no aggregate at all.
+        let (absent_plan, absent_seat, _) = d7_seat_fixture(
+            ken_host::HostOpV1::FsReadFile,
+            vec![RuntimeExpr::Value(RuntimeValue::Int(1.into()))],
+        );
+        assert_eq!(
+            absent_plan
+                .synthesized_root_alternative_population(
+                    absent_seat,
+                    &SynthesizedAggregatePath::root(OK)
+                )
+                .expect("an absent ok arm resolves lawfully"),
+            None,
+            "`FsReadFile`'s `ok` builds no aggregate, which is still a RESOLVED \
+             answer"
+        );
+
+        // ⛔ And every way the question can fail to be answerable stays `Err`.
+        let non_effect = plan
+            .source_occurrences
+            .iter()
+            .flatten()
+            .find(|occurrence| !matches!(occurrence.expr, RuntimeExpr::Effect { .. }))
+            .expect("the fixture has a non-effect occurrence")
+            .static_origin;
+        assert!(
+            plan.synthesized_root_alternative_population(non_effect, &err)
+                .is_err(),
+            "a seat that is not a host effect cannot answer, and must not read \
+             as a root with no planned set"
+        );
+        assert!(
+            plan.synthesized_root_alternative_population(
+                StaticOriginId(u32::MAX),
+                &err
+            )
+            .is_err(),
+            "an origin outside the occurrence population must fail, not resolve \
+             to an absence"
+        );
+        assert!(
+            plan.synthesized_root_alternative_population(seat, &err.alternative(12))
+                .is_err(),
+            "a path that leaves the tree must fail, not resolve to an absence"
+        );
+        let inventory = plan.semantic.synthesized_io_error_roles().len();
+        assert!(
+            plan.synthesized_root_alternative_population(
+                seat,
+                &err.alternative(0).field(0).alternative(
+                    u32::try_from(inventory).expect("the inventory fits")
+                )
+            )
+            .is_err(),
+            "an IOError position outside the closed inventory must fail, not \
+             resolve to an absence"
+        );
+    }
+
+    /// Every operation whose tree this module states.
+    fn measured_tree_operations() -> Vec<ken_host::HostOpV1> {
+        use ken_host::HostOpV1 as Op;
+        vec![
+            Op::ConsoleIsTerminal,
+            Op::ConsoleWrite,
+            Op::ConsoleFlush,
+            Op::FsReadFile,
+            Op::FsOpen,
+            Op::FsWriteFile,
+            Op::FsChangeMode,
+            Op::BufferAllocate,
+            Op::BufferFreeze,
+            Op::FsHandleMetadata,
+            Op::ResourceRelease,
+            Op::FsReadAt,
+            Op::FsWriteAt,
+        ]
+    }
+
+    /// Every node in both of an operation's trees, in no particular order.
+    fn every_tree_node(operation: ken_host::HostOpV1) -> Vec<SynthesizedAggregateNode> {
+        let tree = host_effect_recipe_tree(operation);
+        let mut nodes = Vec::new();
+        for root in [
+            SynthesizedAggregateRoot::HostResultError,
+            SynthesizedAggregateRoot::HostResultOk,
+        ] {
+            walk_tree_with_paths(
+                tree.node(root),
+                &SynthesizedAggregatePath::root(root),
+                &mut |node, _| nodes.push(node),
+            );
+        }
+        nodes
+    }
+
+    /// Visit every node of a tree with the path that reaches it.
+    fn walk_tree_with_paths(
+        node: SynthesizedAggregateNode,
+        path: &SynthesizedAggregatePath,
+        visit: &mut dyn FnMut(SynthesizedAggregateNode, &SynthesizedAggregatePath),
+    ) {
+        visit(node, path);
+        match node {
+            SynthesizedAggregateNode::Fixed { children, .. } => {
+                for (position, child) in children.iter().enumerate() {
+                    walk_tree_with_paths(*child, &path.field(position as u32), visit);
+                }
+            }
+            SynthesizedAggregateNode::Dynamic(SynthesizedDynamicSet::Alternatives(
+                alternatives,
+            )) => {
+                for (position, alternative) in alternatives.iter().enumerate() {
+                    walk_tree_with_paths(
+                        *alternative,
+                        &path.alternative(position as u32),
+                        visit,
+                    );
+                }
+            }
+            SynthesizedAggregateNode::Dynamic(SynthesizedDynamicSet::IoErrors)
+            | SynthesizedAggregateNode::Scalar { .. }
+            | SynthesizedAggregateNode::SiteOperand(_)
+            | SynthesizedAggregateNode::Absent => {}
+        }
+    }
+
     #[test]
     fn substrate_same_shape_aggregates_keep_distinct_lifetimes() {
         let wrapper = |child| RuntimeExpr::Construct {
@@ -12381,12 +21140,15 @@ mod tests {
                 unit.key
                     .continuation_inputs
                     .iter()
-                    .map(|input| (input.source_owner, input.source_abi_position))
+                    .map(|input| {
+                        let (owner, position, _) = input.coordinate.expect_entry_abi();
+                        (owner, position)
+                    })
                     .collect::<Vec<_>>(),
                 vec![(unit.key.consumer_owner, 0), (unit.key.consumer_owner, 1)]
             );
             assert!(matches!(
-                unit.key.continuation_inputs[1].source,
+                unit.key.continuation_inputs[1].coordinate.expect_entry_abi().2,
                 ContinuationInputSource::LexicalCapture { .. }
             ));
             assert_eq!(
@@ -12507,14 +21269,46 @@ mod tests {
         let plan = contspec_plan();
 
         let mut wrong_owner = plan.abi.clone();
-        wrong_owner.continuation_inputs[0].source_owner = PredeclaredFunctionId(u32::MAX);
+        wrong_owner.continuation_inputs[0].provenance =
+            abi::AbiContinuationInputProvenance::EntryAbi {
+                source_owner: PredeclaredFunctionId(u32::MAX),
+            };
         assert_eq!(
             wrong_owner
                 .validate_continuation_specializations(&plan.continuation_specializations)
                 .unwrap_err(),
-            planner_error(
-                "continuation ABI input source owner disagrees with the planner projection"
-            )
+            planner_error("continuation ABI input provenance disagrees with the planner projection")
+        );
+
+        // `RT-CONTSRC-PRODUCER-LOCAL` `D3a` — the corruption the bare
+        // `source_owner` field could not express, let alone refuse.
+        //
+        // ⭐ The owner is carried across UNCHANGED and only the domain moves,
+        // so ordinal, owner and affinity all still agree. Before `D3a` this
+        // record held one `PredeclaredFunctionId` and both domains projected
+        // onto it, so this substitution was **not representable** — an ABI
+        // authority for an entry-ABI value and one for a producer-local
+        // binding in the same owner were the same value. The tag is what makes
+        // the swap both expressible and refusable.
+        let mut crossed_domain = plan.abi.clone();
+        let carried_owner = match crossed_domain.continuation_inputs[0].provenance {
+            abi::AbiContinuationInputProvenance::EntryAbi { source_owner } => source_owner,
+            abi::AbiContinuationInputProvenance::ProducerLocal { binding_owner } => binding_owner,
+        };
+        crossed_domain.continuation_inputs[0].provenance =
+            abi::AbiContinuationInputProvenance::ProducerLocal {
+                binding_owner: carried_owner,
+            };
+        assert_ne!(
+            crossed_domain.continuation_inputs[0].provenance,
+            plan.abi.continuation_inputs[0].provenance,
+            "the domain swap must change the recorded provenance, or this row measures nothing"
+        );
+        assert_eq!(
+            crossed_domain
+                .validate_continuation_specializations(&plan.continuation_specializations)
+                .unwrap_err(),
+            planner_error("continuation ABI input provenance disagrees with the planner projection")
         );
 
         let mut wrong_lifetime = plan.abi.clone();
@@ -12630,9 +21424,11 @@ mod tests {
         );
         assert_eq!(unit.key.continuation_inputs.len(), 2);
         let input = &unit.key.continuation_inputs[0];
-        assert_eq!(input.source_owner, unit.key.consumer_owner);
-        assert_eq!(input.source_abi_position, 1);
-        assert_eq!(input.source, ContinuationInputSource::Parameter);
+        let (source_owner, source_abi_position, source) =
+            input.coordinate.expect_entry_abi();
+        assert_eq!(source_owner, unit.key.consumer_owner);
+        assert_eq!(source_abi_position, 1);
+        assert_eq!(source, ContinuationInputSource::Parameter);
         assert_eq!(
             input.referent_affinity,
             vec![
@@ -12642,26 +21438,54 @@ mod tests {
             ]
         );
 
+        // ⭐⭐ **`D3b` alias repair — this row's mutation is now REFUSED, not
+        // merely observable, and that is a strengthening rather than a change of
+        // subject.**
+        //
+        // The mutation replaces every input's referent affinity with a proxy
+        // derived from the consumer's body-result lifetime, narrowing this
+        // input's affinity from `[NoReferent, PersistentStore, InvocationArena]`
+        // to `[NoReferent, PersistentStore]`. Until the alias repair the row
+        // could only *watch* that narrowing reach the projection: the lexical
+        // search matched on coordinate alone, so a wrong contract was never
+        // consulted and flowed through unchallenged.
+        //
+        // Eligibility is now exact equality of the **complete** source-slot
+        // authority, so the narrowed record no longer matches the authority the
+        // seat actually holds, and planning fails closed.
+        //
+        // ⛔ This is the Architect's required alias control 5 — "the same
+        // coordinate with a different carrier, ownership, storage owner, or
+        // affinity does not qualify" — discharged by a REAL production
+        // perturbation on a landed fixture rather than a synthetic environment.
+        // A value whose affinity omits `InvocationArena` genuinely cannot point
+        // into invocation-owned storage, so it is a different value wearing the
+        // same root identity; indexing it would emit a call carrying an operand
+        // of the wrong lifetime class.
         CONTINUATION_PRODUCTION_MUTATION
             .with(|mutation| mutation.set(ContinuationProductionMutation::ResultLifetimeProxy));
-        let wrong = plan_static_transition_graph_with_symbols(
+        let refusal = plan_static_transition_graph_with_symbols(
             expr,
             &BTreeMap::new(),
             &symbols,
             AbiRootIngress::Process,
             false,
         )
-        .expect("compile-valid result-lifetime proxy plans");
+        .map(|_| ())
+        .expect_err(
+            "the result-lifetime proxy narrows this input's referent affinity, and the D3b \
+             alias rule must refuse it; a successful plan means eligibility fell back to \
+             matching the coordinate alone",
+        );
         CONTINUATION_PRODUCTION_MUTATION
             .with(|mutation| mutation.set(ContinuationProductionMutation::Exact));
-        assert_eq!(
-            wrong.continuation_specializations[0].key.continuation_inputs[0]
-                .referent_affinity,
-            vec![
-                BoundaryReferentOwner::NoReferent,
-                BoundaryReferentOwner::PersistentStore,
-            ],
-            "the production mutation must exhibit the rejected narrowing",
+        assert!(
+            format!("{refusal:?}").contains(
+                "under a different carrier, ownership, storage owner or referent affinity"
+            ),
+            "the refusal must be the contract-mismatch one, not the absent-member or ambiguous \
+             one -- those name different defects and would let this row pass while measuring \
+             something else: {refusal:?}"
         );
     }
 
@@ -12696,7 +21520,7 @@ mod tests {
                 .key
                 .continuation_inputs
                 .iter()
-                .map(|input| input.source_abi_position)
+                .map(|input| input.coordinate.expect_entry_abi().1)
                 .collect::<Vec<_>>(),
             vec![1, 0, 1],
         );
@@ -12719,7 +21543,7 @@ mod tests {
                 .key
                 .continuation_inputs
                 .iter()
-                .map(|input| input.source_abi_position)
+                .map(|input| input.coordinate.expect_entry_abi().1)
                 .collect::<Vec<_>>(),
             vec![1, 0],
             "the production mutation must discard the required tail",
@@ -12743,7 +21567,7 @@ mod tests {
                 .key
                 .continuation_inputs
                 .iter()
-                .map(|input| input.source_abi_position)
+                .map(|input| input.coordinate.expect_entry_abi().1)
                 .collect::<Vec<_>>(),
             vec![0, 1],
             "the production mutation must restate descriptor ordinals",
@@ -12871,6 +21695,1651 @@ mod tests {
         );
     }
 
+    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D1`/`D2b` — the two planner-side consumers
+    /// of the coordinate refuse the producer-local domain instead of reading an
+    /// entry ABI position it does not have.**
+    ///
+    /// `D1` represents the domain; `D3` teaches the *emission* consumers to
+    /// assign it. Between the two, the honest behaviour is a refusal, and a
+    /// refusal nobody exercises is indistinguishable from a missing one — so
+    /// this presents a producer-local coordinate directly.
+    ///
+    /// ⚠ **`D2b` changed the second half of this row, and the change is a
+    /// strengthening rather than a weakening.** `exact_continuation_projection`
+    /// no longer refuses *on the domain* — `D2b` gives the producer-local domain
+    /// a real availability derivation. It refuses on the harder question the
+    /// derivation asks: whether the coordinate is genuinely present in the
+    /// lexical environment in force at the emission seat. A **fabricated**
+    /// coordinate like [`ContinuationSourceCoordinate::producer_local_probe`] is
+    /// present nowhere, so it is still refused — but now because no walk places
+    /// it, which is the property `D2b` actually owes.
+    ///
+    /// ⚠ **`D3a` moved the FIRST half the same way, for the same reason.**
+    /// `validate_continuation_source_slot` no longer refuses on the domain
+    /// either — it re-derives producer-local coordinates by re-running the
+    /// forward walk. A **fabricated** coordinate is still refused, but now
+    /// because the re-derivation cannot reach it: this row's probe names
+    /// `PredeclaredFunctionId(u32::MAX)` as its binding owner, and no such
+    /// owner has a source root to walk from.
+    ///
+    /// ⛔ That refusal is real but *shallow* — it rejects the owner before any
+    /// environment is consulted. The deeper property, that a coordinate with a
+    /// genuine owner and a genuine scope is refused when the walk does not
+    /// place it **there**, is deliberately not claimed here: it needs a
+    /// coordinate this probe cannot express, and
+    /// `contsrc_d3a_validator_rederives_a_producer_local_source` measures it
+    /// with real owners, real scopes and a positive control.
+    ///
+    /// MEASURED: `validate_continuation_source_slot` returns `Err` on a
+    /// producer-local coordinate whose binding owner does not exist;
+    /// `exact_continuation_projection` returns `Err` on a producer-local
+    /// coordinate that the forward semantic walk does not find at the emission
+    /// seat; each returns `Ok` on the same record carrying its original entry
+    /// coordinate. CLAIMED: neither consumer has a path that silently reads an
+    /// entry position out of the local domain. THE GAP: this says nothing about
+    /// whether either derivation assigns the *right* answer when the coordinate
+    /// IS present — the `D2b` discriminators below and the `D3a` row above own
+    /// that, and it is deliberately not claimed here.
+    ///
+    /// ⭐ The positive control is the load-bearing half. `Err` is satisfied by a
+    /// record that was malformed for some unrelated reason, so each row proves
+    /// the same record validates when its coordinate is the entry one.
+    ///
+    /// **Promise class: durable invariant.**
+    #[test]
+    fn contsrc_producer_local_coordinate_is_refused_by_both_planner_consumers() {
+        let plan = contspec_plan();
+        let unit = &plan.continuation_specializations[0];
+        let entry_sources = continuation_owner_entry_sources(&plan, unit.key.consumer_owner)
+            .expect("the consumer owner has an exact entry environment");
+        let exact = entry_sources
+            .first()
+            .expect("the fixture consumer has at least one entry input")
+            .clone();
+
+        // Positive control: the untouched record validates.
+        validate_continuation_source_slot(&plan, &exact)
+            .expect("the exact entry-ABI authority must validate, or this row proves nothing");
+
+        let mut local = exact.clone();
+        local.coordinate = ContinuationSourceCoordinate::producer_local_probe();
+        let refusal = validate_continuation_source_slot(&plan, &local)
+            .expect_err("the exact slot validator must refuse a producer-local coordinate");
+        assert_eq!(
+            refusal,
+            planner_error("continuation owner does not have one exact source-occurrence root"),
+            "the validator must refuse with a message from its OWN re-derivation rather than \
+             incidentally"
+        );
+
+        // `D3b` re-cut — the predeclared emitter's arm. BOTH coordinate domains
+        // now take the forward lexical derivation; a fabricated local coordinate
+        // is not in the seat environment, so it refuses.
+        let entry_environment = ContinuationProducerEnvironment {
+            producer_owner: unit.key.producer_owner,
+            producer_result_origin: unit.key.producer_result_origin,
+            producer_construct_origin: unit.key.producer_construct_origin,
+            consumer_owner: unit.key.consumer_owner,
+            inputs: vec![exact],
+        };
+        exact_continuation_projection(
+            &plan,
+            &entry_environment,
+            unit.key.ordinary_parameters,
+            &ContinuationEmitterFrame::Predeclared(entry_environment.producer_owner),
+        )
+        .expect("the entry-coordinate projection must succeed, or this row proves nothing");
+
+        let local_environment = ContinuationProducerEnvironment {
+            inputs: vec![local],
+            ..entry_environment
+        };
+        let refusal = exact_continuation_projection(
+            &plan,
+            &local_environment,
+            unit.key.ordinary_parameters,
+            &ContinuationEmitterFrame::Predeclared(local_environment.producer_owner),
+        )
+        .expect_err("the projection must refuse a coordinate the seat environment does not hold");
+        assert!(
+            format!("{refusal:?}").contains("not present in the lexical environment"),
+            "the projection must refuse because the forward walk does not place this binding at \
+             the emission seat -- NOT incidentally, and not on the domain alone: {refusal:?}"
+        );
+    }
+
+    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D1` `AC-2` — the coordinate is a CLOSED
+    /// sum, and an entry position is not representable as a local binding.**
+    ///
+    /// The property `AC-2` actually needs is compile-time: a third domain must
+    /// not compile until every consumer assigns it. That is carried by there
+    /// being no wildcard arm at any of the matches, which no runtime assertion
+    /// can observe. What *is* observable, and is the reason the sum exists, is
+    /// that the two domains never compare equal — so an entry coordinate can
+    /// never be mistaken for a local binding by a consumer comparing
+    /// coordinates.
+    ///
+    /// ⛔ This is deliberately NOT an assertion about the source text of the
+    /// matches. It tests the behaviour the type buys.
+    ///
+    /// **Promise class: durable invariant.**
+    #[test]
+    fn contsrc_the_two_coordinate_domains_never_compare_equal() {
+        let plan = contspec_plan();
+        let entry_sources = continuation_owner_entry_sources(
+            &plan,
+            plan.continuation_specializations[0].key.consumer_owner,
+        )
+        .expect("the consumer owner has an exact entry environment");
+        let local = ContinuationSourceCoordinate::producer_local_probe();
+        assert!(
+            !entry_sources.is_empty(),
+            "the fixture must supply at least one entry coordinate to compare against"
+        );
+        for source in &entry_sources {
+            assert!(
+                matches!(
+                    source.coordinate,
+                    ContinuationSourceCoordinate::EntryAbi { .. }
+                ),
+                "the entry walk must produce only entry coordinates"
+            );
+            assert_ne!(
+                source.coordinate, local,
+                "an entry coordinate compared equal to a producer-local one, so the \
+                 generated-context capture lookup could resolve one as the other"
+            );
+        }
+    }
+
+    /// A `ComputationalMatch` consumer sitting inside a `Match` case body, with
+    /// a `Let`-bound host-effect result above both.
+    ///
+    /// The environment reaching that consumer therefore holds **both** `D2`
+    /// binding kinds and an entry parameter, in one vector, which is what lets
+    /// one walk distinguish them instead of three fixtures each proving its own
+    /// half.
+    fn contsrc_d2_both_binding_kinds_fixture() -> RuntimeExpr {
+        RuntimeExpr::Let {
+            value: Box::new(RuntimeExpr::Effect {
+                family: "Console".to_string(),
+                operation: ken_host::HostOpV1::ConsoleRead,
+                capability: None,
+                args: Vec::new(),
+            }),
+            body: Box::new(RuntimeExpr::Match {
+                scrutinee: Box::new(RuntimeExpr::Construct {
+                    constructor: "ctor:fixture::Contspec::Node".to_string(),
+                    args: vec![unit()],
+                }),
+                cases: vec![RuntimeMatchCase {
+                    constructor: "ctor:fixture::Contspec::Node".to_string(),
+                    binders: 1,
+                    // ⛔ `Var(3)` is load-bearing, not decoration. The case
+                    // body must REACH past the two computational binders to the
+                    // surrounding environment, or `required_input_count` is
+                    // zero, `exact_inputs` is empty, and every assertion below
+                    // about the gate is satisfied by a fixture that never
+                    // reached it. Index 3 = the two `ComputationalMatch`
+                    // binders, then the enclosing `Match` binder.
+                    body: contspec_parameter_match(RuntimeExpr::Var(3)),
+                }],
+                default: trap("d2 both binding kinds"),
+            }),
+        }
+    }
+
+    /// The environment the walk reaches at `target`, and that target's owner.
+    fn contsrc_d2_reached_environment(
+        plan: &StaticTransitionPlan<'_>,
+        target: StaticOriginId,
+    ) -> Vec<ContinuationValueSourceAuthority> {
+        let owner = occurrence_authority(plan, target)
+            .expect("the target has an occurrence authority")
+            .owner;
+        let entry_sources = continuation_owner_entry_sources(plan, owner)
+            .expect("the owner has an exact entry environment");
+        let entry_environment = entry_sources
+            .into_iter()
+            .map(ContinuationValueSourceAuthority::source)
+            .collect::<Vec<_>>();
+        let root = continuation_owner_source_root(plan, owner).expect("one source root");
+        let (_, reached) =
+            walk_continuation_value_environment(plan, root, target, &entry_environment)
+                .expect("the walk reaches the target");
+        reached.expect("the target is inside its owner's subtree")
+    }
+
+    /// The first occurrence of the given expression shape, in origin order.
+    fn contsrc_d2_first_origin(
+        plan: &StaticTransitionPlan<'_>,
+        matches_shape: impl Fn(&RuntimeExpr) -> bool,
+    ) -> StaticOriginId {
+        let mut origins = plan
+            .occurrence_authorities
+            .iter()
+            .map(|authority| authority.origin)
+            .collect::<Vec<_>>();
+        origins.sort();
+        origins
+            .into_iter()
+            .find(|origin| {
+                plan.planned_occurrence_expr(*origin)
+                    .is_ok_and(&matches_shape)
+            })
+            .expect("the fixture contains that shape")
+    }
+
+    /// `D2b` — find a **lawful** emission seat whose lexical environment holds
+    /// `coordinate` at an index the introduction index does not predict.
+    ///
+    /// ⭐ The seat is *searched for among real occurrences*, never fabricated:
+    /// it must be an occurrence of `owner` and a genuine construct origin of
+    /// some result edge, which is exactly what
+    /// [`continuation_emission_seat_environment`] demands. A hand-picked origin
+    /// would be the place this row stopped measuring the production check.
+    ///
+    /// Returns `(result_origin, construct_origin, index_at_that_seat)`.
+    fn contsrc_d2b_shifted_emission_seat(
+        plan: &StaticTransitionPlan<'_>,
+        owner: PredeclaredFunctionId,
+        coordinate: ContinuationSourceCoordinate,
+        introduction_index: u32,
+    ) -> (StaticOriginId, StaticOriginId, u32) {
+        let mut origins = plan
+            .occurrence_authorities
+            .iter()
+            .map(|authority| authority.origin)
+            .collect::<Vec<_>>();
+        origins.sort();
+        for result_origin in origins.iter().copied() {
+            let Ok(constructs) = continuation_result_origins(plan, result_origin) else {
+                continue;
+            };
+            for construct_origin in constructs.iter().copied() {
+                let Ok(authority) = occurrence_authority(plan, construct_origin) else {
+                    continue;
+                };
+                if authority.owner != owner {
+                    continue;
+                }
+                let environment = ContinuationProducerEnvironment {
+                    producer_owner: owner,
+                    producer_result_origin: result_origin,
+                    producer_construct_origin: construct_origin,
+                    consumer_owner: owner,
+                    inputs: Vec::new(),
+                };
+                let Ok((_, seat)) = continuation_emission_seat_environment(plan, &environment)
+                else {
+                    continue;
+                };
+                let found = seat.iter().position(|value| {
+                    matches!(
+                        value,
+                        ContinuationValueSourceAuthority::Closed(sources)
+                            if sources.iter().any(|source| source.coordinate == coordinate)
+                    )
+                });
+                let Some(index) = found else { continue };
+                let index = u32::try_from(index).expect("a fixture environment index fits");
+                if index > introduction_index {
+                    return (result_origin, construct_origin, index);
+                }
+            }
+        }
+        panic!(
+            "the fixture has no lawful emission seat holding {coordinate:?} past an intervening \
+             binder; without one this row would measure the unshifted case and could not tell a \
+             real nearest-alias selection from returning the introduction index"
+        );
+    }
+
+    fn contsrc_d2_local(
+        value: &ContinuationValueSourceAuthority,
+    ) -> (&ContinuationSourceSlotAuthority, ProducerLocalBinding, ProducerLocalLocator) {
+        let ContinuationValueSourceAuthority::Closed(sources) = value else {
+            panic!("expected an exactly-sourced value, got {value:?}");
+        };
+        let [source] = sources.as_slice() else {
+            panic!("expected exactly one source, got {sources:?}");
+        };
+        let ContinuationSourceCoordinate::ProducerLocal { binding, locator } = source.coordinate
+        else {
+            panic!("expected a producer-local coordinate, got {:?}", source.coordinate);
+        };
+        (source, binding, locator)
+    }
+
+    /// A `ComputationalMatch` whose single case has **one recursive position
+    /// and one ordinary argument binder**, with a persistent scrutinee, and
+    /// whose case body is itself a `ComputationalMatch`.
+    ///
+    /// Walking to that inner occurrence lands exactly on the outer case's own
+    /// environment, which is the run this discriminator is about:
+    /// `[IH, argument, outer...]`.
+    fn contsrc_d2_ih_and_argument_case_fixture() -> RuntimeExpr {
+        RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(RuntimeExpr::Construct {
+                constructor: "ctor:fixture::Contspec::Node".to_string(),
+                args: vec![unit(), unit()],
+            }),
+            cases: vec![RuntimeComputationalMatchCase {
+                constructor: "ctor:fixture::Contspec::Node".to_string(),
+                argument_binders: 1,
+                recursive_positions: vec![0],
+                body: contspec_parameter_match(RuntimeExpr::Var(3)),
+            }],
+            default: trap("d2 ih and argument"),
+        }
+    }
+
+    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D2` corrected — a `ComputationalMatch`
+    /// case run is `[IH, argument]` and the two subruns are NOT contracted
+    /// alike.**
+    ///
+    /// This is the discriminator `a5a6ce9b` lacked. That checkpoint looped over
+    /// the combined binder count and stamped one contract across both subruns;
+    /// its positive row targeted an inner `ComputationalMatch` but inspected
+    /// that occurrence's *incoming* environment, so it observed an outer
+    /// ordinary-`Match` binder and a host-effect result — never an IH.
+    ///
+    /// MEASURED: the outer case's environment is ordered
+    /// `[Open, producer-local argument binder, ...]`. The IH prefix carries no
+    /// contract at all; the argument binder carries the scrutinee's carrier and
+    /// lifetime. CLAIMED: the two subruns are contracted from their own
+    /// authorities, and the IH's is not invented. THE GAP: the IH's real
+    /// contract is not derived here — it is refused. That is the hard stop
+    /// reported with this correction, not a claim that `Open` is its answer.
+    ///
+    /// ⭐ **This rejects both stampings, which is the point.** Stamping the
+    /// argument contract across the run makes position 0 `Closed`; stamping the
+    /// IH treatment across it makes position 1 `Open`. The row asserts each
+    /// position's domain exactly, so either stamp reds it — and the two
+    /// assertions are what a single `binders`-wide loop cannot satisfy.
+    ///
+    /// **Promise class: durable invariant.**
+    #[test]
+    fn contsrc_d2_a_computational_case_run_separates_its_ih_prefix_from_its_arguments() {
+        let expr = Box::leak(Box::new(contsrc_d2_ih_and_argument_case_fixture()));
+        let plan = plan_static_transition_graph(expr, &BTreeMap::new())
+            .expect("the IH/argument fixture plans");
+        let mut computational = plan
+            .occurrence_authorities
+            .iter()
+            .map(|authority| authority.origin)
+            .filter(|origin| {
+                plan.planned_occurrence_expr(*origin)
+                    .is_ok_and(|expr| matches!(expr, RuntimeExpr::ComputationalMatch { .. }))
+            })
+            .collect::<Vec<_>>();
+        computational.sort();
+        let [outer, inner, ..] = computational.as_slice() else {
+            panic!("the fixture must contain an outer and an inner ComputationalMatch");
+        };
+        let reached = contsrc_d2_reached_environment(&plan, *inner);
+        assert!(
+            reached.len() >= 2,
+            "the walk must land on the outer case's own binder run: {reached:?}"
+        );
+
+        // ⛔ Position 0 is the recursive IH. No contract is claimed for it.
+        // Stamping the argument contract across the run would make this
+        // `Closed`, which is precisely the defect this row exists to catch.
+        assert_eq!(
+            reached[0],
+            ContinuationValueSourceAuthority::Open,
+            "the recursive IH prefix must carry NO contract; a producer-local value here is \
+             the a5a6ce9b misclassification"
+        );
+
+        // Position 1 is the ordinary constructor argument binder, contracted
+        // from the scrutinee. Stamping the IH treatment across the run would
+        // make this `Open`.
+        let (argument, binding, locator) = contsrc_d2_local(&reached[1]);
+        assert_eq!(
+            binding.binding_ordinal, 1,
+            "the ordinal must span the whole run so identity stays (case body, ordinal) \
+             with no new tag"
+        );
+        assert_eq!(binding.binding_origin, locator.environment_origin);
+        assert_eq!(locator.environment_index, 1);
+
+        // The contract is READ from the scrutinee, not chosen. The scrutinee is
+        // a constructor of persistent children, so its lifetime is persistent
+        // and its affinity is the two-element set -- which an IH's
+        // activation-owned treatment could not produce.
+        let scrutinee_lifetime = occurrence_authority(&plan, *outer)
+            .expect("the outer match has an occurrence authority")
+            .children
+            .iter()
+            .find(|child| child.position == 0)
+            .expect("the outer match has a scrutinee child")
+            .lifetime;
+        // ⛔ Non-vacuity: the fixture's scrutinee must actually be PERSISTENT.
+        // An activation-owned scrutinee would give the argument binder the same
+        // affinity an IH's activation-owned treatment produces, and the
+        // comparison below would hold for the wrong reason.
+        assert_eq!(
+            scrutinee_lifetime,
+            PlannedReferentLifetime::Persistent,
+            "the discriminator needs a persistent scrutinee, or the affinity assertion cannot \
+             tell a scrutinee-derived contract from a stamped activation-owned one"
+        );
+        assert_eq!(
+            argument.referent_affinity,
+            lifetime_referent_affinity(scrutinee_lifetime),
+            "the argument binder's affinity must be the scrutinee's, not a stamped constant"
+        );
+        assert_eq!(
+            argument.ownership,
+            argument.carrier.ownership(),
+            "ownership must remain the carrier's projection"
+        );
+        assert_eq!(argument.storage_owner, argument.carrier.storage_owner());
+    }
+
+    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D2` — both binding kinds are populated as
+    /// DISTINCT structural bindings, with a planner-derived contract.**
+    ///
+    /// One fixture, one walk, one environment vector holding a `Match` case
+    /// binder, a `Let`-bound host-effect result and an entry parameter — so the
+    /// row can tell the two local kinds apart from each other *and* from the
+    /// entry domain, which three separate fixtures could not.
+    ///
+    /// ⛔ Both local values here are an **ordinary `Match` case's constructor
+    /// argument binder** and a host-effect result. No recursive IH binder is in
+    /// this fixture's environment; the IH/argument split is a separate row.
+    ///
+    /// MEASURED: at the consumer inside the case body the environment is
+    /// `[argument binder, effect result, entry ...]`; the two local bindings
+    /// differ in `binding_origin`; each carries the carrier its own authority
+    /// supplies — the scrutinee's for the argument binder, the `Effect` shape's
+    /// for the effect result — with the ownership and storage owner
+    /// `AbiCarrier` derives from it, and a non-empty referent affinity.
+    /// CLAIMED: `D2` populates both kinds through one derivation that restates
+    /// no other record's fact. THE GAP: nothing here admits either binding —
+    /// the candidate still declines, which is the next row.
+    ///
+    /// ⭐ The locator/binding split is asserted, not assumed: for the effect
+    /// result the two origins **differ** (the `Effect` creates the value, the
+    /// `Let` body holds it), and for the argument binder they coincide. If a
+    /// future change collapsed the two fields, the effect row would red.
+    ///
+    /// **Promise class: durable invariant.**
+    #[test]
+    fn contsrc_d2_populates_both_producer_local_binding_kinds() {
+        let expr = Box::leak(Box::new(contsrc_d2_both_binding_kinds_fixture()));
+        let plan = plan_static_transition_graph(expr, &BTreeMap::new())
+            .expect("the D2 fixture plans");
+        let target = contsrc_d2_first_origin(&plan, |expr| {
+            matches!(expr, RuntimeExpr::ComputationalMatch { .. })
+        });
+        let effect_origin = contsrc_d2_first_origin(&plan, |expr| {
+            matches!(expr, RuntimeExpr::Effect { .. })
+        });
+        let reached = contsrc_d2_reached_environment(&plan, target);
+        assert!(
+            reached.len() >= 2,
+            "the fixture must reach the consumer with both local bindings: {reached:?}"
+        );
+
+        // Position 0 -- the `Match` case binder. Its scope introduces it and
+        // holds it, so binding and locator name the same occurrence.
+        let (binder_source, binder_binding, binder_locator) = contsrc_d2_local(&reached[0]);
+        assert_eq!(binder_binding.binding_ordinal, 0);
+        assert_eq!(
+            binder_binding.binding_origin, binder_locator.environment_origin,
+            "a case binder is introduced by, and held in, the same scope"
+        );
+        assert_eq!(binder_locator.environment_index, 0);
+
+        // Position 1 -- the `Let`-bound host-effect result. The `Effect`
+        // creates it; the `Let` body holds it. ⛔ Different origins.
+        let (effect_source, effect_binding, effect_locator) = contsrc_d2_local(&reached[1]);
+        assert_eq!(
+            effect_binding.binding_origin, effect_origin,
+            "the host-effect result must be identified by the Effect occurrence itself"
+        );
+        assert_ne!(
+            effect_binding.binding_origin, effect_locator.environment_origin,
+            "the binding identity and the emission-time locator must not collapse into one"
+        );
+        assert_eq!(effect_locator.environment_index, 0);
+
+        // The two kinds are distinct bindings, which is the deliverable.
+        assert_ne!(
+            binder_binding, effect_binding,
+            "the two D2 binding kinds must not compare equal"
+        );
+
+        // The contract, derived once and consistent with the entry plane's
+        // reading of the same carrier. ⛔ The carrier is asserted against the
+        // authority that supplies it, never against a literal: on this fixture
+        // both authorities answer `ValueWord`, and writing that constant here
+        // would state a blanket rule the derivation deliberately does not have.
+        let expected_argument_carrier = abi::result_carrier(SemanticSourceKind::Expression(
+            RuntimeExprShape::Construct,
+        ))
+        .expect("the fixture's Match scrutinee is a Construct");
+        let expected_effect_carrier =
+            abi::result_carrier(SemanticSourceKind::Expression(RuntimeExprShape::Effect))
+                .expect("the Effect shape has a result carrier");
+        assert_eq!(binder_source.carrier, expected_argument_carrier);
+        assert_eq!(effect_source.carrier, expected_effect_carrier);
+        for (label, source) in [
+            ("argument binder", binder_source),
+            ("effect result", effect_source),
+        ] {
+            assert_eq!(
+                source.ownership,
+                source.carrier.ownership(),
+                "{label} ownership must be the carrier's, not a second statement of it"
+            );
+            assert_eq!(
+                source.storage_owner,
+                source.carrier.storage_owner(),
+                "{label} storage owner must be the carrier's"
+            );
+            assert!(
+                !source.referent_affinity.is_empty(),
+                "{label} must carry a real referent affinity; an empty one is what \
+                 validate_continuation_source_slot rejects for the entry domain"
+            );
+        }
+
+        // ⭐ The referent affinity is derived PER BINDING, not stamped from one
+        // constant. The case binder's scrutinee is a persistent constructor and
+        // the host effect's result is activation-owned, so the two affinities
+        // must differ on this fixture. A single hardcoded affinity — the
+        // easiest wrong implementation — reds here.
+        assert_ne!(
+            binder_source.referent_affinity, effect_source.referent_affinity,
+            "both kinds received the same referent affinity, so the derivation is not \
+             reading each binding's own lifetime authority"
+        );
+    }
+
+    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D2b` DISCRIMINATOR 1 — current-lexical
+    /// availability counts the binders actually pushed between the binding and
+    /// the emission seat.**
+    ///
+    /// The defect `evt_44k69b55vhek2` reopened `D2` for is that `D1`'s locator
+    /// is *scope-relative* — `environment_index` is where the value sits in the
+    /// scope that introduced it — while the emitter stands somewhere else
+    /// entirely. Any implementation that hands the locator index straight
+    /// through looks correct on every fixture where nothing intervenes.
+    ///
+    /// ⭐ **So the fixture is chosen for the intervening binder.** The
+    /// host-effect result is introduced at index 0 of the `Let` body, and the
+    /// enclosing `Match` case pushes its own binder before the emission seat, so
+    /// the value has moved by the time it is emitted. `nearest_alias_index` and
+    /// `environment_index` are therefore *different numbers on this row* —
+    /// which is what makes "introduction index equals emission index" a failing
+    /// answer here rather than an indistinguishable one.
+    ///
+    /// MEASURED: the projection's `CurrentLexical` arm returns the index at
+    /// which the emission seat's own environment holds this exact coordinate;
+    /// that index differs from the binding's `environment_index`; the position
+    /// the introduction index names at that seat carries a **different** value;
+    /// and the arm is keyed to the exact emission occurrence and lexical
+    /// environment origin. CLAIMED: the availability is derived by the forward
+    /// semantic walk rather than restated from the locator. THE GAP: this says
+    /// nothing about lowering *consuming* the arm — `D3` owns that, and the
+    /// emission seams still refuse it.
+    ///
+    /// **Promise class: durable invariant.**
+    #[test]
+    fn contsrc_d2b_current_lexical_availability_counts_the_intervening_binder() {
+        let expr = Box::leak(Box::new(contsrc_d2_both_binding_kinds_fixture()));
+        let plan =
+            plan_static_transition_graph(expr, &BTreeMap::new()).expect("the D2 fixture plans");
+        let target = contsrc_d2_first_origin(&plan, |expr| {
+            matches!(expr, RuntimeExpr::ComputationalMatch { .. })
+        });
+        let owner = occurrence_authority(&plan, target)
+            .expect("the target has an occurrence authority")
+            .owner;
+        let reached = contsrc_d2_reached_environment(&plan, target);
+        let (effect_source, _, effect_locator) = contsrc_d2_local(&reached[1]);
+        let coordinate = effect_source.coordinate;
+        let introduction_index = effect_locator.environment_index;
+
+        let (result_origin, construct_origin, seat_index) =
+            contsrc_d2b_shifted_emission_seat(&plan, owner, coordinate, introduction_index);
+        let environment = ContinuationProducerEnvironment {
+            producer_owner: owner,
+            producer_result_origin: result_origin,
+            producer_construct_origin: construct_origin,
+            consumer_owner: owner,
+            inputs: vec![effect_source.clone()],
+        };
+
+        // The independent oracle: the seat's own environment, read directly
+        // rather than through the projection under test.
+        let (source_root, seat) = continuation_emission_seat_environment(&plan, &environment)
+            .expect("the searched seat is lawful by construction");
+        let holds = |index: u32| {
+            matches!(
+                seat.get(index as usize),
+                Some(ContinuationValueSourceAuthority::Closed(sources))
+                    if sources.iter().any(|source| source.coordinate == coordinate)
+            )
+        };
+        assert!(
+            holds(seat_index),
+            "the oracle must place this binding at {seat_index} or the row proves nothing"
+        );
+        // ⛔ THE vacuity kill. Had the derivation returned the locator's index,
+        // it would have named a position holding a DIFFERENT value — so this
+        // asserts the wrong answer is wrong, not merely that it is unequal.
+        assert!(
+            !holds(introduction_index),
+            "the introduction index still holds this binding at the emission seat, so nothing \
+             here distinguishes a real nearest-alias selection from passing the locator through"
+        );
+
+        let projected = exact_continuation_projection(
+            &plan,
+            &environment,
+            0,
+            &ContinuationEmitterFrame::Predeclared(environment.producer_owner),
+        )
+        .expect("a producer-local coordinate present at the seat must project");
+        assert_eq!(
+            projected[0].availability,
+            ContinuationAvailabilityDraft {
+                direct_emission: Some(ContinuationEnvironmentDraft::CurrentLexical {
+                    emission_owner: environment.producer_owner,
+                    producer_result_origin: result_origin,
+                    emission_origin: construct_origin,
+                    lexical_environment_origin: source_root,
+                    nearest_alias_index: seat_index,
+                }),
+                // ⛔ The re-cut's load-bearing half of this row. A predeclared
+                // emitter projects NO context-capture claim, so the capture
+                // consumer cannot reach this value at all. Asserting the whole
+                // record rather than the direct view is what makes that a
+                // measured absence instead of an unexamined field.
+                context_capture: None,
+            },
+            "the direct-emission claim must be keyed to the exact emission occurrence, owner and \
+             lexical environment and carry the nearest-alias index, and a predeclared emitter must \
+             project no capture claim at all"
+        );
+        assert_ne!(
+            seat_index, introduction_index,
+            "this fixture must exercise a genuine shift; equal indices would make every \
+             assertion above satisfiable by the identity"
+        );
+
+        // ⛔ Fail-closed 1 of 5 — wrong emission origin. A seat that is not a
+        // construct origin of this result edge has no defined environment.
+        let off_edge = {
+            let lawful = continuation_result_origins(&plan, result_origin)
+                .expect("the result edge resolves");
+            plan.occurrence_authorities
+                .iter()
+                .map(|authority| authority.origin)
+                .find(|origin| !lawful.contains(origin))
+                .expect("the fixture has an occurrence off this result edge")
+        };
+        let wrong_seat = ContinuationProducerEnvironment {
+            producer_construct_origin: off_edge,
+            ..environment.clone()
+        };
+        let refusal = exact_continuation_projection(
+            &plan,
+            &wrong_seat,
+            0,
+            &ContinuationEmitterFrame::Predeclared(environment.producer_owner),
+        )
+        .expect_err("an emission seat off its own result edge must refuse");
+        assert!(
+            format!("{refusal:?}").contains("not an occurrence of its own producer owner"),
+            "the refusal must be the emission-origin one, not an incidental error: {refusal:?}"
+        );
+
+        // ⛔ Fail-closed 2 of 5 — wrong nearest-alias index. A binding the walk
+        // does not place at the seat gets no index at all.
+        let mut absent = effect_source.clone();
+        absent.coordinate = ContinuationSourceCoordinate::producer_local_probe();
+        let refusal = exact_continuation_projection(
+            &plan,
+            &ContinuationProducerEnvironment {
+                inputs: vec![absent],
+                ..environment
+            },
+            0,
+            &ContinuationEmitterFrame::Predeclared(environment.producer_owner),
+        )
+        .expect_err("a binding absent from the seat environment must refuse");
+        assert!(
+            format!("{refusal:?}").contains("not present in the lexical environment"),
+            "the refusal must name the absent binding rather than fall through: {refusal:?}"
+        );
+    }
+
+    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D4b` — the admission partition is EXACTLY
+    /// `interned = V` / `declined = R`, with no third modality.**
+    ///
+    /// ⭐ `D4a` admitted the producer-local domain by **deleting** a filter, and
+    /// the claim it left behind is that `R` is refused upstream by the
+    /// take-loop's own two clauses — an `Open` value, or a position carrying
+    /// more than one exact source — and by nothing else.
+    ///
+    /// ⛔ **The proposition is an equivalence, and both directions are asserted
+    /// per record**: a candidate is admitted **iff** every required position is
+    /// closed and unambiguous. An extra route modality, a special case, a corpus
+    /// lookup, a closure-identity test or a first-`Open` classification would all
+    /// appear as a record where the two sides disagree.
+    ///
+    /// ⛔ **Both sides must be witnessed**, or the equivalence is half-vacuous.
+    /// The declining fixtures are named rather than hoped for: the required-tail
+    /// fixture supplies an `Open` and an `Ambiguous(2)` position, and the
+    /// IH/argument fixture supplies the `Open[ih-binder]` edge — which are the
+    /// census's three non-closed positions, and the only ones in the corpus.
+    ///
+    /// ⚠ **MEASURED**: admission agrees with the closed-vector predicate on
+    /// every record, both sides non-empty, and every declined record carries an
+    /// `Open` or ambiguous position. **CLAIMED**: nothing outside the required
+    /// vector participates in the decision. **THE GAP**: this measures the
+    /// decision, not the vector — that each position's verdict is itself right
+    /// is the source walk's authority, not this row's.
+    ///
+    /// **Promise class: durable invariant.**
+    #[test]
+    fn d4b_admission_is_exactly_the_closed_required_vector() {
+        let symbols = crate::NativeProcessSymbols::legacy_prelude();
+        d4b_arm_admission(true);
+        // Admitting fixtures.
+        let complete = Box::leak(Box::new(contspec_complete_environment_fixture()));
+        let _ = plan_static_transition_graph_with_symbols(
+            complete,
+            &BTreeMap::new(),
+            &symbols,
+            AbiRootIngress::Process,
+            false,
+        );
+        // ⛔ The THREE declining shapes, named rather than hoped for. Between
+        // them they carry exactly the census's three non-closed positions.
+        //
+        // `Open[let-value:Construct]` — a required tail with open provenance.
+        let tail = Box::leak(Box::new(contspec_required_tail_fixture(unit())));
+        let _ = plan_static_transition_graph_with_symbols(
+            &*tail,
+            &BTreeMap::new(),
+            &symbols,
+            AbiRootIngress::Process,
+            false,
+        );
+        // `AMBIG2[let-value:If]` — an `If` whose branches name two DISTINCT
+        // exact sources, which the walk refuses to collapse to one ordinal.
+        let ambiguous_tail = RuntimeExpr::If {
+            scrutinee: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+            then_expr: Box::new(RuntimeExpr::Var(0)),
+            else_expr: Box::new(RuntimeExpr::Var(1)),
+        };
+        let ambiguous = Box::leak(Box::new(contspec_required_tail_fixture(ambiguous_tail)));
+        let _ = plan_static_transition_graph_with_symbols(
+            &*ambiguous,
+            &BTreeMap::new(),
+            &symbols,
+            AbiRootIngress::Process,
+            false,
+        );
+        let ih = Box::leak(Box::new(contsrc_d2_ih_and_argument_case_fixture()));
+        let _ = plan_static_transition_graph(ih, &BTreeMap::new());
+        d4b_arm_admission(false);
+        let records = d4b_take_admission();
+
+        assert!(
+            !records.is_empty(),
+            "the witness corpus must produce candidate edges at all"
+        );
+        for (vector, admitted) in &records {
+            let all_closed = vector.iter().all(|verdict| *verdict == D4bVerdict::Closed);
+            assert_eq!(
+                *admitted, all_closed,
+                "admission must be exactly 'every required position closed and unambiguous'; \
+                 this record disagrees, which is an extra route modality: vector={vector:?}"
+            );
+        }
+
+        let admitted = records.iter().filter(|(_, a)| *a).count();
+        let declined = records.len() - admitted;
+        assert!(
+            admitted > 0,
+            "no admitted edge was witnessed, so V is unmeasured and the equivalence is \
+             half-vacuous"
+        );
+        assert!(
+            declined > 0,
+            "no DECLINED edge was witnessed ({admitted} of {}), so R is unmeasured -- the row \
+             would pass on a corpus where admission is unconditionally true",
+            records.len()
+        );
+
+        // ⛔ Every declined edge is refused by one of the take-loop's two
+        // clauses. A decline with an all-closed vector would mean some other
+        // predicate is running.
+        for (vector, admitted) in &records {
+            if !admitted {
+                assert!(
+                    vector.iter().any(|verdict| matches!(
+                        verdict,
+                        D4bVerdict::Open | D4bVerdict::Ambiguous(_)
+                    )),
+                    "a declined edge must carry an Open or ambiguous position: vector={vector:?}"
+                );
+            }
+        }
+
+        // ⛔ Both decline CLAUSES are witnessed, not just one. A corpus carrying
+        // only `Open` declines would leave the ambiguity clause unmeasured.
+        assert!(
+            records.iter().any(|(v, _)| v.contains(&D4bVerdict::Open)),
+            "the Open decline clause is unwitnessed"
+        );
+        assert!(
+            records
+                .iter()
+                .any(|(v, _)| v.iter().any(|x| matches!(x, D4bVerdict::Ambiguous(_)))),
+            "the ambiguity decline clause is unwitnessed"
+        );
+    }
+
+    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D3b` alias controls 3, 4 and 5 — the rule
+    /// selects by ELIGIBILITY, and order only canonicalizes among proved aliases.**
+    ///
+    /// ⭐⭐ **Controls 1 and 3 select OPPOSITE ENDS of the environment, and that
+    /// is the whole point of having both.** A suite carrying only the
+    /// nearest-alias case passes just as well under a positional shortcut —
+    /// "take the first member containing the coordinate" — because on that
+    /// fixture the first member *is* the answer. Control 3 puts an ambiguous
+    /// `Closed([S, T])` at the inner position and the exact singleton at the
+    /// outer one, so a positional shortcut answers `0` and the ruled rule answers
+    /// `2`. Only the pair distinguishes them.
+    ///
+    /// ⚠ **MEASURED**: eligibility is exact equality of the complete source-slot
+    /// authority, and selection among eligible positions is the minimum index.
+    /// **CLAIMED**: the rule is total over the environment — every position is
+    /// classified before any is chosen. **THE GAP**: this exercises the rule as a
+    /// function; that the planner and the consumer both *call* it is
+    /// `d3b_the_duplicated_entry_source_selects_the_nearest_alias` below.
+    ///
+    /// **Promise class: durable invariant.**
+    #[test]
+    fn d3b_alias_eligibility_not_position_decides() {
+        let expr = Box::leak(Box::new(contspec_complete_environment_fixture()));
+        let symbols = crate::NativeProcessSymbols::legacy_prelude();
+        let plan = plan_static_transition_graph_with_symbols(
+            expr,
+            &BTreeMap::new(),
+            &symbols,
+            AbiRootIngress::Process,
+            false,
+        )
+        .expect("the complete-environment fixture plans");
+        let owner = plan.continuation_specializations[0].key.consumer_owner;
+        // ⛔ Real authorities, not hand-built ones: eligibility is whole-record
+        // equality, so a synthetic S could differ from anything production ever
+        // produces and the row would prove nothing about the live rule.
+        let sources = continuation_owner_entry_sources(&plan, owner).expect("entry sources");
+        assert!(
+            sources.len() >= 2,
+            "the fixture must supply two distinct source slots, or S and T cannot be told apart"
+        );
+        let s = sources[0].clone();
+        let t = sources[1].clone();
+        assert_ne!(s, t, "S and T must be distinct records");
+        assert_ne!(
+            s.coordinate, t.coordinate,
+            "S and T must differ in COORDINATE, or the contract-mismatch arm would fire where \
+             the rows below expect the ambiguity or absence one"
+        );
+        let closed = |sources: Vec<ContinuationSourceSlotAuthority>| {
+            ContinuationValueSourceAuthority::Closed(sources)
+        };
+
+        // Control 1's shape, as a unit: two exact aliases, the nearer wins.
+        let both = vec![closed(vec![s.clone()]), closed(vec![t.clone()]), closed(vec![s.clone()])];
+        assert_eq!(
+            nearest_exact_alias(&s, &both).expect("two exact aliases are eligible"),
+            0,
+            "among proved aliases the minimum de Bruijn index is selected"
+        );
+
+        // ⛔ Control 3 — inner ambiguous, outer exact. The OUTER is selected.
+        let outer = vec![
+            closed(vec![s.clone(), t.clone()]),
+            closed(vec![t.clone()]),
+            closed(vec![s.clone()]),
+        ];
+        assert_eq!(
+            nearest_exact_alias(&s, &outer).expect("the outer singleton is eligible"),
+            2,
+            "an ambiguous Closed([S, T]) at the inner position is NOT an alias, so the rule must \
+             reach past it; answering 0 here would mean it is selecting the first member that \
+             merely contains the coordinate"
+        );
+
+        // ⛔ Control 4 — ambiguous with no singleton anywhere refuses.
+        let ambiguous = vec![closed(vec![s.clone(), t.clone()])];
+        let refusal = nearest_exact_alias(&s, &ambiguous)
+            .expect_err("an ambiguous source set proves nothing and must refuse");
+        assert!(
+            format!("{refusal:?}").contains("ambiguous source set"),
+            "the refusal must be the ambiguity one, not absence: {refusal:?}"
+        );
+
+        // ⛔ Control 5, unit form — same coordinate, different contract.
+        let mut narrowed = s.clone();
+        narrowed.referent_affinity = Vec::new();
+        assert_ne!(narrowed, s, "the narrowing must actually change the record");
+        assert_eq!(narrowed.coordinate, s.coordinate, "and must keep the coordinate");
+        let mismatched = vec![closed(vec![narrowed])];
+        let refusal = nearest_exact_alias(&s, &mismatched)
+            .expect_err("a different contract under the same coordinate must refuse");
+        assert!(
+            format!("{refusal:?}").contains("different carrier, ownership, storage owner"),
+            "the refusal must be the contract-mismatch one: {refusal:?}"
+        );
+
+        // ⛔ Absent entirely — the third refusal, kept distinguishable.
+        let absent = vec![closed(vec![t])];
+        let refusal =
+            nearest_exact_alias(&s, &absent).expect_err("an absent coordinate must refuse");
+        assert!(
+            format!("{refusal:?}").contains("not present in the lexical environment"),
+            "the refusal must be the absence one: {refusal:?}"
+        );
+    }
+
+    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D3b` alias controls 1, 2 and 6 — the
+    /// measured duplicate selects index 0, and the real consumer rederives it.**
+    ///
+    /// ⭐ This is the exact environment that produced the hard stop: `let y = x`
+    /// forwards process parameter 1, so `EntryAbi { .., 1, Parameter }` occupies
+    /// lexical indices **0 and 2**. The old exact-once law refused it outright.
+    ///
+    /// ⛔ **Control 2 is the canonicality half, and it is deliberately NOT stated
+    /// as "index 2 holds a different value".** It does not — index 2 is a proved
+    /// alias holding the same semantic source. What the consumer refuses is a
+    /// claim that is not the *canonical* selection, and that distinction is the
+    /// reason this rule is safe to share between two planes: planner and consumer
+    /// run one function, so a claim either is what that function returns or is
+    /// rejected.
+    ///
+    /// ⚠ **MEASURED**: the issued claim carries index 0; the production consumer
+    /// accepts it and refuses index 2. **CLAIMED**: the claim a consumer indexes
+    /// with is the planner's own answer, re-derived rather than trusted. **THE
+    /// GAP**: this re-runs the planner's rule, so a defect in the rule itself
+    /// would be reproduced rather than caught — `d3b_alias_eligibility_not_position_decides`
+    /// owns that half.
+    ///
+    /// **Promise class: durable invariant.**
+    #[test]
+    fn d3b_the_duplicated_entry_source_selects_the_nearest_alias() {
+        let expr = Box::leak(Box::new(contspec_complete_environment_fixture()));
+        let symbols = crate::NativeProcessSymbols::legacy_prelude();
+        let plan = plan_static_transition_graph_with_symbols(
+            expr,
+            &BTreeMap::new(),
+            &symbols,
+            AbiRootIngress::Process,
+            false,
+        )
+        .expect("the complete-environment fixture plans");
+        let unit = &plan.continuation_specializations[0];
+        let input = &unit.key.continuation_inputs[0];
+        let requested = ContinuationSourceSlotAuthority {
+            coordinate: input.coordinate,
+            carrier: input.carrier,
+            ownership: input.ownership,
+            storage_owner: input.storage_owner,
+            referent_affinity: input.referent_affinity.clone(),
+        };
+
+        // The duplicate is real and MEASURED here, not assumed from the fixture's
+        // name. ⛔ Without this the row could pass on an environment holding the
+        // coordinate once, where nearest-alias and exact-once agree.
+        let seat_environment = continuation_emission_seat_environment(
+            &plan,
+            &ContinuationProducerEnvironment {
+                producer_owner: unit.key.producer_owner,
+                producer_result_origin: unit.key.producer_result_origin,
+                producer_construct_origin: unit.key.producer_construct_origin,
+                consumer_owner: unit.key.consumer_owner,
+                inputs: Vec::new(),
+            },
+        )
+        .expect("the emission seat has an environment")
+        .1;
+        let exact_positions = seat_environment
+            .iter()
+            .enumerate()
+            .filter(|(_, value)| {
+                matches!(value, ContinuationValueSourceAuthority::Closed(sources)
+                    if sources.as_slice() == [requested.clone()])
+            })
+            .map(|(index, _)| index)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            exact_positions,
+            vec![0, 2],
+            "this row's whole subject is a coordinate at TWO exact-alias positions; one position \
+             would make nearest-alias and the retired exact-once law indistinguishable"
+        );
+
+        let Some(ContinuationEnvironmentDraft::CurrentLexical {
+            emission_owner,
+            producer_result_origin,
+            emission_origin,
+            lexical_environment_origin,
+            nearest_alias_index,
+        }) = input.availability.direct_emission
+        else {
+            panic!("a predeclared emitter must issue a current-lexical direct-emission claim");
+        };
+        // ⛔ Control 1 — the nearer of the two proved aliases.
+        assert_eq!(
+            nearest_alias_index, 0,
+            "the issued claim must carry the minimum eligible index"
+        );
+
+        // The REAL consumer accepts it.
+        verify_current_lexical_availability(
+            &plan,
+            emission_owner,
+            producer_result_origin,
+            emission_origin,
+            lexical_environment_origin,
+            &requested,
+            nearest_alias_index,
+        )
+        .expect("the production consumer must accept the planner's own answer");
+
+        // ⛔ Control 2 — the outer alias is refused as non-canonical.
+        let refusal = verify_current_lexical_availability(
+            &plan,
+            emission_owner,
+            producer_result_origin,
+            emission_origin,
+            lexical_environment_origin,
+            &requested,
+            2,
+        )
+        .expect_err(
+            "a claim naming the outer alias must be refused; accepting it would mean the \
+             consumer indexes with whatever number it is handed as long as something lives there",
+        );
+        assert!(
+            format!("{refusal:?}").contains("does not hold that coordinate at"),
+            "the refusal must be the seat revalidation: {refusal:?}"
+        );
+    }
+
+    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D2b` DISCRIMINATOR 2 — generated-context
+    /// capture availability, with the root and immediate positions DIFFERENT.**
+    ///
+    /// A generated context reaches a producer-local value only as one of its own
+    /// declared captures, laid out after its parameter run. So the immediate
+    /// capture slot is a third number, distinct from both the binding's
+    /// introduction index and its position in the capture projection — and a
+    /// row where any two of those coincide cannot tell a real lookup from an
+    /// index that happened to line up.
+    ///
+    /// ⭐ The enclosing capture projection is built with a decoy ahead of the
+    /// value, and the context declares parameters, so the three numbers here are
+    /// `0` (introduction), `1` (capture position) and `3` (immediate slot).
+    ///
+    /// MEASURED: the arm resolves to the exact context/owner it is keyed to with
+    /// `immediate_capture_slot = context_parameters + capture position`; and it
+    /// refuses when the caller's proof is absent, when the coordinate is not in
+    /// the capture projection, when the owner is crossed with another unit's
+    /// captures, and when the slot arithmetic would overflow. CLAIMED: a
+    /// producer-local capture exists only where the caller's own current-lexical
+    /// availability proves the value was there. THE GAP: `D3` still owns
+    /// consuming this at emission; nothing here lowers it.
+    ///
+    /// **Promise class: durable invariant.**
+    #[test]
+    fn contsrc_d2b_generated_context_capture_separates_root_from_immediate() {
+        let expr = Box::leak(Box::new(contsrc_d2_both_binding_kinds_fixture()));
+        let plan =
+            plan_static_transition_graph(expr, &BTreeMap::new()).expect("the D2 fixture plans");
+        let target = contsrc_d2_first_origin(&plan, |expr| {
+            matches!(expr, RuntimeExpr::ComputationalMatch { .. })
+        });
+        let owner = occurrence_authority(&plan, target)
+            .expect("the target has an occurrence authority")
+            .owner;
+        let reached = contsrc_d2_reached_environment(&plan, target);
+        let (effect_source, _, effect_locator) = contsrc_d2_local(&reached[1]);
+        let coordinate = effect_source.coordinate;
+        let introduction_index = effect_locator.environment_index;
+
+        let (result_origin, construct_origin, seat_index) =
+            contsrc_d2b_shifted_emission_seat(&plan, owner, coordinate, introduction_index);
+        let source_root = continuation_owner_source_root(&plan, owner).expect("one source root");
+
+        // The CALLER's own projection of this value. ⭐ **The re-cut relocates
+        // this row's caller-proof authority rather than dropping it.** Under the
+        // retired law the projection inspected this record's availability and
+        // refused anything but a current-lexical one. That check is gone, because
+        // a nested generated context's member lawfully carries an entry-frame
+        // claim, so the old refusal was not a law. What replaces it is stronger
+        // and structural: **exact-once membership by whole coordinate in the
+        // enclosing specialization's own continuation inputs** — and those inputs
+        // were themselves projected and validated when that specialization was
+        // interned. A capture cannot be fabricated because there is nothing to
+        // find unless the caller really declares the value.
+        let caller_proof = ContinuationInputProjection {
+            availability: ContinuationAvailabilityDraft {
+                direct_emission: Some(ContinuationEnvironmentDraft::CurrentLexical {
+                    emission_owner: owner,
+                    producer_result_origin: result_origin,
+                    emission_origin: construct_origin,
+                    lexical_environment_origin: source_root,
+                    nearest_alias_index: seat_index,
+                }),
+                context_capture: None,
+            },
+            producer_owner: owner,
+            consumer_owner: owner,
+            coordinate,
+            ordinal: 1,
+            carrier: effect_source.carrier,
+            ownership: effect_source.ownership,
+            storage_owner: effect_source.storage_owner,
+            boundary_phase: BoundaryUsePhase::OperationalCarrier,
+            boundary_operation: BoundaryUseOperation::Forward,
+            boundary_need: BoundaryUseNeed::PreserveValue,
+            boundary_avail: BoundaryUseAvail::Value,
+            referent_affinity: effect_source.referent_affinity.clone(),
+            ordinary_abi_position: 7,
+        };
+        // A decoy ahead of it, so the capture POSITION is not zero and cannot
+        // be confused with the introduction index.
+        let decoy = ContinuationInputProjection {
+            availability: ContinuationAvailabilityDraft {
+                direct_emission: Some(ContinuationEnvironmentDraft::EntryFrame {
+                    frame: ContinuationFrameRequirement::Predeclared(owner),
+                    declared_slot: 0,
+                }),
+                context_capture: None,
+            },
+            coordinate: ContinuationSourceCoordinate::EntryAbi {
+                source_owner: owner,
+                source_abi_position: 0,
+                source: ContinuationInputSource::Parameter,
+            },
+            ordinal: 0,
+            ..caller_proof.clone()
+        };
+        let enclosing_inputs = vec![decoy, caller_proof.clone()];
+        const CONTEXT_PARAMETERS: u32 = 2;
+        let context = ContinuationSpecializationId(0);
+        // ⛔ Two DISTINCT worker bodies. The frame identity is a pair, and a row
+        // that only ever supplies one body origin cannot tell a recorded identity
+        // from a defaulted one.
+        let body_origin = target;
+        let other_body_origin = plan
+            .occurrence_authorities
+            .iter()
+            .map(|authority| authority.origin)
+            .find(|origin| *origin != body_origin)
+            .expect("the fixture has a second static origin");
+        let environment = ContinuationProducerEnvironment {
+            producer_owner: owner,
+            producer_result_origin: result_origin,
+            producer_construct_origin: construct_origin,
+            consumer_owner: owner,
+            inputs: vec![effect_source.clone()],
+        };
+        fn resolution<'plan>(
+            context: ContinuationSpecializationId,
+            inputs: &'plan [ContinuationInputProjection],
+            worker_body_origin: StaticOriginId,
+            parameters: u32,
+        ) -> ContinuationEmitterFrame<'plan> {
+            ContinuationEmitterFrame::GeneratedContext {
+                enclosing: context,
+                worker_body_origin,
+                context_parameters: parameters,
+                enclosing_inputs: inputs,
+            }
+        }
+
+        let projected = exact_continuation_projection(
+            &plan,
+            &environment,
+            0,
+            &resolution(context, &enclosing_inputs, body_origin, CONTEXT_PARAMETERS),
+        )
+        .expect("a captured producer-local value with a caller proof must project");
+        let declared = ContinuationEnvironmentDraft::EntryFrame {
+            frame: ContinuationFrameRequirement::GeneratedContext {
+                enclosing: context,
+                worker_body_origin: body_origin,
+            },
+            declared_slot: CONTEXT_PARAMETERS + 1,
+        };
+        assert_eq!(
+            projected[0].availability,
+            // ⭐ BOTH views carry the same claim here, and only here. A generated
+            // context's direct emission and its capture append read one frame --
+            // its own operand run -- so the two consumers agree by identity of
+            // environment rather than by convention. ⛔ Asserting the whole record
+            // is what makes that agreement measured; asserting one view would
+            // leave the other unexamined.
+            ContinuationAvailabilityDraft {
+                direct_emission: Some(declared),
+                context_capture: Some(declared),
+            },
+        );
+        // The three numbers are pairwise distinct, which is what makes the
+        // lookup answerable rather than a coincidence of index.
+        assert_ne!(CONTEXT_PARAMETERS + 1, introduction_index);
+        assert_ne!(CONTEXT_PARAMETERS + 1, 1, "the capture position is not the slot");
+
+        // ⛔ Fail-closed 3 of 5 — missing full-coordinate capture membership.
+        let refusal = exact_continuation_projection(
+            &plan,
+            &environment,
+            0,
+            &resolution(context, &enclosing_inputs[..1], body_origin, CONTEXT_PARAMETERS),
+        )
+        .expect_err("a value absent from the capture projection must refuse");
+        assert!(
+            format!("{refusal:?}").contains("not among the"),
+            "the refusal must be the membership one: {refusal:?}"
+        );
+
+        // ⛔ 4 of 5 — the FRAME IDENTITY is recorded, not defaulted.
+        //
+        // ⭐ **This is the re-cut of the retired "crossed owner/context" refusal,
+        // and the relocation is the point.** That refusal fired in the planner,
+        // which was the wrong plane for it: the planner is handed the emitting
+        // frame and has no second frame to cross it against. What it can be held
+        // to is FAITHFULNESS — that the claim names the frame it was actually
+        // given. The refusal itself now lives at the consumer, in
+        // `verify_entry_frame`, which is the only place both the claimed frame
+        // and the held frame exist. A row asserting a defaulted identity would
+        // make that consumer check unreachable in principle.
+        let crossed = exact_continuation_projection(
+            &plan,
+            &environment,
+            0,
+            &resolution(context, &enclosing_inputs, other_body_origin, CONTEXT_PARAMETERS),
+        )
+        .expect("a different worker body is still a well-formed emitting frame")[0]
+            .availability;
+        assert_eq!(
+            crossed,
+            ContinuationAvailabilityDraft {
+                direct_emission: Some(ContinuationEnvironmentDraft::EntryFrame {
+                    frame: ContinuationFrameRequirement::GeneratedContext {
+                        enclosing: context,
+                        worker_body_origin: other_body_origin,
+                    },
+                    declared_slot: CONTEXT_PARAMETERS + 1,
+                }),
+                context_capture: Some(ContinuationEnvironmentDraft::EntryFrame {
+                    frame: ContinuationFrameRequirement::GeneratedContext {
+                        enclosing: context,
+                        worker_body_origin: other_body_origin,
+                    },
+                    declared_slot: CONTEXT_PARAMETERS + 1,
+                }),
+            },
+            "the claim must name the worker body it was handed; a frame identity that ignores it \
+             would make two different frames indistinguishable to the consumer that has to refuse \
+             one of them"
+        );
+        assert_ne!(
+            crossed, projected[0].availability,
+            "two distinct emitting frames must not project the same claim, or the identity \
+             carries no information"
+        );
+
+        // ⛔ 5 of 5 — the slot arithmetic refuses rather than wraps. The capture
+        // run starts after the parameter run, and `u32::MAX` parameters leaves no
+        // representable slot for a capture at position 1.
+        let refusal = exact_continuation_projection(
+            &plan,
+            &environment,
+            0,
+            &resolution(context, &enclosing_inputs, body_origin, u32::MAX),
+        )
+        .expect_err("an immediate slot past the representable range must refuse");
+        assert!(
+            format!("{refusal:?}").contains("immediate slot position exhausted"),
+            "the refusal must be the slot-arithmetic one: {refusal:?}"
+        );
+
+        // ⛔ 6 — membership is EXACTLY ONCE. A duplicated member makes the
+        // declared slot ambiguous, and taking the first would silently pick one
+        // of two positions holding the same coordinate.
+        let refusal = exact_continuation_projection(
+            &plan,
+            &environment,
+            0,
+            &resolution(
+                context,
+                &[
+                    enclosing_inputs[0].clone(),
+                    caller_proof.clone(),
+                    caller_proof,
+                ],
+                body_origin,
+                CONTEXT_PARAMETERS,
+            ),
+        )
+        .expect_err("a duplicated capture member must refuse rather than take the first");
+        assert!(
+            format!("{refusal:?}").contains("two members for one"),
+            "the refusal must be the ambiguity one: {refusal:?}"
+        );
+    }
+
+    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D4a` — the binding is ADMITTED, and the
+    /// declined set is refused by the authority that was always there.**
+    ///
+    /// ⭐ **This row is the `D2` sentinel, fired and restated — not deleted.**
+    /// Its predecessor asserted the exact opposite: that no interned
+    /// specialization names a producer-local coordinate. That was `D2`'s law
+    /// and its promise class named `D4` as the event that retires it. `D4a` is
+    /// that event, so the assertion is **inverted rather than dropped**, which
+    /// keeps the transition itself measured instead of leaving a gap where a
+    /// law used to be.
+    ///
+    /// MEASURED: the fixture's environment holds producer-local bindings, and
+    /// at least one interned specialization now names a producer-local
+    /// coordinate, against a nonzero interned-input total. CLAIMED: the `D2`
+    /// filter is gone and the domain reaches interning. THE GAP: this row does
+    /// **not** measure `R`'s decline — this fixture is fully closed, so nothing
+    /// in it reaches either decline clause, and the corpus-level
+    /// `interned = V` / `declined = R` partition is `D4b`'s. It also says
+    /// nothing about lowering, which still refuses both local availability
+    /// arms; that is `D3b`'s, against the emissions this checkpoint creates.
+    ///
+    /// **Promise class: durable invariant** — the admission law itself. It goes
+    /// red if a future change re-filters the domain or weakens either decline
+    /// clause.
+    #[test]
+    fn contsrc_d4a_a_producer_local_environment_is_admitted_and_r_still_declines() {
+        let expr = Box::leak(Box::new(contsrc_d2_both_binding_kinds_fixture()));
+        let plan = plan_static_transition_graph(expr, &BTreeMap::new())
+            .expect("a fixture whose environment names producer-local bindings still PLANS");
+        let target = contsrc_d2_first_origin(&plan, |expr| {
+            matches!(expr, RuntimeExpr::ComputationalMatch { .. })
+        });
+        let reached = contsrc_d2_reached_environment(&plan, target);
+        assert!(
+            reached.iter().any(|value| matches!(
+                value,
+                ContinuationValueSourceAuthority::Closed(sources)
+                    if sources.iter().any(|source| matches!(
+                        source.coordinate,
+                        ContinuationSourceCoordinate::ProducerLocal { .. }
+                    ))
+            )),
+            "the fixture must actually reach the gate, or this row measures nothing: {reached:?}"
+        );
+
+        // ADMISSION, the inverted law. ⛔ The count is asserted alongside, so an
+        // empty interned population cannot satisfy this vacuously — which is
+        // the shape that would have let a still-filtering gate pass.
+        let mut interned_inputs = 0usize;
+        let mut interned_local = 0usize;
+        for plan in [&plan, &contspec_plan()] {
+            for unit in &plan.continuation_specializations {
+                for input in &unit.key.continuation_inputs {
+                    interned_inputs += 1;
+                    if matches!(
+                        input.coordinate,
+                        ContinuationSourceCoordinate::ProducerLocal { .. }
+                    ) {
+                        interned_local += 1;
+                    }
+                }
+            }
+        }
+        assert!(
+            interned_inputs > 0,
+            "no specialization interned any input at all, so this row holds vacuously"
+        );
+        assert!(
+            interned_local > 0,
+            "D4a admits the producer-local domain, so at least one interned specialization must \
+             name one; zero means the gate is still filtering and the deletion did not take"
+        );
+
+        // ⛔ `R`'s decline is deliberately NOT asserted here, and the reason is
+        // that it cannot be asserted honestly from this fixture. This
+        // environment is fully closed — that is precisely why it is admitted —
+        // so nothing in it reaches either decline clause. A row that
+        // constructed an `Open` value locally and matched on it would be a
+        // tautology about the enum, not a measurement of the take-loop.
+        //
+        // What keeps `R` declined is that `D4a` deleted a block *below* the
+        // take-loop and changed nothing in it. The corpus-level partition
+        // proof, `interned = V` and `declined = R` over all 83 instances, is
+        // `D4b`'s deliverable and needs the census harness, not this row.
+    }
+
+    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D3a` — the validator RE-DERIVES a
+    /// producer-local source instead of refusing its domain.**
+    ///
+    /// ⭐ The positive control is the deliverable: before `D3a` this call was
+    /// an `Err` for every producer-local coordinate, so `Ok(())` here is the
+    /// consumer actually being assigned rather than merely stopping.
+    ///
+    /// ⛔ The three discriminators exist because a lookup that merely *finds*
+    /// the coordinate would pass the positive control. Each perturbs one thing
+    /// the re-derivation must check and asserts the refusal by its own message.
+    ///
+    /// MEASURED: a walk-derived producer-local source validates; relocating it
+    /// to an index the same environment genuinely holds a **different** value
+    /// at is refused; changing the structural binding identity while keeping
+    /// the locator is refused; and corrupting a contract field the coordinate
+    /// does not name — the referent affinity — is refused. CLAIMED: the arm
+    /// re-runs the derivation and compares the whole record, rather than
+    /// confirming the coordinate appears somewhere. THE GAP: production still
+    /// declines every producer-local candidate at the `D2` gate, so this arm is
+    /// reached here by direct construction and not by any fixture compile.
+    ///
+    /// **Promise class: durable invariant.**
+    #[test]
+    fn contsrc_d3a_validator_rederives_a_producer_local_source() {
+        let expr = Box::leak(Box::new(contsrc_d2_both_binding_kinds_fixture()));
+        let plan =
+            plan_static_transition_graph(expr, &BTreeMap::new()).expect("the D2 fixture plans");
+        let target = contsrc_d2_first_origin(&plan, |expr| {
+            matches!(expr, RuntimeExpr::ComputationalMatch { .. })
+        });
+        let reached = contsrc_d2_reached_environment(&plan, target);
+        let (effect_source, _, effect_locator) = contsrc_d2_local(&reached[1]);
+
+        // The positive control, and the whole point of the deliverable.
+        validate_continuation_source_slot(&plan, effect_source)
+            .expect("D3a re-derives a producer-local source rather than refusing its domain");
+
+        // Discriminator 1 — the locator must name the position that actually
+        // holds THIS value.
+        //
+        // ⭐ The decoy is the fixture's OTHER producer-local binding's own
+        // locator, so it is a real occupied position in a real scope that holds
+        // a genuinely different value. That is what makes "walk somewhere and
+        // accept whatever sits at the index" a FAILING answer here rather than
+        // an indistinguishable one — an out-of-range index would only have
+        // measured the bounds guard.
+        let (binder_source, _, binder_locator) = contsrc_d2_local(&reached[0]);
+        assert_ne!(
+            (binder_locator.environment_origin, binder_locator.environment_index),
+            (effect_locator.environment_origin, effect_locator.environment_index),
+            "the two fixture bindings must occupy different positions, or the decoy is the seat"
+        );
+        let mut relocated = effect_source.clone();
+        if let ContinuationSourceCoordinate::ProducerLocal { locator, .. } =
+            &mut relocated.coordinate
+        {
+            *locator = binder_locator;
+        }
+        // The oracle: that position is occupied, and by something else.
+        let decoy_scope = contsrc_d2_reached_environment(&plan, binder_locator.environment_origin);
+        assert!(
+            matches!(
+                decoy_scope.get(binder_locator.environment_index as usize),
+                Some(ContinuationValueSourceAuthority::Closed(sources))
+                    if sources.contains(binder_source) && !sources.contains(&relocated)
+            ),
+            "the decoy position must hold the OTHER binding and not the relocated one, or this \
+             discriminator cannot fail for the intended reason"
+        );
+        assert_eq!(
+            validate_continuation_source_slot(&plan, &relocated).unwrap_err(),
+            planner_error(
+                "continuation value disagrees with its exact producer-local source provenance"
+            )
+        );
+
+        // Discriminator 2 — the structural binding identity is re-derived, not
+        // carried. Keeping the locator exact and moving only the ordinal makes
+        // the coordinate name a binding the walk never places there.
+        let mut crossed_binding = effect_source.clone();
+        if let ContinuationSourceCoordinate::ProducerLocal { binding, .. } =
+            &mut crossed_binding.coordinate
+        {
+            binding.binding_ordinal = binding.binding_ordinal.wrapping_add(1);
+        }
+        assert_eq!(
+            validate_continuation_source_slot(&plan, &crossed_binding).unwrap_err(),
+            planner_error(
+                "continuation value disagrees with its exact producer-local source provenance"
+            )
+        );
+
+        // Discriminator 3 — the CONTRACT, not just the coordinate. Affinity is
+        // re-derived by `producer_local_source` from the binding's lifetime, so
+        // a projection arriving with a different one disagrees even though its
+        // coordinate is exact.
+        //
+        // ⛔ The corrupted affinity is deliberately kept NON-EMPTY. Clearing it
+        // was the first draft, and it passed against a coordinate-only
+        // comparison: the sibling `is_empty()` clause refused it, so the row
+        // named the whole-record comparison while measuring the emptiness
+        // guard. Measured, not reasoned — the mutation to a coordinate-only
+        // match survived until this became a different non-empty value.
+        let mut wrong_affinity = effect_source.clone();
+        assert!(
+            !wrong_affinity.referent_affinity.is_empty(),
+            "the fixture source must carry an affinity to corrupt, or this row is vacuous"
+        );
+        wrong_affinity
+            .referent_affinity
+            .push(wrong_affinity.referent_affinity[0]);
+        assert!(
+            !wrong_affinity.referent_affinity.is_empty()
+                && wrong_affinity.referent_affinity != effect_source.referent_affinity,
+            "the corrupted affinity must be non-empty AND different, or discriminator 3 measures \
+             the emptiness guard instead of the whole-record comparison"
+        );
+        assert_eq!(
+            validate_continuation_source_slot(&plan, &wrong_affinity).unwrap_err(),
+            planner_error(
+                "continuation value disagrees with its exact producer-local source provenance"
+            )
+        );
+
+        // Discriminator 4 — the locator's index is BOUNDED by the environment
+        // that scope actually has, and running off it refuses by its own
+        // message rather than folding into the disagreement above.
+        //
+        // ⚠ This is the one refusal the coordinate comparison cannot subsume.
+        // The locator lives *inside* the coordinate, so a wrong index is
+        // normally caught as a coordinate disagreement — an index past the end
+        // has no position to compare against at all, and reaches a different
+        // guard.
+        let mut past_end = effect_source.clone();
+        if let ContinuationSourceCoordinate::ProducerLocal { locator, .. } =
+            &mut past_end.coordinate
+        {
+            locator.environment_index = u32::MAX;
+        }
+        assert_eq!(
+            validate_continuation_source_slot(&plan, &past_end).unwrap_err(),
+            planner_error(
+                "a producer-local continuation value names an environment index past the end of \
+                 the environment in force at its own locator scope"
+            )
+        );
+    }
+
+    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D3a` — the ABI provenance construction is
+    /// DOMAIN-PRESERVING, on the one input where a domain-total helper looks
+    /// identical.**
+    ///
+    /// ⭐ The whole ruling is about *one* case: the same owner id reached
+    /// through two different coordinate domains. Any helper — including the
+    /// domain-total `provenance_owner()` this replaced — agrees with this one
+    /// on every other input, so a row that varied the owner would pass against
+    /// the rejected design. This holds the owner FIXED and varies only the
+    /// domain.
+    ///
+    /// MEASURED: two coordinates carrying the identical `PredeclaredFunctionId`
+    /// in different domains produce provenance values that are not equal, and
+    /// each lands in its own arm. CLAIMED: an entry-ABI authority and a
+    /// producer-local authority in the same owner are distinguishable at this
+    /// plane. THE GAP: this is the constructor's law only; that the ABI
+    /// cross-check actually *uses* it is
+    /// `contspec_abi_refuses_owner_lifetime_and_affinity_disagreement`.
+    ///
+    /// **Promise class: durable invariant.**
+    #[test]
+    fn contsrc_d3a_abi_provenance_separates_the_domains_at_one_owner() {
+        let owner = PredeclaredFunctionId(11);
+        let entry = abi::AbiContinuationInputProvenance::of(
+            ContinuationSourceCoordinate::EntryAbi {
+                source_owner: owner,
+                source_abi_position: 0,
+                source: ContinuationInputSource::Parameter,
+            },
+        );
+        let local = abi::AbiContinuationInputProvenance::of(
+            ContinuationSourceCoordinate::ProducerLocal {
+                binding: ProducerLocalBinding {
+                    binding_owner: owner,
+                    binding_origin: StaticOriginId(4),
+                    binding_ordinal: 0,
+                },
+                locator: ProducerLocalLocator {
+                    environment_origin: StaticOriginId(4),
+                    environment_index: 0,
+                },
+            },
+        );
+        assert_eq!(
+            entry,
+            abi::AbiContinuationInputProvenance::EntryAbi {
+                source_owner: owner
+            }
+        );
+        assert_eq!(
+            local,
+            abi::AbiContinuationInputProvenance::ProducerLocal {
+                binding_owner: owner
+            }
+        );
+        // ⛔ The kill: a domain-total owner projection makes these equal.
+        assert_ne!(
+            entry, local,
+            "the same owner reached through two domains must not collapse to one provenance"
+        );
+    }
+
     fn mutate_projection_field(
         projection: &mut ContinuationInputProjection,
         field: ContinuationProjectionOmission,
@@ -12882,15 +23351,34 @@ mod tests {
             ContinuationProjectionOmission::ConsumerOwner => {
                 projection.consumer_owner = PredeclaredFunctionId(u32::MAX)
             }
-            ContinuationProjectionOmission::SourceOwner => {
-                projection.source_owner = PredeclaredFunctionId(u32::MAX)
-            }
-            ContinuationProjectionOmission::SourceAbiPosition => {
-                projection.source_abi_position = u32::MAX
-            }
-            ContinuationProjectionOmission::Source => {
-                projection.source = ContinuationInputSource::SeedCapture {
-                    defining_origin: StaticOriginId(u32::MAX),
+            // `D1` — same three components, now inside the `EntryAbi` arm.
+            // ⛔ The sentinel is written INTO the arm, never by replacing the
+            // arm: swapping the whole coordinate for a producer-local one would
+            // make every row of the matrix pass on the domain tag alone.
+            ContinuationProjectionOmission::SourceOwner
+            | ContinuationProjectionOmission::SourceAbiPosition
+            | ContinuationProjectionOmission::Source => {
+                let ContinuationSourceCoordinate::EntryAbi {
+                    source_owner,
+                    source_abi_position,
+                    source,
+                } = &mut projection.coordinate
+                else {
+                    panic!("the AC-2 omission matrix reached a producer-local coordinate");
+                };
+                match field {
+                    ContinuationProjectionOmission::SourceOwner => {
+                        *source_owner = PredeclaredFunctionId(u32::MAX)
+                    }
+                    ContinuationProjectionOmission::SourceAbiPosition => {
+                        *source_abi_position = u32::MAX
+                    }
+                    ContinuationProjectionOmission::Source => {
+                        *source = ContinuationInputSource::SeedCapture {
+                            defining_origin: StaticOriginId(u32::MAX),
+                        }
+                    }
+                    other => panic!("{other:?} is not a coordinate component"),
                 }
             }
             ContinuationProjectionOmission::Ordinal => projection.ordinal = u32::MAX,
@@ -13110,6 +23598,211 @@ mod tests {
             )
             .unwrap_err(),
             planner_error("continuation edge token disagrees with its exact target")
+        );
+    }
+
+    // -- `D7` checkpoint `1c`: the matrix-omission law, in PLANNING ----------
+    //
+    // ⭐⭐ The law is that a real planned static-worker member which is omitted
+    // or misclassified must fail HERE, and may not fall through to the late
+    // generic `Closure` arm. Its two halves are measured separately: an exact
+    // member's absence or reclassification must red in planning, and an
+    // ORDINARY closure -- one outside any planner-proved edge -- must be
+    // untouched by it.
+
+    /// One closure shape, used twice: once in the recursive-position seat where
+    /// the planner proves an exact edge, and once as an ordinary `Let` binder
+    /// where it proves nothing.
+    ///
+    /// ⭐⭐ **Same shape on purpose.** The frame's scoping sentence is about *the
+    /// same closure* outside an exact planner-proved edge, so a fixture whose
+    /// two closures differed in arity or capture count could satisfy the law by
+    /// telling them apart on shape rather than on membership -- and would say
+    /// nothing about the property.
+    fn d7_1c_member_and_ordinary_twin_fixture() -> RuntimeExpr {
+        let twin = || RuntimeExpr::LexicalClosure {
+            captures: vec![unit()],
+            params: vec!["twin".to_string()],
+            body: Box::new(RuntimeExpr::Construct {
+                constructor: "ctor:fixture::Contspec::Leaf".to_string(),
+                args: Vec::new(),
+            }),
+        };
+        RuntimeExpr::Let {
+            // The ordinary twin. Nothing proves an edge into it, so no
+            // specialization names it and the law must not demand one.
+            value: Box::new(twin()),
+            body: Box::new(RuntimeExpr::ComputationalMatch {
+                scrutinee: Box::new(RuntimeExpr::Construct {
+                    constructor: "ctor:fixture::Contspec::Node".to_string(),
+                    args: vec![twin()],
+                }),
+                cases: vec![
+                    crate::RuntimeComputationalMatchCase {
+                        constructor: "ctor:fixture::Contspec::Node".to_string(),
+                        argument_binders: 1,
+                        recursive_positions: vec![0],
+                        body: RuntimeExpr::Var(0),
+                    },
+                    crate::RuntimeComputationalMatchCase {
+                        constructor: "ctor:fixture::Contspec::Leaf".to_string(),
+                        argument_binders: 0,
+                        recursive_positions: Vec::new(),
+                        body: unit(),
+                    },
+                ],
+                default: RuntimeTrap {
+                    code: RuntimeTrapCode::PatternMatchFailure,
+                    message: "d7 1c twin fixture".to_string(),
+                },
+            }),
+        }
+    }
+
+    /// The members a plan's specialization population names, and the
+    /// `ClosureBody` units it does not.
+    fn d7_1c_member_and_ordinary_body_counts(plan: &StaticTransitionPlan<'_>) -> (usize, usize) {
+        let members = plan
+            .continuation_specializations
+            .iter()
+            .map(|specialization| specialization.key.worker.body_origin)
+            .collect::<BTreeSet<_>>();
+        let ordinary = plan
+            .abi
+            .descriptors
+            .iter()
+            .filter(|descriptor| {
+                matches!(descriptor.definition, AbiUnitDefinition::ClosureBody { .. })
+                    && !members.contains(&descriptor.origin)
+            })
+            .count();
+        (members.len(), ordinary)
+    }
+
+    /// **The positive control and the scoping half in one measurement.**
+    ///
+    /// ⭐ The scoping assertion is what stops this law from being "every closure
+    /// body needs a specialization". That reading would also make every mutation
+    /// row below red, so the rows alone cannot distinguish the two -- only a
+    /// plan that carries an ordinary `ClosureBody` and still closes can.
+    #[test]
+    fn d7_1c_the_member_population_closes_and_ordinary_closures_are_outside_it() {
+        let expr = d7_1c_member_and_ordinary_twin_fixture();
+        let plan = plan_static_transition_graph(&expr, &BTreeMap::new())
+            .expect("the twin fixture plans, with the member law in force");
+        let (members, ordinary) = d7_1c_member_and_ordinary_body_counts(&plan);
+        assert!(
+            members >= 1,
+            "the fixture must prove at least one exact planner edge, or every row below is vacuous"
+        );
+        assert!(
+            ordinary >= 1,
+            "the fixture must also carry a closure body OUTSIDE every proved edge, or the law is \
+             indistinguishable from `every closure body needs a specialization`"
+        );
+        validate_static_worker_member_population(&plan)
+            .expect("the derived member population is closed");
+    }
+
+    /// **Every compile-valid corruption of the exact member reds IN PLANNING.**
+    ///
+    /// ⭐ Four settings and not one, because a member can be wrong by not being
+    /// there, by being there as a different unit kind, by being attributed to a
+    /// different closure, and by declaring a different contract in the same
+    /// place. `Reclassify` and `Misdeclare` are the two a positive assertion is
+    /// most likely to agree with by accident: the unit is still present, still
+    /// declared and still has a function.
+    ///
+    /// ⛔ **The first three share one refusal, and that is the honest reading
+    /// rather than a collapsed check.** This law joins the two populations on
+    /// the defining closure occurrence, so "the unit is gone", "the unit is not
+    /// a closure body" and "the unit belongs to another closure" are one fact to
+    /// it: no emittable unit defines this worker's closure. The contract row is
+    /// what proves the law is not merely a presence test -- it fails with the
+    /// member present, correctly classified, and correctly attributed.
+    #[test]
+    fn d7_1c_an_omitted_or_misclassified_member_reds_in_planning() {
+        let expr = d7_1c_member_and_ordinary_twin_fixture();
+        for (mutation, expected) in [
+            (
+                StaticWorkerMemberMutation::OmitMember,
+                "no emittable unit defines",
+            ),
+            (
+                StaticWorkerMemberMutation::ReclassifyMember,
+                "no emittable unit defines",
+            ),
+            (
+                StaticWorkerMemberMutation::RedirectDefiningOccurrence,
+                "no emittable unit defines",
+            ),
+            (
+                StaticWorkerMemberMutation::MisdeclareMemberContract,
+                "different parameter count",
+            ),
+        ] {
+            let Err(error) = with_static_worker_member_mutation(mutation, || {
+                plan_static_transition_graph(&expr, &BTreeMap::new())
+            }) else {
+                panic!("{mutation:?}: a corrupted member population must not close")
+            };
+            let CraneliftBackendError::Backend(BackendFailure::PlannerInvariant(reason)) = &error
+            else {
+                panic!("{mutation:?} must refuse in PLANNING, got {error:?}")
+            };
+            assert!(
+                reason.contains(expected),
+                "{mutation:?} must be attributed to the member law, got {reason:?}"
+            );
+        }
+    }
+
+    /// **The refusal reaches the whole lowering entry, and is never the generic
+    /// `Closure` diagnostic.**
+    ///
+    /// ⭐⭐ The planning-entry rows above prove the checker fires; this proves
+    /// the checker is ON THE PATH a program takes. Planning runs before any
+    /// Cranelift function is defined, so a `PlannerInvariant` here is a refusal
+    /// before definition or object emission by construction -- and no object is
+    /// returned to say otherwise.
+    ///
+    /// ⛔ The unmutated row is the positive control: the same fixture through
+    /// the same entry must not produce this refusal, which is what makes the
+    /// mutated rows evidence rather than a fixture that never compiled.
+    #[test]
+    fn d7_1c_the_planning_refusal_is_what_the_whole_lowering_entry_reports() {
+        let example = crate::RuntimeExample {
+            name: "d7-1c-member-law".to_string(),
+            checked_core_shape: "LexicalClosure".to_string(),
+            ir: d7_1c_member_and_ordinary_twin_fixture(),
+            observation: crate::RuntimeObservation::Returned(crate::RuntimeGroundValue::Bool(true)),
+        };
+        let compile = || {
+            crate::run_example_with_seed_observation(&example, &crate::NativeSeedEnvironment::empty())
+                .err()
+        };
+        let member_law = |error: &CraneliftBackendError| {
+            matches!(
+                error,
+                CraneliftBackendError::Backend(BackendFailure::PlannerInvariant(reason))
+                    if reason.contains("no emittable unit defines")
+            )
+        };
+        if let Some(error) = compile() {
+            assert!(
+                !member_law(&error),
+                "the unmutated fixture must not trip the member law: {error:?}"
+            );
+        }
+        let error = with_static_worker_member_mutation(
+            StaticWorkerMemberMutation::OmitMember,
+            compile,
+        )
+        .expect("an omitted member must refuse the whole entry, not produce a run report");
+        assert!(
+            member_law(&error),
+            "an omitted member must refuse in planning, never at the generic closure \
+             diagnostic: {error:?}"
         );
     }
 }

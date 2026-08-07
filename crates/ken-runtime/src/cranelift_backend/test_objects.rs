@@ -102,6 +102,15 @@ fn px8tr_test_interface(name: u8) -> crate::CheckedAnswerInterfaceV1 {
     crate::CheckedAnswerInterfaceV1::new(bytes).expect("PX8-TR test interface is canonical")
 }
 
+/// `D5a` localization: the same fixture's planning inputs, so a census can be
+/// taken independently of the emission run.
+#[cfg(test)]
+pub(crate) fn px8tr_nested_post_effect_planning_inputs()
+-> (crate::RuntimeExpr, Vec<crate::RuntimeDeclaration>) {
+    let (entry, declaration, _plan) = px8tr_nested_post_effect_fixture();
+    (entry, vec![declaration])
+}
+
 fn px8tr_nested_post_effect_fixture() -> (
     RuntimeExpr,
     RuntimeDeclaration,
@@ -165,7 +174,7 @@ fn px8tr_nested_post_effect_fixture() -> (
         args: vec![
             unit(),
             RuntimeExpr::LexicalClosure {
-                captures: Vec::new(),
+                captures: px8tr_worker_captures(),
                 params: vec!["response".to_string()],
                 body: Box::new(terminal_body),
             },
@@ -189,8 +198,30 @@ fn px8tr_nested_post_effect_fixture() -> (
                     call_template_id: 100,
                     checked_occurrence_path: vec![30],
                     body: Box::new(RuntimeExpr::Call {
-                        callee: Box::new(RuntimeExpr::Var(0)),
-                        args: vec![unit()],
+                        callee: Box::new(RuntimeExpr::Var(
+                            if px8tr_call_selected_recursive_argument() {
+                                2
+                            } else {
+                                0
+                            },
+                        )),
+                        // `D8p` — under test only, nest an ORDINARY call on the
+                        // same recursor binder inside the checked application.
+                        // The nested call instantiates a semantic IH layer of
+                        // its own, and a segment carrying a checked frame
+                        // requires every semantic layer to carry a checked
+                        // invocation authority. This is the refusal `D8p` must
+                        // not weaken: projecting the checked-application seam
+                        // onto a second call edge must not make an unauthorised
+                        // layer acceptable.
+                        args: if px8tr_nest_ordinary_ih_call() {
+                            vec![RuntimeExpr::Call {
+                                callee: Box::new(RuntimeExpr::Var(0)),
+                                args: vec![unit()],
+                            }]
+                        } else {
+                            vec![unit()]
+                        },
                     }),
                 }),
             },
@@ -208,6 +239,15 @@ fn px8tr_nested_post_effect_fixture() -> (
                     constructor: vis_constructor.clone(),
                     args: vec![
                         unit(),
+                        // ⛔ Capture-free, deliberately, even when the `D9b`
+                        // switch is armed. THIS closure is the scrutinee's
+                        // recursive field, so it is what the `ComputationalMatch`
+                        // eliminates into the case body's induction hypothesis —
+                        // and a capture-bearing closure here arrives carried,
+                        // making the IH a carried value that the case body's
+                        // `Call` then refuses as non-callable. The selected
+                        // worker `D9b` needs captures on is the one the case body
+                        // CONSTRUCTS, below.
                         RuntimeExpr::LexicalClosure {
                             captures: Vec::new(),
                             params: vec!["response".to_string()],
@@ -303,9 +343,125 @@ fn px8tr_nested_post_effect_fixture() -> (
     )
 }
 
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8p`** — nest an ordinary call on the same
+/// recursor binder inside the checked application, under test only.
+#[cfg(test)]
+thread_local! {
+    static PX8TR_NEST_ORDINARY_IH_CALL: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+pub(crate) fn set_px8tr_nest_ordinary_ih_call(armed: bool) {
+    PX8TR_NEST_ORDINARY_IH_CALL.with(|cell| cell.set(armed));
+}
+
+#[cfg(test)]
+fn px8tr_nest_ordinary_ih_call() -> bool {
+    PX8TR_NEST_ORDINARY_IH_CALL.with(std::cell::Cell::get)
+}
+
+#[cfg(not(test))]
+fn px8tr_nest_ordinary_ih_call() -> bool {
+    false
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D6b`** — call the SELECTED RECURSIVE
+/// ARGUMENT, under test only.
+///
+/// `Var(2)` is that member: the `Vis` case has `argument_binders = 2` and
+/// `recursive_positions = [1]`, so
+/// [`continuation_case_binder_run`](crate::cranelift_backend::lowering::units::continuation_case_binder_run)
+/// lays the run out as `[IH, ordinary field 0, SelectedRecursiveArgument{1}, ..]`.
+/// ⛔ Not `Var(0)`: that is the induction hypothesis, which every existing
+/// witness already calls, and calling it is what leaves the argument member
+/// proven as a binding and never as a call.
+#[cfg(test)]
+thread_local! {
+    static PX8TR_CALL_SELECTED_RECURSIVE_ARGUMENT: std::cell::Cell<bool> =
+        const { std::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+pub(crate) fn set_px8tr_call_selected_recursive_argument(armed: bool) {
+    PX8TR_CALL_SELECTED_RECURSIVE_ARGUMENT.with(|cell| cell.set(armed));
+}
+
+#[cfg(test)]
+fn px8tr_call_selected_recursive_argument() -> bool {
+    PX8TR_CALL_SELECTED_RECURSIVE_ARGUMENT.with(std::cell::Cell::get)
+}
+
+#[cfg(not(test))]
+fn px8tr_call_selected_recursive_argument() -> bool {
+    false
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D9b`** — give the SELECTED WORKER two
+/// distinguishable lexical captures, under test only.
+///
+/// The `Vis` case declares `recursive_positions = [1]`, so the `LexicalClosure`
+/// at position 1 of each `Vis` producer **is** the continuation's selected
+/// worker. With `captures: []` its planned envelope is the nonrecursive prefix
+/// alone, and every envelope perturbation that needs a capture role has nothing
+/// to move — which is the witness limit `b08c1b21` recorded.
+///
+/// ⭐ **Two, and distinguishable.** One capture cannot exhibit a swapped
+/// ordinal, and two captures carrying the *same* value would make the swap an
+/// observational identity — the equal-value no-op that has twice been mistaken
+/// here for a missing guard. The distinctness is asserted by the row that arms
+/// this, not assumed.
+///
+/// ⛔ Off by default: this fixture is shared with the `D6c` and `D8g` rows, and
+/// changing every witness's worker arity to serve one row would move facts those
+/// rows measure.
+#[cfg(test)]
+thread_local! {
+    static PX8TR_WORKER_CAPTURES: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+pub(crate) fn set_px8tr_worker_captures(armed: bool) {
+    PX8TR_WORKER_CAPTURES.with(|cell| cell.set(armed));
+}
+
+#[cfg(test)]
+fn px8tr_worker_captures() -> Vec<RuntimeExpr> {
+    if PX8TR_WORKER_CAPTURES.with(std::cell::Cell::get) {
+        // ⛔ Two DISTINCT literals, so the two capture operands differ in their
+        // own identity and a swap of their ordinals is observable. Equal values
+        // would satisfy every keyed comparison under the swap.
+        vec![
+            RuntimeExpr::Value(RuntimeValue::Int(7.into())),
+            RuntimeExpr::Value(RuntimeValue::Int(9.into())),
+        ]
+    } else {
+        Vec::new()
+    }
+}
+
+#[cfg(not(test))]
+fn px8tr_worker_captures() -> Vec<RuntimeExpr> {
+    Vec::new()
+}
+
 pub(crate) fn emit_px8tr_nested_post_effect_object(
     entry_symbol: impl Into<String>,
     disable_repair: bool,
+) -> Result<Px8trNestedRouteObject, CraneliftBackendError> {
+    emit_px8tr_nested_post_effect_object_with_plan(entry_symbol, disable_repair, |_| {})
+}
+
+/// **`RT-DECL-CLOSURE-PORT` `D5a`** — the same witness, with one hook: the
+/// checked plan is handed to `mutate` before compilation.
+///
+/// ⭐ The mutation lands on the **plan**, never on the lowering. A control that
+/// perturbed the consumer would be asking whether the consumer agrees with
+/// itself; perturbing the plan asks the question that matters — whether the
+/// consumer is really reading the checked templates it claims to.
+pub(crate) fn emit_px8tr_nested_post_effect_object_with_plan(
+    entry_symbol: impl Into<String>,
+    disable_repair: bool,
+    mutate: impl FnOnce(&mut crate::OrientedSubcontinuationPlanV1),
 ) -> Result<Px8trNestedRouteObject, CraneliftBackendError> {
     struct Reset;
     impl Drop for Reset {
@@ -316,7 +472,8 @@ pub(crate) fn emit_px8tr_nested_post_effect_object(
     }
 
     let entry_symbol = entry_symbol.into();
-    let (entrypoint, declaration, plan) = px8tr_nested_post_effect_fixture();
+    let (entrypoint, declaration, mut plan) = px8tr_nested_post_effect_fixture();
+    mutate(&mut plan);
     let declarations = BTreeMap::from([(declaration.symbol.as_str(), &declaration)]);
     PX8TR_TRAP_PROVENANCE.with(|trace| trace.borrow_mut().clear());
     PX8TR_DISABLE_DEFORESTED_ANSWER_ROUTE.set(disable_repair);

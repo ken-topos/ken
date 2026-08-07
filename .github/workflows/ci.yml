@@ -100,8 +100,12 @@ jobs:
       # duplicated or silently dropped — and a dropped test still shows a
       # green gate.
       #
-      # `rt_parity_native` is a differential (interp-vs-native) oracle, not
-      # CI hygiene — see `native-rt-parity` below and
+      # `rt_parity_native` was given its own job to serve as a differential
+      # (interp-vs-native) oracle rather than as CI hygiene. It carries NO
+      # such differential at this candidate: its six `assert_narrowed_alike`
+      # rows are ignored and the one row still running is not a differential.
+      # The exclusion below is still correct — see `native-rt-parity` below
+      # for which nodes re-arm it, and
       # docs/program/issues/CI-SKIPPED-NATIVE-TESTS.md. Measured 7 tests /
       # 266.7s wall / 470.6s CPU as one binary, where
       # `fs_write_at_malformed_offset_narrows_to_invalid_offset` alone takes
@@ -187,8 +191,26 @@ jobs:
         uses: taiki-e/install-action@a6b2e2dcd845ddd7f509ce4f3ed3d922b80cc5d9 # v2.84.0
         with:
           tool: nextest
+      # THIS JOB CURRENTLY SELECTS ZERO TESTS, and `--no-tests=pass` is what
+      # keeps that from being an error.
+      #
+      # px8f_write_partition.rs has exactly one `#[test]`, at :354,
+      # `checked_write_all_reaches_full_short_zero_progress_flip_and_error_prefixes`,
+      # and it is `#[ignore]`d pending RT-CARRIED-RESOURCE-SCALAR. nextest's
+      # `--no-tests` default is `auto`, which fails on an empty selection
+      # (exit 4, "no tests to run"), so without this flag the job hard-fails
+      # and takes the aggregator with it.
+      #
+      # Read the green here correctly: this job is green because it is EMPTY,
+      # not because anything passed. It carries no signal about the write
+      # partition while that row is ignored.
+      #
+      # RT-CARRIED-RESOURCE-SCALAR re-arms it: when that node un-ignores :354
+      # the job selects a real test again and this comment stops being true.
+      # `--no-tests=pass` suppresses only the empty-selection error, never a
+      # failing test, so the flag can stay when the row returns.
       - name: Test
-        run: cargo nextest run --locked -p ken-verify --test px8f_write_partition
+        run: cargo nextest run --locked -p ken-verify --test px8f_write_partition --no-tests=pass
 
   # ~310s measured pre-C6, ~240s projected post-C6 (C6 gave its sibling
   # px8f_write_partition -22.7%: 309s -> 239s). Fits the same headroom.
@@ -218,15 +240,51 @@ jobs:
         uses: taiki-e/install-action@a6b2e2dcd845ddd7f509ce4f3ed3d922b80cc5d9 # v2.84.0
         with:
           tool: nextest
+      # THIS JOB CURRENTLY SELECTS ZERO TESTS, and `--no-tests=pass` is what
+      # keeps that from being an error.
+      #
+      # px8f_buffer_native.rs has exactly one `#[test]`, at :203,
+      # `linked_checked_write_all_observes_short_progress_and_matches_interpreter`,
+      # and it is `#[ignore]`d pending RT-CARRIED-RESOURCE-SCALAR. nextest's
+      # `--no-tests` default is `auto`, which fails on an empty selection
+      # (exit 4, "no tests to run"), so without this flag the job hard-fails
+      # and takes the aggregator with it.
+      #
+      # Read the green here correctly: this job is green because it is EMPTY,
+      # not because anything passed. It carries no signal about the linked
+      # checked-write path while that row is ignored.
+      #
+      # RT-CARRIED-RESOURCE-SCALAR re-arms it: when that node un-ignores :203
+      # the job selects a real test again and this comment stops being true.
+      # `--no-tests=pass` suppresses only the empty-selection error, never a
+      # failing test, so the flag can stay when the row returns.
       - name: Test
-        run: cargo nextest run --locked -p ken-cli --test px8f_buffer_native
+        run: cargo nextest run --locked -p ken-cli --test px8f_buffer_native --no-tests=pass
 
-  # ~266.7s wall measured as one binary (7 tests). Not a wall-clock-only
-  # restoration: this binary is the interp/native RT-PARITY differential
-  # oracle (`assert_narrowed_alike`, `crates/ken-cli/tests/rt_parity_native.rs`),
-  # and while it was excluded here it ran nowhere — a green CI carried no
-  # information about whether native and interp agreed on these narrowing
-  # cases. See docs/program/issues/CI-SKIPPED-NATIVE-TESTS.md.
+  # ~266.7s wall measured as one binary (7 tests).
+  #
+  # ITS DIFFERENTIAL IS CURRENTLY DARK. This binary was restored here to be
+  # the interp/native RT-PARITY differential oracle
+  # (`assert_narrowed_alike`, `crates/ken-cli/tests/rt_parity_native.rs`),
+  # because while it was excluded a green CI carried no information about
+  # whether native and interp agreed on these narrowing cases. That is the
+  # condition it was built to end, and at this tip the condition is true
+  # again: all six `assert_narrowed_alike` rows — :498, :527, :554, :599,
+  # :652, :692 — are `#[ignore]`d.
+  #
+  # The job still runs and still reports green, on the one live row left at
+  # :786. That row calls `elaborates()`, a source-scope negative check, and
+  # is NOT a differential. So a green here means the source still elaborates;
+  # it does not mean the two lanes agree.
+  #
+  # Two nodes re-arm it, and it takes both: RT-CARRIER-BYTESPAN-OBSERVE owns
+  # five of the six rows, and RT-CLOSURE-BOUNDARY-LANE owns :652. Un-ignoring
+  # only one node's rows leaves the differential partly dark.
+  #
+  # This job deliberately does NOT take `--no-tests=pass`, unlike its two
+  # px8f siblings above. It still selects a live test, so an empty selection
+  # here would mean something broke in selection, and it must stay an error.
+  # See docs/program/issues/CI-SKIPPED-NATIVE-TESTS.md.
   native-rt-parity:
     name: native-slow (rt_parity_native)
     runs-on: ubuntu-latest

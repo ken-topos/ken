@@ -3725,10 +3725,24 @@ pub(crate) mod tests {
         for tag in BoundaryTag::ALL {
             assert_eq!(BoundaryTag::from_bits(tag as u64), Some(tag));
         }
+        // ⛔ This was `assert_eq!(BoundaryTag::ALL.len(), 9)`, and the literal
+        // was **redundant with the byte-range loop below**, which already
+        // derives its boundary from `ALL.len()` — a variant added to the enum
+        // and omitted from `ALL` reddens there, on the decode/publish
+        // disagreement itself. All the frozen count added was a second red
+        // whenever a lane is legitimately admitted, naming a drift that had
+        // not happened.
+        //
+        // ⭐ Re-asserted as the RELATION it was standing in for: `ALL`
+        // publishes each admitted byte exactly once, so it is a faithful
+        // enumeration rather than a list of the right length.
+        let mut published = BoundaryTag::ALL.to_vec();
+        published.sort_by_key(|tag| *tag as u64);
+        published.dedup_by_key(|tag| *tag as u64);
         assert_eq!(
+            published.len(),
             BoundaryTag::ALL.len(),
-            9,
-            "AC-1: the published tag list and the enum have drifted apart"
+            "AC-1: the published tag list repeats a tag byte"
         );
         // Everything outside the set is refused, across the whole byte range —
         // an enumeration of forbidden values would have missed whichever byte

@@ -31,12 +31,284 @@ fn recursive_position_unit_calls() -> usize {
 
 type ConsumedSubcontinuationFrame = (u64, u64);
 
+/// **`D8m`** — withhold the tuple the checked bridge transports, restoring the
+/// pre-`D8m` shape at that one site.
+#[cfg(test)]
+thread_local! {
+    static D8M_SUPPRESS_TRANSPORTED_TUPLE: std::cell::Cell<bool> =
+        const { std::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn set_d8m_suppress_transported_tuple(armed: bool) {
+    D8M_SUPPRESS_TRANSPORTED_TUPLE.with(|cell| cell.set(armed));
+}
+
+#[cfg(test)]
+fn d8m_suppress_transported_tuple() -> bool {
+    D8M_SUPPRESS_TRANSPORTED_TUPLE.with(std::cell::Cell::get)
+}
+
+/// **`D8m`** — give the bridge the WRAPPER's own occurrence instead of the
+/// wrapped match's, which is child 0 of it.
+///
+/// The marker names the frame; the match IS the frame. Every origin-keyed
+/// lookup downstream -- case bodies, the planner's continuation origin -- has to
+/// land on the match, and substituting the wrapper is the one-node-off error a
+/// single checked occurrence cannot see: with one occurrence any origin that
+/// resolves at all resolves to the only candidate.
+#[cfg(test)]
+thread_local! {
+    static D8M_WRAPPER_ORIGIN_SUBSTITUTION: std::cell::Cell<bool> =
+        const { std::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn set_d8m_wrapper_origin_substitution(armed: bool) {
+    D8M_WRAPPER_ORIGIN_SUBSTITUTION.with(|cell| cell.set(armed));
+}
+
+#[cfg(test)]
+fn d8m_wrapper_origin_substitution() -> bool {
+    D8M_WRAPPER_ORIGIN_SUBSTITUTION.with(std::cell::Cell::get)
+}
+
+/// **`D8m`** — consume the marker with a default the source match does not
+/// carry.
+///
+/// The bridge consumes through the existing pair, and that pair holds the
+/// marker to the shape the plan transported for it. Withholding the tuple proves
+/// the identity is carried; this proves the identity is carried FOR THE MATCH
+/// THE MARKER WRAPPED, rather than for whatever shape the bridge happens to hold
+/// by the time it consumes.
+#[cfg(test)]
+thread_local! {
+    static D8M_FOREIGN_CONSUMED_SHAPE: std::cell::Cell<bool> =
+        const { std::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn set_d8m_foreign_consumed_shape(armed: bool) {
+    D8M_FOREIGN_CONSUMED_SHAPE.with(|cell| cell.set(armed));
+}
+
+#[cfg(test)]
+fn d8m_foreign_consumed_shape() -> bool {
+    D8M_FOREIGN_CONSUMED_SHAPE.with(std::cell::Cell::get)
+}
+
+/// **`D8f`** — let the DECLINED call answer for the checked application's
+/// composed causal identity, which is what it did before this checkpoint.
+///
+/// The call itself is unchanged either way; only the claim moves. That is what
+/// makes the duplicate-discharge refusal a difference this checkpoint removed
+/// rather than one it routed around.
+#[cfg(test)]
+thread_local! {
+    static D8F_DECLINED_CALL_CLAIMS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn set_d8f_declined_call_claims(armed: bool) {
+    D8F_DECLINED_CALL_CLAIMS.with(|cell| cell.set(armed));
+}
+
+#[cfg(test)]
+fn d8f_declined_call_claims() -> bool {
+    D8F_DECLINED_CALL_CLAIMS.with(std::cell::Cell::get)
+}
+
+/// **`D8n`** — restore the compile-wide consumed-frame lifetime.
+#[cfg(test)]
+thread_local! {
+    static D8N_COMPILE_WIDE_LIFECYCLE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn set_d8n_compile_wide_lifecycle(armed: bool) {
+    D8N_COMPILE_WIDE_LIFECYCLE.with(|cell| cell.set(armed));
+}
+
+#[cfg(test)]
+fn d8n_compile_wide_lifecycle() -> bool {
+    D8N_COMPILE_WIDE_LIFECYCLE.with(std::cell::Cell::get)
+}
+
 /// Transactions checked-frame consumption across mutually exclusive lowering
 /// successors. A successor begins at the common predecessor baseline, while
 /// the union remains authoritative after their join.
 struct CheckedFrameBranchScope {
     baseline: BTreeSet<ConsumedSubcontinuationFrame>,
     union: BTreeSet<ConsumedSubcontinuationFrame>,
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8o` — the ambient body-authority binding.**
+///
+/// ⭐⭐ **Both ambient facts are bound for the lifetime of ONE emitted body and
+/// cleared afterwards, so a later `Function` cannot inherit residue.** Before
+/// `D8o` only two of the three source-bearing body kinds wrote them: an
+/// ordinary unit body and a generated-context body did, and a **specialization
+/// body did not** -- so throughout it both fields held whatever the previously
+/// defined body left behind.
+///
+/// ⛔ **Why that was quiet, which is the census's real finding.** Of the eight
+/// production readers of `defining_emission_owner`, two fail closed and two
+/// compare -- residue there becomes a refusal, and someone sees it. The other
+/// **four DECLINE**: `composed_recursive_argument_binding` keeps the ordinary
+/// route, and the three synthesized-aggregate sites return `None`/`Ok(())`. A
+/// declining reader cannot tell "no body is being defined" from "a body is
+/// being defined and left the wrong value here", so a stale owner simply
+/// changes the answer. See `docs/notes/rt-contsrc-d8o-ambient-body-authority-
+/// census.md`.
+///
+/// ⛔ **The owner is supplied, never inferred.** Not from the `FuncId`, not
+/// from the raw body's origin, not from the prior ambient value: each body kind
+/// passes the exact fact the planner issued for it. A specialization body's
+/// owner is exactly `ContinuationEmissionOwner::Specialization(unit.id)`.
+///
+/// ⛔ On exit both fields are RESTORED to what the enclosing scope held, which
+/// is `None` at the top level. Clearing unconditionally would be wrong for a
+/// nested pass; restoring is correct for both and does not have to know which
+/// it is in.
+pub(super) struct AmbientBodyAuthority {
+    enclosing_owner: Option<ContinuationEmissionOwner>,
+    enclosing_unit: Option<PredeclaredFunctionId>,
+}
+
+impl AmbientBodyAuthority {
+    /// Bind one emitted body's authority, before any source lowering.
+    pub(super) fn bind(
+        compiler: &mut Lowering<'_>,
+        owner: ContinuationEmissionOwner,
+        unit: PredeclaredFunctionId,
+    ) -> Self {
+        let scope = Self {
+            enclosing_owner: compiler.defining_emission_owner,
+            enclosing_unit: compiler.defining_unit,
+        };
+        compiler.defining_emission_owner = Some(owner);
+        compiler.defining_unit = Some(unit);
+        // `D8o` — the observation, taken AFTER installation and read back out of
+        // the LIVE fields, under the Function currently being defined.
+        //
+        // ⛔ Not the bind arguments. Recording those would say only that this
+        // function was called with them; reading the fields says what any
+        // reader in this body will actually see, which is the property the
+        // census is about. The two differ exactly when the install is wrong.
+        //
+        // ⛔ The inherited pair is the load-bearing half -- with the release in
+        // place it is `None` at every body, and a release that failed to restore
+        // shows up here as the previous body's facts arriving as this one's
+        // enclosing scope.
+        #[cfg(test)]
+        crate::cranelift_backend::lowering::record_d8o_body_authority(
+            compiler.defining_function_id,
+            compiler
+                .defining_emission_owner
+                .expect("just installed above"),
+            compiler.defining_unit.expect("just installed above"),
+            scope.enclosing_owner,
+            scope.enclosing_unit,
+        );
+        scope
+    }
+
+    /// Release it, restoring the enclosing scope's facts.
+    pub(super) fn release(self, compiler: &mut Lowering<'_>) {
+        // ⛔ `D8o` — the pre-repair behaviour, restored under test: the body's
+        // facts are LEFT in place instead of being rolled back, so the next
+        // body inherits them. That is exactly the residue this binding removes.
+        #[cfg(test)]
+        if crate::cranelift_backend::lowering::d8o_inherit_residue() {
+            return;
+        }
+        compiler.defining_emission_owner = self.enclosing_owner;
+        compiler.defining_unit = self.enclosing_unit;
+    }
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8n` — the per-`Function` checked-frame
+/// transaction.**
+///
+/// ⭐⭐ **Consumption is a fact about ONE emitted function, not about a
+/// compile.** `consumed_subcontinuation_frames` was a single compile-wide set,
+/// so a source body lowered into two generated `Function`s -- an ordinary
+/// declaration body and the specialization body derived from the same text --
+/// consumed the same `(invocation_id, frame_id)` twice and refused. That is not
+/// a double consumption: it is one consumption in each of two functions, which
+/// is exactly what a split body means.
+///
+/// ⛔ **The identity key is untouched.** No emission-owner, `FuncId` or
+/// `PredeclaredFunctionId` salt: salting the key would make one source frame
+/// two identities and quietly permit a real double consumption inside a single
+/// function. What was wrong was the ledger's LIFETIME, not what it counts.
+///
+/// ⛔ **Distinct from [`CheckedFrameBranchScope`], and they nest.** Branch
+/// successors are mutually exclusive paths through ONE function that rejoin, so
+/// their consumption unions at the join. Separate emitted functions never
+/// rejoin, so theirs must not: each starts empty and the enclosing set is
+/// restored afterwards. Using the branch scope here would union two functions'
+/// consumption into one set and reintroduce the collision one level up.
+///
+/// ⛔ **No active marker may cross the boundary in either direction.** A
+/// function body that begins with a marker pending would consume a frame its
+/// caller entered; one that ends with a marker pending has entered a frame
+/// nobody consumed, and the enclosing restore would then hide it.
+pub(super) struct CheckedFrameFunctionScope {
+    enclosing_consumed: BTreeSet<ConsumedSubcontinuationFrame>,
+}
+
+impl CheckedFrameFunctionScope {
+    /// Begin one generated `Function`'s consumption transaction.
+    pub(super) fn open(compiler: &mut Lowering<'_>) -> Result<Self, CraneliftBackendError> {
+        if compiler.active_subcontinuation_frame.is_some() {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "a checked subcontinuation marker was still active when a generated function                  body began, so that body would consume a frame its caller entered",
+            ));
+        }
+        // ⛔ `D8n` — the OLD lifecycle, restored under test: the set is shared
+        // compile-wide instead of starting empty per function. It is the exact
+        // pre-`D8n` behaviour, not an invented corruption, so the refusal it
+        // brings back is the one this checkpoint repaired.
+        #[cfg(test)]
+        if d8n_compile_wide_lifecycle() {
+            return Ok(Self {
+                enclosing_consumed: compiler.consumed_subcontinuation_frames.clone(),
+            });
+        }
+        Ok(Self {
+            enclosing_consumed: std::mem::take(&mut compiler.consumed_subcontinuation_frames),
+        })
+    }
+
+    /// End it, restoring the enclosing function's own consumption.
+    pub(super) fn close(self, compiler: &mut Lowering<'_>) -> Result<(), CraneliftBackendError> {
+        let dangling = compiler.active_subcontinuation_frame.take();
+        // ⛔ Under the compile-wide switch the body's consumption is LEFT in
+        // place instead of being rolled back, which is the other half of the
+        // pre-`D8n` behaviour. Restoring here while sharing at `open` would
+        // still hand the second function an empty set and reproduce nothing --
+        // the mutation has to be faithful at both ends or it measures neither.
+        #[cfg(test)]
+        if d8n_compile_wide_lifecycle() {
+            if dangling.is_some() {
+                return Err(unsupported(
+                    "OrientedSubcontinuationPlanV1",
+                    "a generated function body ended with a checked subcontinuation marker still                      active, so it entered a frame nothing consumed",
+                ));
+            }
+            return Ok(());
+        }
+        compiler.consumed_subcontinuation_frames = self.enclosing_consumed;
+        if dangling.is_some() {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "a generated function body ended with a checked subcontinuation marker still                  active, so it entered a frame nothing consumed",
+            ));
+        }
+        Ok(())
+    }
 }
 
 impl CheckedFrameBranchScope {
@@ -123,7 +395,7 @@ enum FrameScopeHarnessMutation {
 /// result-directed joins; D7/S4 exercise their corrected governed composition.
 /// S4's completed-emission rows establish collection capability only; they are
 /// not an asymptotic verdict about those rows.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum RecursiveDescentResidual {
     /// An ordinary producer match whose scrutinee is directly a call.
     ProducerMatchCall,
@@ -138,8 +410,19 @@ enum RecursiveDescentResidual {
     LexicalCallArgumentRecursor,
     /// A call whose callee is the retained non-lexical closure form.
     SeedClosureCall,
-    /// A transparent declaration whose body is a closure seed.
-    TransparentDeclarationClosure,
+    // ⭐⭐ **`RT-DECL-CLOSURE-PORT` `D6` RETIRED `TransparentDeclarationClosure`.**
+    //
+    // A transparent declaration whose body is a closure seed is now reached as a
+    // separately owned callable unit, so it is no longer a reason to retain the
+    // monolithic `RecursiveDescent` root. That is the whole node: `D1`-`D5a`
+    // built the planner-owned declaration units, the typed transport, the
+    // `DeclarationRef` calls and the complete owner/phase validation the ruling
+    // required **before** this variant could be removed.
+    //
+    // ⛔ The four variants above are untouched and the classifier below is still
+    // exhaustive and fail-closed. This is a retirement, not a relaxation: the
+    // selector is unchanged in kind and still refuses to select
+    // `FunctionizedUnits` while any remaining variant fires.
 }
 
 /// Produce the retained reason, if any, from the exhaustive source walk.
@@ -237,17 +520,207 @@ fn recursive_descent_residual(expr: &RuntimeExpr) -> Option<RecursiveDescentResi
     }
 }
 
+/// **`RT-DECL-CLOSURE-PORT` `D1` -- report EVERY residual variant present, not
+/// the first.**
+///
+/// [`recursive_descent_residual`] answers the selector's question: *is there at
+/// least one residual?* It is built from `.or_else(..)` and `find_map`, so it
+/// stops at the first hit and is **correct for that question and useless for
+/// this one**. ⛔ This walk never short-circuits: every classification is
+/// recorded and every child is visited regardless of what a sibling produced.
+///
+/// ⚠ **The reason this instrument owes a compound control rather than a
+/// plausibility read.** If it silently kept the short-circuit it would report
+/// exactly one variant on the governed fixture -- which is precisely the answer
+/// the frame leads a reader to expect, so nothing would look wrong. Only a
+/// program that fires two or more variants can tell the two behaviours apart.
+///
+/// ⭐ The campaign reuses this instrument (`RT-SEED-CALL-PORT`,
+/// `RT-PRODUCER-MATCH-PORT`, `RT-RECURSOR-TRANSPORT`, `RT-DESCENT-RETIRE`), and
+/// `RT-DESCENT-RETIRE`'s "no residual fires anywhere" becomes vacuous at exactly
+/// the moment it authorizes deleting the lane if this walk has a gap. Re-prove
+/// it cheaply at each point of use -- `D2`-`D6` rewrite this file underneath it.
+fn enumerate_recursive_descent_residuals(
+    expr: &RuntimeExpr,
+    declarations: &BTreeMap<&str, &RuntimeDeclaration>,
+) -> BTreeSet<RecursiveDescentResidual> {
+    let mut found = BTreeSet::new();
+    collect_recursive_descent_residuals(expr, &mut found);
+    for declaration in declarations.values() {
+        collect_declaration_recursive_descent_residuals(declaration, &mut found);
+    }
+    found
+}
+
+/// The non-short-circuiting twin of [`recursive_descent_residual`].
+///
+/// ⛔ The `match` is exhaustive with no wildcard arm, exactly as its twin is
+/// (`AC-5`): a new `RuntimeExpr` form must still be unable to compile until
+/// someone classifies it. A wildcard here would make the instrument silently
+/// under-report the moment the IR grows.
+fn collect_recursive_descent_residuals(
+    expr: &RuntimeExpr,
+    found: &mut BTreeSet<RecursiveDescentResidual>,
+) {
+    match expr {
+        RuntimeExpr::CheckedJoinSite { body, .. }
+        | RuntimeExpr::CheckedSubcontinuationFrame { body, .. }
+        | RuntimeExpr::CheckedRecursiveInvocation { body, .. }
+        | RuntimeExpr::CheckedComputationalIHSlots { body, .. }
+        | RuntimeExpr::CheckedComputationalIHInvocation { body, .. }
+        | RuntimeExpr::Closure { body, .. } => {
+            collect_recursive_descent_residuals(body, found);
+        }
+        RuntimeExpr::LexicalClosure { captures, body, .. } => {
+            for capture in captures {
+                collect_recursive_descent_residuals(capture, found);
+            }
+            collect_recursive_descent_residuals(body, found);
+        }
+        RuntimeExpr::Let { value, body } => {
+            collect_recursive_descent_residuals(value, found);
+            collect_recursive_descent_residuals(body, found);
+        }
+        RuntimeExpr::If {
+            scrutinee,
+            then_expr,
+            else_expr,
+        } => {
+            collect_recursive_descent_residuals(scrutinee, found);
+            collect_recursive_descent_residuals(then_expr, found);
+            collect_recursive_descent_residuals(else_expr, found);
+        }
+        RuntimeExpr::PrimitiveCall { args, .. } | RuntimeExpr::Construct { args, .. } => {
+            for argument in args {
+                collect_recursive_descent_residuals(argument, found);
+            }
+        }
+        RuntimeExpr::Match {
+            scrutinee, cases, ..
+        } => {
+            // ⛔ BOTH classifications, then BOTH walks. The twin stops after
+            // whichever fires first.
+            if matches!(scrutinee.as_ref(), RuntimeExpr::Call { .. }) {
+                found.insert(RecursiveDescentResidual::ProducerMatchCall);
+            }
+            if matches!(
+                scrutinee.as_ref(),
+                RuntimeExpr::ComputationalMatch { cases, .. }
+                    if cases
+                        .iter()
+                        .any(|case| !case.recursive_positions.is_empty())
+            ) {
+                found.insert(RecursiveDescentResidual::MatchScrutineeRecursor);
+            }
+            collect_recursive_descent_residuals(scrutinee, found);
+            for case in cases {
+                collect_recursive_descent_residuals(&case.body, found);
+            }
+        }
+        RuntimeExpr::ComputationalMatch {
+            scrutinee, cases, ..
+        } => {
+            collect_recursive_descent_residuals(scrutinee, found);
+            for case in cases {
+                collect_recursive_descent_residuals(&case.body, found);
+            }
+        }
+        RuntimeExpr::Record { fields } => {
+            for (_, value) in fields {
+                collect_recursive_descent_residuals(value, found);
+            }
+        }
+        RuntimeExpr::Project { record, .. } => {
+            collect_recursive_descent_residuals(record, found);
+        }
+        RuntimeExpr::Call { callee, args } => {
+            if matches!(callee.as_ref(), RuntimeExpr::Closure { .. }) {
+                found.insert(RecursiveDescentResidual::SeedClosureCall);
+            }
+            if matches!(callee.as_ref(), RuntimeExpr::LexicalClosure { .. })
+                && args.iter().any(|argument| {
+                    matches!(
+                        argument,
+                        RuntimeExpr::ComputationalMatch { cases, .. }
+                            if cases
+                                .iter()
+                                .any(|case| !case.recursive_positions.is_empty())
+                    )
+                })
+            {
+                found.insert(RecursiveDescentResidual::LexicalCallArgumentRecursor);
+            }
+            collect_recursive_descent_residuals(callee, found);
+            for argument in args {
+                collect_recursive_descent_residuals(argument, found);
+            }
+        }
+        RuntimeExpr::Effect {
+            capability, args, ..
+        } => {
+            if let Some(capability) = capability.as_ref() {
+                collect_recursive_descent_residuals(&capability.value, found);
+            }
+            for argument in args {
+                collect_recursive_descent_residuals(argument, found);
+            }
+        }
+        RuntimeExpr::Value(_)
+        | RuntimeExpr::Var(_)
+        | RuntimeExpr::DeclarationRef { .. }
+        | RuntimeExpr::ImportedDeclarationRef { .. }
+        | RuntimeExpr::Trap(_) => {}
+    }
+}
+
+/// The non-short-circuiting twin of
+/// [`declaration_recursive_descent_residual`].
+///
+/// ⛔ The twin uses `.or_else(..)` and stops at its first hit; this walk records
+/// every classification and visits every child regardless of what a sibling
+/// produced. ⚠ `D6` retired the declaration-head variant, so a transparent
+/// declaration now contributes exactly what its **body** contributes — but the
+/// distinction between the two functions is unchanged and still load-bearing for
+/// the rest of the campaign.
+fn collect_declaration_recursive_descent_residuals(
+    declaration: &RuntimeDeclaration,
+    found: &mut BTreeSet<RecursiveDescentResidual>,
+) {
+    match &declaration.kind {
+        RuntimeDeclarationKind::Transparent { body } => {
+            collect_recursive_descent_residuals(body, found);
+        }
+        RuntimeDeclarationKind::Primitive { .. }
+        | RuntimeDeclarationKind::Data { .. }
+        | RuntimeDeclarationKind::Record { .. }
+        | RuntimeDeclarationKind::RecursiveGroup { .. }
+        | RuntimeDeclarationKind::EffectBoundary { .. }
+        | RuntimeDeclarationKind::MetadataOnly => {}
+    }
+}
+
 /// Produce the retained reason from the exhaustive declaration-kind route.
 fn declaration_recursive_descent_residual(
     declaration: &RuntimeDeclaration,
 ) -> Option<RecursiveDescentResidual> {
     match &declaration.kind {
-        RuntimeDeclarationKind::Transparent { body } => matches!(
-            body,
-            RuntimeExpr::Closure { .. } | RuntimeExpr::LexicalClosure { .. }
-        )
-        .then_some(RecursiveDescentResidual::TransparentDeclarationClosure)
-        .or_else(|| recursive_descent_residual(body)),
+        // ⭐⭐ **`RT-DECL-CLOSURE-PORT` `D6` — THE ACTIVATION.**
+        //
+        // A transparent declaration's own head no longer contributes a retained
+        // reason. Its body is classified exactly as any other expression is, so
+        // a closure-seed declaration selects `FunctionizedUnits` unless
+        // something in the body genuinely retains the lane.
+        //
+        // ⚠ **The `cfg(test)` selector witness that used to sit here is gone,
+        // and its removal is half the deliverable.** It existed to break a
+        // measured circularity: `D5` had to demonstrate its validator
+        // fail-closed on an *accepted* input, a checked recursive declaration
+        // call requires a closure-seed body, and this arm was exactly what kept
+        // such a program on `RecursiveDescent`. With the variant retired the
+        // route is reachable in production, so every control it governed now
+        // runs **unhooked** — which is the evidence `D6` owes and the reason the
+        // frame ordered activation after acceptance rather than with it.
+        RuntimeDeclarationKind::Transparent { body } => recursive_descent_residual(body),
         RuntimeDeclarationKind::Primitive { .. }
         | RuntimeDeclarationKind::Data { .. }
         | RuntimeDeclarationKind::Record { .. }
@@ -568,7 +1041,12 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
     let mut func_ctx = FunctionBuilderContext::new();
     let mut compiler = Lowering {
         continuation_claims: None,
+        checked_call_ledger: None,
         defining_unit: None,
+        defining_emission_owner: None,
+        defining_function_id: None,
+        aggregate_allocations: None,
+        host_effect_seats: None,
         seed_env,
         declarations,
         static_transition_plan,
@@ -616,6 +1094,26 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
             let (unit_bundle, call_edges) = functionized_bundle
                 .as_ref()
                 .expect("the functionized selector arm owns its bundle");
+            // `RT-DECL-CLOSURE-PORT` `D5a` checkpoint 2 — THE ONE LEDGER'S
+            // LIFETIME, opened and closed HERE rather than inside any single
+            // definition pass.
+            //
+            // ⛔ It used to open and close inside `define_unit_bodies`, which
+            // is the FIRST of the passes that declare, claim and emit causal
+            // calls. Its exact-set equality therefore ran while the
+            // generated-context pass had not yet had a chance to declare
+            // anything, and would report a planned token absent that was about
+            // to be discharged. ⇒ The defect was the *lifetime*, not the
+            // equality.
+            //
+            // ⭐ The position is the whole deliverable. Both endpoints sit in
+            // this one block, around every pass that can own a causal token, so
+            // "one global equality" is visible in a single place instead of
+            // being a property a reader must reconstruct from three files.
+            // There is deliberately no per-pass partial close and no second
+            // mirrored ledger — the passes accumulate into this one and it is
+            // checked once.
+            super::units::open_continuation_claim_ledger(&mut compiler, unit_bundle)?;
             let root_result = super::units::define_unit_bodies(
                 &mut module,
                 &mut compiler,
@@ -624,6 +1122,31 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
                 call_edges,
                 staged_process_input,
             )?;
+            // `D5a` checkpoint 4 step 3 — the reaching mutation for the ONE
+            // ledger's lifetime, and it is the checkpoint-2 defect itself:
+            // close after the FIRST definition pass, before any generated
+            // `Function` exists. ⛔ Nothing about the equality moves; only the
+            // window it is taken over.
+            #[cfg(test)]
+            if d5a_route_mutation() == D5aRouteMutation::CloseLedgerAfterTheFirstPass {
+                record_d5a_route_application();
+                super::units::close_continuation_claim_ledger(&mut compiler)?;
+                // `D7` — the relation's enforced laws close here: every event
+                // maps to exactly one record, every committed pair is unique,
+                // every related record is in `P`, no body is built twice, and
+                // no event set is left open.
+                //
+                // ⚠ `image(R) ⊆ P`, deliberately not equality. `P` is a closed
+                // AUTHORIZATION population: it plans a record for every
+                // allocation-reachable node of every seat's tree under every
+                // emission owner the seat may be lowered by, while one
+                // compilation emits only the bodies it has. An unused record is
+                // lawful, and requiring equality refused ordinary programs by
+                // 1 to 132 records when measured.
+                let _aggregate_relation =
+                    super::units::close_aggregate_allocation_ledger(&mut compiler)?;
+                let _effect_seats = super::units::close_host_effect_seat_ledger(&mut compiler)?;
+            }
             // `RT-CONTSPEC-ACTIVATE` `D2` — define each declared continuation
             // target from its own projected contract, after the ordinary
             // bodies and before the root adapter.
@@ -632,6 +1155,17 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
                 &mut compiler,
                 helpers,
                 unit_bundle,
+            )?;
+            // `RT-DECL-CLOSURE-PORT` `D5a` — define each generated producer
+            // execution context, after the specializations that call them.
+            // Declaration already happened in the one up-front bundle pass, so
+            // this ordering is a readability choice, not a linking constraint.
+            super::units::define_continuation_context_bodies(
+                &mut module,
+                &mut compiler,
+                helpers,
+                unit_bundle,
+                call_edges,
             )?;
             compiler.require_complete_join_plan_consumption()?;
             compiler.require_complete_dynamic_splice_edge_consumption()?;
@@ -644,6 +1178,34 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
                 process_mode,
                 project_public_scalar_root,
             )?;
+            // Every generated `Function` that can own a causal token now exists
+            // and has recorded itself, so the ONE global exact-set equality
+            // runs here.
+            //
+            // ⚠ Closing right after the last definition pass and before the
+            // root adapter is the tempting spot. It is closed after the adapter
+            // instead: the adapter is itself a generated `Function`, and
+            // closing before it would make a causal ref declared there
+            // invisible to the equality rather than caught by it. It declares
+            // none today — that is a fact about the adapter, not a reason to
+            // narrow the window.
+            super::units::close_continuation_claim_ledger(&mut compiler)?;
+                // `D7` — the relation's enforced laws close here: every event
+                // maps to exactly one record, every committed pair is unique,
+                // every related record is in `P`, no body is built twice, and
+                // no event set is left open.
+                //
+                // ⚠ `image(R) ⊆ P`, deliberately not equality. `P` is a closed
+                // AUTHORIZATION population: it plans a record for every
+                // allocation-reachable node of every seat's tree under every
+                // emission owner the seat may be lowered by, while one
+                // compilation emits only the bodies it has. An unused record is
+                // lawful, and requiring equality refused ordinary programs by
+                // 1 to 132 records when measured.
+                let _aggregate_relation =
+                    super::units::close_aggregate_allocation_ledger(&mut compiler)?;
+            // `D7` — planned seats against consumed seats, exactly.
+            let _effect_seats = super::units::close_host_effect_seat_ledger(&mut compiler)?;
             root_result
         }
         BodyEmissionAuthority::RecursiveDescent => {
@@ -807,6 +1369,120 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
     Ok(compiled)
 }
 
+/// `RT-CONTSRC-PRODUCER-LOCAL` `AC-1` -- the source-carried CONTROL mutation
+/// family, for the activation-gate controls of families 5 and 2a.
+///
+/// Test-only, and deliberately NOT a widening of `D7`'s
+/// `EffectSeatDispatchMutation`: that family perturbs effect-seat dispatch and
+/// these two perturb the carried `Match` route. Sharing one enum would let a
+/// control claim a mutation it did not apply.
+///
+/// Each variant refuses **after the real production decision has already been
+/// taken**, and does nothing else. It never manufactures a carrier, terminal or
+/// planner fact, never rewrites a join target, never duplicates the dispatch and
+/// never lowers an alternative. That is what makes an application evidence that
+/// the production path reached that exact point, rather than evidence about the
+/// mutation's own machinery.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SourceCarriedControlMutation {
+    /// Production behaviour.
+    Exact,
+    /// Family 5 -- refuse an ALREADY-CLASSIFIED `LoweringOperand::Carried` with
+    /// the exact refusal the pre-repair seat produced.
+    RefuseClassifiedCarried,
+    /// Family 2a -- refuse an ALREADY-SPLIT `SourcePrefixTerminal::Join` before
+    /// its inherited target is used.
+    RefuseSplitInheritedJoin,
+}
+
+#[cfg(test)]
+thread_local! {
+    static SOURCE_CARRIED_CONTROL_MUTATION: std::cell::Cell<SourceCarriedControlMutation> =
+        const { std::cell::Cell::new(SourceCarriedControlMutation::Exact) };
+    /// How many times the active mutation actually fired.
+    ///
+    /// This is the anti-vacuity instrument. A mutated run that refuses with
+    /// the right message but a count of zero refused for some OTHER reason, and
+    /// is not evidence.
+    static SOURCE_CARRIED_CONTROL_APPLICATIONS: std::cell::Cell<u32> =
+        const { std::cell::Cell::new(0) };
+}
+
+/// Restores `Exact` on drop, so a panicking control cannot leak a mutation into
+/// the next test on this thread.
+#[cfg(test)]
+struct SourceCarriedControlMutationGuard;
+
+#[cfg(test)]
+impl Drop for SourceCarriedControlMutationGuard {
+    fn drop(&mut self) {
+        SOURCE_CARRIED_CONTROL_MUTATION
+            .with(|cell| cell.set(SourceCarriedControlMutation::Exact));
+    }
+}
+
+/// Run `body` under `mutation`, returning its value and the number of times the
+/// mutation fired. The counter is reset on entry, and `Exact` is restored on
+/// exit even if `body` panics.
+#[cfg(test)]
+fn with_source_carried_control_mutation<R>(
+    mutation: SourceCarriedControlMutation,
+    body: impl FnOnce() -> R,
+) -> (R, u32) {
+    let _guard = SourceCarriedControlMutationGuard;
+    SOURCE_CARRIED_CONTROL_APPLICATIONS.with(|cell| cell.set(0));
+    SOURCE_CARRIED_CONTROL_MUTATION.with(|cell| cell.set(mutation));
+    let value = body();
+    let applications = SOURCE_CARRIED_CONTROL_APPLICATIONS.with(std::cell::Cell::get);
+    (value, applications)
+}
+
+/// `Some(refusal)` when `mutation` is the active one; the caller returns it
+/// unchanged. Counting happens here so a hook cannot fire without being counted.
+#[cfg(test)]
+fn source_carried_control_refusal(
+    mutation: SourceCarriedControlMutation,
+    construct: &'static str,
+    reason: &'static str,
+) -> Option<CraneliftBackendError> {
+    if SOURCE_CARRIED_CONTROL_MUTATION.with(std::cell::Cell::get) != mutation {
+        return None;
+    }
+    SOURCE_CARRIED_CONTROL_APPLICATIONS.with(|cell| cell.set(cell.get() + 1));
+    Some(unsupported(construct, reason))
+}
+
+/// The status the carried source-machine `Match` returns when the boundary
+/// word's CLASS is one this case set never decoded.
+///
+/// Named locally and deliberately: this is NOT claimed to be a canonical
+/// carrier-wide failure word. It reuses the value the dynamic-constructor
+/// emitter already returns for a malformed represented value, because both mean
+/// *"this word is not the representation this chain decodes"*.
+///
+/// NOTHING PINS THIS VALUE, and an earlier draft of this comment claimed a
+/// wrong-class control did. It does not exist and cannot be written today:
+/// `mismatch_block` is emitted on the residual arm of the class chain, and a
+/// sentinel sweep of the whole `ken-runtime` lib suite measured that arm as
+/// reached ZERO times. `lower_source_carried_match` is entered exactly once in
+/// the crate -- by
+/// `constructors::ac1_source_machine_match_classifies_a_carried_scrutinee_by_phase`
+/// -- and that entry refuses at join acquisition, before any selector is
+/// emitted. So a divergence in this value is a SILENT DRIFT, not a test
+/// failure. Retiring this paragraph needs a fixture that reaches the arm, not
+/// a re-reading of the code.
+const CARRIED_REPRESENTATION_MISMATCH_STATUS: i64 = MALFORMED_DYNAMIC_CONSTRUCTOR_STATUS;
+
+/// One emitted-case descriptor for the carried source-machine `Match`.
+struct SourceCarriedCase {
+    index: usize,
+    emitted: bool,
+    identity: u64,
+    binders: i64,
+    borrowed: Option<(i64, usize)>,
+}
+
 impl<'a> Lowering<'a> {
     fn resume_active_continuation(
         &mut self,
@@ -828,7 +1504,7 @@ impl<'a> Lowering<'a> {
             source_selected_cursor: active.source_selected_cursor,
             selected_scope: active.selected_scope,
         });
-        self.lower_computational_match_value_composed(builder, value, &[*head, successor])
+        self.lower_computational_match_value_composed(builder, RoutedAnswer::direct(value), &[*head, successor])
     }
 
     /// ⛔⛔ **`AC-C4` clause 3 — a carried residual is a transferred VALUE, never
@@ -896,18 +1572,21 @@ impl<'a> Lowering<'a> {
                         self.lower_expr(builder, arg, argument_env)
                     })
                     .collect::<Result<Vec<_>, _>>()?;
+                // ⚠ No invocation segment is in scope on the pending-`Let`
+                // resumption, so no coordinates can be supplied. The callee
+                // fails closed if this body has a generated context.
                 let returned =
-                    self.call_declared_recursive_position_unit(builder, body, &inputs)?;
+                    self.call_declared_recursive_position_unit(builder, body, &inputs, None)?;
                 return self.lower_computational_match_value_composed(
                     builder,
-                    returned,
+                    RoutedAnswer::direct(returned),
                     outer_eliminators,
                 );
             }
             Self::reject_carried_residual_arguments(args.len())?;
             return self.lower_computational_match_value_composed(
                 builder,
-                LoweringOperand::Carried(*word),
+                RoutedAnswer::direct(LoweringOperand::Carried(*word)),
                 outer_eliminators,
             );
         }
@@ -956,7 +1635,7 @@ impl<'a> Lowering<'a> {
                 ),
             ));
         }
-        extend_specialized(&mut call_env, captures.iter().cloned());
+        extend_captures(&mut call_env, captures.iter().cloned());
         call_env.extend_from_slice(saved_producer_env);
         self.lower_computational_producer_expr(
             builder,
@@ -979,16 +1658,9 @@ impl<'a> Lowering<'a> {
         producer_env: &[LoweringEnvironmentBinding],
         eliminator_env: &[LoweringEnvironmentBinding],
     ) -> Result<LoweringOperand, CraneliftBackendError> {
-        let checked_frame_id = self.consume_checked_subcontinuation_frame(cases, default)?;
-        let checked_invocation_id = checked_frame_id.map(|_| {
-            self.active_recursive_invocations
-                .last()
-                .map_or(0, |instance| instance.invocation_instance_id)
-        });
-        let checked_invocation_depth = self
-            .active_recursive_invocations
-            .last()
-            .map_or(0, |instance| instance.semantic_depth);
+        // `D8m` — the shared derivation. ⛔ Not re-spelled here: the checked
+        // bridge must carry this exact tuple, and two spellings is how they part.
+        let checked = self.checked_computational_frame(cases, default)?;
         let provenance = self.mint_recursor_frame_provenance();
         self.lower_computational_producer_expr(
             builder,
@@ -1003,13 +1675,11 @@ impl<'a> Lowering<'a> {
                     retained_scrutinee_index: None,
                     deferred_constructor_case: None,
                     provenance,
-                    checked_frame_id,
-                    checked_invocation_id,
-                    checked_invocation_source: self
-                        .active_recursive_invocations
-                        .last()
-                        .map(|instance| instance.source),
-                    checked_invocation_depth,
+                    checked_frame_id: checked.id,
+                    checked_invocation_id: checked.invocation_id,
+                    checked_invocation_source: checked.invocation_source,
+                    checked_invocation_depth: checked.invocation_depth,
+                    answer_route: SourceComputationalAnswerRoute::DirectScrutinee,
                 },
             )],
         )
@@ -1123,8 +1793,16 @@ impl<'a> Lowering<'a> {
                 body,
                 ..
             } => {
-                self.enter_checked_computational_ih_invocation(*call_template_id)?;
+                // `D8f` — the marker's application occurrence, derived once and
+                // used both to enter the marker and to lower the body, so the
+                // occupancy check compares against the occurrence the lowering
+                // actually visits.
                 let body = self.child_occurrence(static_origin, 0, body)?;
+                self.enter_checked_computational_ih_invocation(
+                    *call_template_id,
+                    body.expr,
+                    body.static_origin,
+                )?;
                 let value = self.lower_computational_producer_expr(
                     builder,
                     body,
@@ -1210,7 +1888,7 @@ impl<'a> Lowering<'a> {
                                     let returned = returned?;
                                     return self.lower_computational_match_value_composed(
                                         builder,
-                                        returned,
+                                        RoutedAnswer::direct(returned),
                                         eliminators,
                                     );
                                 }
@@ -1242,22 +1920,45 @@ impl<'a> Lowering<'a> {
                 let callee = self.lower_expr(builder, callee, producer_env)?;
                 match callee {
                     LoweringOperand::Specialized(Lowered::DeclarationClosure {
+                        reference,
                         symbol,
                         captures,
                         params,
                         body,
-                    }) => self.lower_recursive_declaration_call(
-                        builder,
-                        &symbol,
-                        &captures,
-                        &params,
-                        self.retained_body_occurrence(body)?,
-                        args,
-                        static_origin,
-                        producer_env,
-                        Some(eliminators),
-                        join_plan,
-                    ),
+                    }) => {
+                        // `RT-DECL-CLOSURE-PORT` `D4`, consumer 2 of 3.
+                        if self.body_emission_authority
+                            == BodyEmissionAuthority::FunctionizedUnits
+                        {
+                            let args = args
+                                .iter()
+                                .enumerate()
+                                .map(|(position, argument)| {
+                                    let argument = self.child_occurrence(
+                                        static_origin,
+                                        1 + position,
+                                        argument,
+                                    )?;
+                                    self.lower_expr(builder, argument, producer_env)
+                                })
+                                .collect::<Result<Vec<_>, _>>()?;
+                            return self.call_declaration_closure_unit(
+                                builder, reference, &symbol, &params, captures, args,
+                            );
+                        }
+                        self.lower_recursive_declaration_call(
+                            builder,
+                            &symbol,
+                            &captures,
+                            &params,
+                            self.retained_body_occurrence(body)?,
+                            args,
+                            static_origin,
+                            producer_env,
+                            Some(eliminators),
+                            join_plan,
+                        )
+                    }
                     LoweringOperand::Specialized(Lowered::Closure {
                         captures,
                         params,
@@ -1274,7 +1975,8 @@ impl<'a> Lowering<'a> {
                                 {
                                     let argument =
                                         self.child_occurrence(static_origin, 1, &args[0])?;
-                                    let frame_env = env_with(captures.clone(), producer_env);
+                                    let frame_env =
+                                        env_with_operands(captures.clone(), producer_env);
                                     let mut composed = Vec::with_capacity(eliminators.len() + 1);
                                     composed.push(EliminatorFrame::Ordinary(
                                         OrdinaryEliminatorFrame {
@@ -1335,7 +2037,7 @@ impl<'a> Lowering<'a> {
                         // lexical environment. They stay operands here, and
                         // only the environment role crosses the binding
                         // authority -- there is no route back the other way.
-                        call_inputs.extend(captures.into_iter().map(LoweringOperand::Specialized));
+                        call_inputs.extend(captures);
                         match self.body_emission_authority {
                             BodyEmissionAuthority::RecursiveDescent => {
                                 let call_env = env_with_operands(call_inputs, producer_env);
@@ -1357,7 +2059,7 @@ impl<'a> Lowering<'a> {
                                 )?;
                                 self.lower_computational_match_value_composed(
                                     builder,
-                                    returned,
+                                    RoutedAnswer::direct(returned),
                                     eliminators,
                                 )
                             }
@@ -1373,6 +2075,13 @@ impl<'a> Lowering<'a> {
                         let (activation, invocation) =
                             boundary.expect("recursor closure carries an invocation segment");
                         let recursive_unit_body = invocation.recursive_unit_body;
+                        // `D5a` checkpoint 4 step 1 — read the retained source
+                        // coordinates BEFORE the segment is installed, beside the
+                        // existing pre-move field read. Both are facts of the
+                        // invocation, so both are taken while it is still in hand
+                        // rather than reconstructed afterwards.
+                        let carried_coordinates =
+                            CarriedInvocationCoordinates::of(&invocation)?;
                         let current = active_recursor_frame(eliminators).ok_or_else(|| {
                             unsupported(
                                 "ComputationalRecursor",
@@ -1425,18 +2134,24 @@ impl<'a> Lowering<'a> {
                                     })
                                     .collect::<Result<Vec<_>, _>>()?;
                                 self.enter_oriented_semantic_region(installed.checked);
+                                let coordinates = carried_coordinates;
                                 let returned = self
-                                    .call_declared_recursive_position_unit(builder, body, &inputs)
+                                    .call_declared_recursive_position_unit(
+                                        builder,
+                                        body,
+                                        &inputs,
+                                        Some(coordinates),
+                                    )
                                     .and_then(|value| {
                                         self.lower_computational_match_value_composed(
-                                            builder, value, &composed,
+                                            builder, RoutedAnswer::direct(value), &composed,
                                         )
                                     });
                                 self.leave_oriented_semantic_region(installed.checked);
                                 let returned = returned?;
                                 return self.lower_computational_match_value_composed(
                                     builder,
-                                    returned,
+                                    RoutedAnswer::direct(returned),
                                     eliminators,
                                 );
                             }
@@ -1444,14 +2159,14 @@ impl<'a> Lowering<'a> {
                             self.enter_oriented_semantic_region(installed.checked);
                             let returned = self.lower_computational_match_value_composed(
                                 builder,
-                                LoweringOperand::Carried(word),
+                                RoutedAnswer::direct(LoweringOperand::Carried(word)),
                                 &composed,
                             );
                             self.leave_oriented_semantic_region(installed.checked);
                             let returned = returned?;
                             return self.lower_computational_match_value_composed(
                                 builder,
-                                returned,
+                                RoutedAnswer::direct(returned),
                                 eliminators,
                             );
                         }
@@ -1474,7 +2189,7 @@ impl<'a> Lowering<'a> {
                             let returned = returned?;
                             return self.lower_computational_match_value_composed(
                                 builder,
-                                returned,
+                                RoutedAnswer::direct(returned),
                                 eliminators,
                             );
                         }
@@ -1526,7 +2241,7 @@ impl<'a> Lowering<'a> {
                         // Two roles, as above: ordered unit-call inputs, or the
                         // prefix of a lexical environment. Only the second
                         // crosses the binding authority.
-                        call_inputs.extend(captures.into_iter().map(LoweringOperand::Specialized));
+                        call_inputs.extend(captures);
                         self.enter_oriented_semantic_region(installed.checked);
                         let returned = match self.body_emission_authority {
                             BodyEmissionAuthority::RecursiveDescent => {
@@ -1545,7 +2260,7 @@ impl<'a> Lowering<'a> {
                                     None,
                                 )?;
                                 self.lower_computational_match_value_composed(
-                                    builder, returned, &composed,
+                                    builder, RoutedAnswer::direct(returned), &composed,
                                 )
                             }
                         };
@@ -1553,7 +2268,7 @@ impl<'a> Lowering<'a> {
                         let returned = returned?;
                         self.lower_computational_match_value_composed(
                             builder,
-                            returned,
+                            RoutedAnswer::direct(returned),
                             eliminators,
                         )
                     }
@@ -1601,6 +2316,12 @@ impl<'a> Lowering<'a> {
                             self.static_transition_plan
                                 .constructor_symbol_identity(static_origin)?,
                         ),
+                        // `D7` -- the allocation lane is the second fact resolved
+                        // at the producer and carried with the template.
+                        occurrence: Some(self.static_transition_plan.source_aggregate_occurrence(
+                            static_origin,
+                            PlannedAggregateShape::Constructor,
+                        )?),
                         args: specialized_operands_at(&lowered_args, "a constructor argument")?,
                     }));
                 }
@@ -1788,6 +2509,13 @@ impl<'a> Lowering<'a> {
                     let mut composed = Vec::with_capacity(2);
                     composed.push(match consumer {
                         ImmediateBinderEliminator::Computational { cases, default } => {
+                            // `D8m` — which arm this composed site took, at the
+                            // one place that knows.
+                            #[cfg(test)]
+                            crate::cranelift_backend::lowering::record_d8m_bridge_arm(
+                                self.defining_function_id,
+                                crate::cranelift_backend::lowering::D8mBridgeArm::Computational,
+                            );
                             EliminatorFrame::Computational(ComputationalEliminatorFrame {
                                 cases,
                                 default,
@@ -1796,13 +2524,125 @@ impl<'a> Lowering<'a> {
                                 retained_scrutinee_index: None,
                                 deferred_constructor_case: Some(&deferred),
                                 provenance: self.mint_recursor_frame_provenance(),
+                                // `D8m` — an UNWRAPPED bridge stays all-None.
+                                // The source declared no frame here, so there is
+                                // none to preserve, and inventing one is exactly
+                                // what this checkpoint forbids.
                                 checked_frame_id: None,
                                 checked_invocation_id: None,
                                 checked_invocation_source: None,
                                 checked_invocation_depth: 0,
+                                answer_route: SourceComputationalAnswerRoute::DirectScrutinee,
+                            })
+                        }
+                        // ⭐⭐ `D8m` — THE SOURCE FRAME, PRESERVED THROUGH THE
+                        // BRIDGE.
+                        //
+                        // ⛔ Entered and consumed through the EXISTING pair, and
+                        // only here, after the existing gates have already
+                        // selected the bridge. That is deliberate: the
+                        // consumption path is where the fingerprint agreement
+                        // and the consumed-once law live, so routing through it
+                        // means this adds no second validator and cannot drift
+                        // from the one the direct path uses.
+                        ImmediateBinderEliminator::CheckedComputational {
+                            frame_id,
+                            cases,
+                            default,
+                        } => {
+                            #[cfg(test)]
+                            crate::cranelift_backend::lowering::record_d8m_bridge_arm(
+                                self.defining_function_id,
+                                crate::cranelift_backend::lowering::D8mBridgeArm::CheckedComputational,
+                            );
+                            self.enter_checked_subcontinuation_frame(frame_id)?;
+                            // ⛔ `D8m` — CONSUME WITH A SHAPE THE SOURCE MATCH
+                            // DOES NOT CARRY, under test only. Same marker, same
+                            // cases, one field of the default changed: the
+                            // consumption law must refuse, which is what makes
+                            // "the bridge is held to the match the marker
+                            // wrapped" a measured fact rather than a reading of
+                            // the call site.
+                            let consumed_default = default;
+                            #[cfg(test)]
+                            let foreign_default = RuntimeTrap {
+                                code: default.code.clone(),
+                                message: format!("{} foreign", default.message),
+                            };
+                            #[cfg(test)]
+                            let consumed_default = if d8m_foreign_consumed_shape() {
+                                &foreign_default
+                            } else {
+                                consumed_default
+                            };
+                            // ⭐ `D8m` — the SAME derivation the direct path
+                            // uses, whole. All four facts, not the id alone.
+                            let checked =
+                                self.checked_computational_frame(cases, consumed_default)?;
+                            // ⛔ `D8m` — SUPPRESS THE TRANSPORTED TUPLE, under
+                            // test only. The marker is still entered and
+                            // consumed above, so the plan side is untouched and
+                            // only the transport is withheld: the bridge then
+                            // carries what it carried before this checkpoint,
+                            // and the detached-frame refusal must come back.
+                            #[cfg(test)]
+                            let checked = if d8m_suppress_transported_tuple() {
+                                CheckedComputationalFrame {
+                                    id: None,
+                                    invocation_id: None,
+                                    invocation_source: None,
+                                    invocation_depth: 0,
+                                }
+                            } else {
+                                checked
+                            };
+                            EliminatorFrame::Computational(ComputationalEliminatorFrame {
+                                cases,
+                                default,
+                                env: &[],
+                                // ⛔ CHILD 0 of the marker occurrence, never the
+                                // wrapper's own origin. The marker names the
+                                // frame; the match IS the frame, and every
+                                // origin-keyed lookup downstream -- case bodies,
+                                // the planner's continuation origin -- must land
+                                // on the match.
+                                static_origin: {
+                                    let wrapped = self
+                                        .child_occurrence(case_body.static_origin, 0, case_body.expr)?
+                                        .static_origin;
+                                    // `D8m` — SUBSTITUTE THE WRAPPER'S OWN
+                                    // OCCURRENCE, under test only. One node off,
+                                    // and the only difference is which of two
+                                    // nested occurrences downstream lookups key
+                                    // on.
+                                    #[cfg(test)]
+                                    let wrapped = if d8m_wrapper_origin_substitution() {
+                                        case_body.static_origin
+                                    } else {
+                                        wrapped
+                                    };
+                                    wrapped
+                                },
+                                retained_scrutinee_index: None,
+                                deferred_constructor_case: Some(&deferred),
+                                provenance: self.mint_recursor_frame_provenance(),
+                                checked_frame_id: checked.id,
+                                checked_invocation_id: checked.invocation_id,
+                                checked_invocation_source: checked.invocation_source,
+                                checked_invocation_depth: checked.invocation_depth,
+                                // ⛔ UNCHANGED. Checked-frame presence is an
+                                // identity fact, not a routing one; making it
+                                // move the answer route would make the two forms
+                                // of one source match lower differently.
+                                answer_route: SourceComputationalAnswerRoute::DirectScrutinee,
                             })
                         }
                         ImmediateBinderEliminator::Ordinary { cases, default } => {
+                            #[cfg(test)]
+                            crate::cranelift_backend::lowering::record_d8m_bridge_arm(
+                                self.defining_function_id,
+                                crate::cranelift_backend::lowering::D8mBridgeArm::Ordinary,
+                            );
                             EliminatorFrame::Ordinary(OrdinaryEliminatorFrame {
                                 cases,
                                 default,
@@ -1837,28 +2677,29 @@ impl<'a> Lowering<'a> {
                 // carrier and the identity-erasing join has not run. This is
                 // the seat where the four-field selector's operands all exist
                 // and where the exact token is claimed at most once.
-                let mut continuation_result: Option<LoweringOperand> = None;
+                let mut continuation_result: Option<RoutedAnswer> = None;
                 if let Some((frame_origin, case_index, recursive_positions)) =
                     selected_computational.as_ref()
                 {
                     for position in recursive_positions.iter().copied() {
-                        // The ordinary envelope: nonrecursive lowered fields in
-                        // source order with the selected recursive field
-                        // omitted. Worker captures follow in capture-ordinal
-                        // order, taken from the same lowered field run.
-                        let ordinary: Vec<LoweringOperand> = lowered_args
-                            .iter()
-                            .enumerate()
-                            .filter(|(index, _)| *index != position)
-                            .map(|(_, operand)| operand.clone())
-                            .collect();
+                        // `D9` — the WHOLE lowered field run is handed down; the
+                        // ordinary run is assembled from the planner's envelope
+                        // at the one seat that resolves the unit.
+                        //
+                        // ⛔ This site used to build the run itself, filtering
+                        // out the recursive field, under a comment claiming
+                        // *"worker captures follow in capture-ordinal order"*.
+                        // They did not: nothing here or downstream appended
+                        // them, so a continuation whose selected worker had
+                        // captures was called with its declared parameter tail
+                        // unfilled.
                         if let Some(returned) = self.claim_and_call_continuation(
                             builder,
                             static_origin,
                             *frame_origin,
                             *case_index,
                             position,
-                            &ordinary,
+                            &lowered_args,
                             producer_env,
                         )? {
                             // The call's own value is the result after the
@@ -1894,10 +2735,20 @@ impl<'a> Lowering<'a> {
                             self.static_transition_plan
                                 .constructor_symbol_identity(static_origin)?,
                         ),
+                        // `D7` -- the allocation lane is the second fact resolved
+                        // at the producer and carried with the template.
+                        occurrence: Some(self.static_transition_plan.source_aggregate_occurrence(
+                            static_origin,
+                            PlannedAggregateShape::Constructor,
+                        )?),
                         args: specialized_operands_at(&lowered_args, "a constructor argument")?,
                     })
                 };
-                let produced = continuation_result.unwrap_or(produced);
+                // `D6a` upstream half -- ordinary evaluation STARTS direct and
+                // the exact producer RAISES it. ⛔ Not a default written at the
+                // consumer: a site that hard-codes `DirectScrutinee` on a path an
+                // exact call result reaches would erase the fact being transported.
+                let produced = continuation_result.unwrap_or_else(|| RoutedAnswer::direct(produced));
                 self.lower_computational_match_value_composed(builder, produced, eliminators)
             }
             RuntimeExpr::Match {
@@ -2160,17 +3011,7 @@ impl<'a> Lowering<'a> {
                 // no intermediate aggregate is materialized or exit-lowered.
                 let mut composed = Vec::with_capacity(eliminators.len() + 1);
                 let provenance = self.mint_recursor_frame_provenance();
-                let checked_frame_id =
-                    self.consume_checked_subcontinuation_frame(inner_cases, inner_default)?;
-                let checked_invocation_id = checked_frame_id.map(|_| {
-                    self.active_recursive_invocations
-                        .last()
-                        .map_or(0, |instance| instance.invocation_instance_id)
-                });
-                let checked_invocation_depth = self
-                    .active_recursive_invocations
-                    .last()
-                    .map_or(0, |instance| instance.semantic_depth);
+                let checked = self.checked_computational_frame(inner_cases, inner_default)?;
                 composed.push(EliminatorFrame::Computational(
                     ComputationalEliminatorFrame {
                         cases: inner_cases,
@@ -2180,13 +3021,11 @@ impl<'a> Lowering<'a> {
                         retained_scrutinee_index: None,
                         deferred_constructor_case: None,
                         provenance,
-                        checked_frame_id,
-                        checked_invocation_id,
-                        checked_invocation_source: self
-                            .active_recursive_invocations
-                            .last()
-                            .map(|instance| instance.source),
-                        checked_invocation_depth,
+                        checked_frame_id: checked.id,
+                        checked_invocation_id: checked.invocation_id,
+                        checked_invocation_source: checked.invocation_source,
+                        checked_invocation_depth: checked.invocation_depth,
+                        answer_route: SourceComputationalAnswerRoute::DirectScrutinee,
                     },
                 ));
                 composed.extend_from_slice(eliminators);
@@ -2294,7 +3133,7 @@ impl<'a> Lowering<'a> {
                 // included — the producer-side twin of the source machine's
                 // fallback arm.
                 let value = self.lower_expr(builder, occurrence, producer_env)?;
-                self.lower_computational_match_value_composed(builder, value, eliminators)
+                self.lower_computational_match_value_composed(builder, RoutedAnswer::direct(value), eliminators)
             }
         }
     }
@@ -2302,9 +3141,11 @@ impl<'a> Lowering<'a> {
     fn lower_computational_match_value_composed(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
-        scrutinee: LoweringOperand,
+        scrutinee: RoutedAnswer,
         eliminators: &[EliminatorFrame<'_>],
     ) -> Result<LoweringOperand, CraneliftBackendError> {
+        let incoming_route = scrutinee.route;
+        let scrutinee = scrutinee.value;
         let Some(eliminator) = eliminators.first().copied() else {
             return Err(unsupported(
                 "ComputationalMatch",
@@ -2335,7 +3176,28 @@ impl<'a> Lowering<'a> {
         // route. ⛔ The phase is classified with no wildcard.
         if let LoweringOperand::Carried(word) = scrutinee {
             return match eliminator {
-                EliminatorFrame::Computational(frame) => {
+                EliminatorFrame::Computational(mut frame) => {
+                    // `D6a` -- the predecessor's route RAISES the frame's, and
+                    // never lowers it. The frame's own field stays the
+                    // recursor-layer producer's authority; this is the call-result
+                    // producer's, and the two join.
+                    let frame_field = frame.answer_route;
+                    frame.answer_route =
+                        RoutedAnswer { value: LoweringOperand::Carried(word), route: incoming_route }
+                            .raise(frame.answer_route);
+                    #[cfg(test)]
+                    if d6a_route_mutation() == D6aRouteMutation::OverwriteIncomingWithFrameField {
+                        record_d6a_route_application();
+                        frame.answer_route = frame_field;
+                    }
+                    #[cfg(test)]
+                    record_d6a_route_event(D6aRouteEvent::ConsumerRoute {
+                        seat: D6aConsumerSeat::Composed,
+                        static_origin: frame.static_origin,
+                        incoming: incoming_route,
+                        frame_field,
+                        joined: frame.answer_route,
+                    });
                     self.lower_carried_computational_match(builder, word, frame, &eliminators[1..])
                 }
                 // ── ⛔ DEFERRED, and named rather than absorbed ────────────
@@ -2380,6 +3242,7 @@ impl<'a> Lowering<'a> {
         let Lowered::Constructor {
             constructor,
             synthesized_identity,
+            occurrence,
             args,
         } = scrutinee
         else {
@@ -2391,6 +3254,10 @@ impl<'a> Lowering<'a> {
         let retained_scrutinee = Lowered::Constructor {
             constructor: constructor.clone(),
             synthesized_identity,
+            // Retaining a scrutinee re-presents the SAME producer, so it keeps
+            // the same occurrence. Dropping it here would make the retained
+            // copy refuse where the original emitted.
+            occurrence,
             args: args.clone(),
         };
         let remaining_eliminators = &eliminators[1..];
@@ -2989,6 +3856,12 @@ impl<'a> Lowering<'a> {
                 self.static_transition_plan
                     .constructor_symbol_identity(deferred.construct_origin)?,
             ),
+            // `D7` -- the allocation lane is the second fact resolved
+            // at the producer and carried with the template.
+            occurrence: Some(self.static_transition_plan.source_aggregate_occurrence(
+                deferred.construct_origin,
+                PlannedAggregateShape::Constructor,
+            )?),
             args: constructor_args.clone(),
         };
         let outer_tail = match self.materialize_eliminator_frame_env(
@@ -3002,13 +3875,13 @@ impl<'a> Lowering<'a> {
 
         match deferred.outer_eliminator {
             EliminatorFrame::Computational(frame) => {
-                let case = match frame
+                let Some((alternative, case)) = frame
                     .cases
                     .iter()
-                    .find(|case| case.constructor == deferred.constructor)
-                {
-                    Some(case) => case,
-                    None => return Ok(Err(frame.default.clone())),
+                    .enumerate()
+                    .find(|(_, case)| case.constructor == deferred.constructor)
+                else {
+                    return Ok(Err(frame.default.clone()));
                 };
                 if case.argument_binders != constructor_args.len() {
                     return Err(unsupported(
@@ -3081,7 +3954,38 @@ impl<'a> Lowering<'a> {
                     );
                     induction_hypotheses.push(LoweringEnvironmentBinding::Value(induction_hypothesis));
                 }
-                extend_specialized(&mut induction_hypotheses, constructor_args);
+                // ⭐ `D8d` — THE ONE ENVIRONMENT AUTHORITY at the selected
+                // recursive source-order position.
+                //
+                // Every nonrecursive position stays a `Value`, the IH prefix
+                // above and the outer frame below are untouched, and a recursive
+                // position the planner has no target for keeps its existing
+                // `Value` binding -- "no target" is the ordinary
+                // non-specialized path, exactly as a missing continuation call
+                // binding is, and never a licence to invent one.
+                //
+                // ⛔ A `StaticWorker`, deliberately NOT a specialized
+                // `Value(Closure)`. The capsule has no value representation, so
+                // reading it in value position fails closed at `value_at` --
+                // which is the property `D8e`'s consumer will be the sole lawful
+                // way around. Until then this binding is intentionally
+                // unreadable, and nothing here manufactures a consumer for it.
+                for (position, lowered) in constructor_args.into_iter().enumerate() {
+                    let binding = match self.composed_recursive_argument_binding(
+                        case,
+                        deferred.construct_origin,
+                        frame.static_origin,
+                        alternative,
+                        position,
+                        &lowered,
+                    )? {
+                        Some(worker) => LoweringEnvironmentBinding::StaticWorker(worker),
+                        None => LoweringEnvironmentBinding::Value(LoweringOperand::Specialized(
+                            lowered,
+                        )),
+                    };
+                    induction_hypotheses.push(binding);
+                }
                 induction_hypotheses.extend(outer_tail);
                 Ok(Ok(induction_hypotheses))
             }
@@ -3250,27 +4154,35 @@ impl<'a> Lowering<'a> {
                         body,
                         ..
                     } => {
-                        self.enter_checked_computational_ih_invocation(call_template_id)?;
+                        // `D8f` — the machine's own child derivation, taken
+                        // BEFORE the marker is entered so the same occurrence is
+                        // recorded and evaluated.
+                        let body = self.owned_child_occurrence(static_origin, 0, *body)?;
+                        self.enter_checked_computational_ih_invocation(
+                            call_template_id,
+                            &body.expr,
+                            body.static_origin,
+                        )?;
                         control.continuation =
                             SourceContinuation::CheckedComputationalIHInvocationReturn {
                                 call_template_id,
                                 next: Box::new(control.continuation),
                             };
                         SourceMachineState::Eval {
-                            expr: self.owned_child_occurrence(static_origin, 0, *body)?,
+                            expr: body,
                             env,
                             control,
                         }
                     }
                     RuntimeExpr::Value(value) => SourceMachineState::Value {
-                        value: LoweringOperand::Specialized(self.lower_value(builder, &value)?),
+                        value: RoutedAnswer::direct(LoweringOperand::Specialized(self.lower_value(builder, &value)?)),
                         control,
                     },
                     // Same value-producing rule as the direct descent's `Var`:
                     // only `Value` yields a machine value, and a static worker
                     // binding fails closed here rather than entering one.
                     RuntimeExpr::Var(index) => SourceMachineState::Value {
-                        value: env
+                        value: RoutedAnswer::direct(env
                             .get(index as usize)
                             .ok_or_else(|| {
                                 unsupported(
@@ -3279,7 +4191,7 @@ impl<'a> Lowering<'a> {
                                 )
                             })?
                             .value_at("a source-machine Var in value position")?
-                            .clone(),
+                            .clone()),
                         control,
                     },
                     RuntimeExpr::Let { value, body } => {
@@ -3300,14 +4212,14 @@ impl<'a> Lowering<'a> {
                     } => {
                         if args.is_empty() {
                             SourceMachineState::Value {
-                                value: LoweringOperand::Specialized(
+                                value: RoutedAnswer::direct(LoweringOperand::Specialized(
                                     self.finish_source_constructor(
                                         builder,
                                         constructor,
                                         static_origin,
                                         vec![],
                                     )?,
-                                ),
+                                )),
                                 control,
                             }
                         } else {
@@ -3363,15 +4275,183 @@ impl<'a> Lowering<'a> {
                                 self.owned_child_occurrence(static_origin, 1 + position, arg)
                             })
                             .collect::<Result<Vec<_>, _>>()?;
-                        control.continuation = SourceContinuation::CallCallee {
-                            args,
-                            env: env.clone(),
-                            next: Box::new(control.continuation),
+                        // **`RT-CONTSRC-PRODUCER-LOCAL` `D8e` — THE SOLE
+                        // SOURCE-MACHINE CONSUMER of a `D8d` binding.**
+                        //
+                        // ⛔ It sits **ahead of the callee's own evaluation**,
+                        // and that placement is the mechanism, not a
+                        // convenience. Evaluating a `Var` callee first routes it
+                        // through the machine's value arm, which calls
+                        // `value_at` and fails closed on a static worker by
+                        // design. So the binding is either consumed here or
+                        // refused everywhere — there is no third outcome, and a
+                        // `Var` resolving to `Value` falls through to the
+                        // pre-existing route untouched.
+                        //
+                        // ⭐ Deliberately the same shape as the direct descent's
+                        // sole consumer: an exact `Var`, read out of the
+                        // environment by index, no shape inference and no
+                        // planner query. The environment already holds the
+                        // answer because `D8d` put it there; asking the planner
+                        // again here would be the consumer-side target lookup
+                        // this checkpoint excludes, and a second authority for
+                        // one binding.
+                        let static_worker = match callee.as_ref() {
+                            RuntimeExpr::Var(index) => match env.get(*index as usize) {
+                                Some(LoweringEnvironmentBinding::StaticWorker(worker)) => {
+                                    Some((u64::from(*index), worker.clone()))
+                                }
+                                _ => None,
+                            },
+                            _ => None,
                         };
-                        SourceMachineState::Eval {
-                            expr: self.owned_child_occurrence(static_origin, 0, *callee)?,
-                            env,
-                            control,
+                        if let Some((binder_index, worker)) = static_worker {
+                            #[cfg(test)]
+                            d8e_record_consumption();
+                            // `D8l2` — which facet this consumption carried,
+                            // recorded beside the count so "three consumptions"
+                            // can be attributed rather than merely counted.
+                            #[cfg(test)]
+                            crate::cranelift_backend::lowering::record_d8l2_consumed_facet(
+                                matches!(
+                                    worker.discharge,
+                                    ContinuationDischarge::ComposedSourceContinuation(_)
+                                ),
+                            );
+                            // Arguments are evaluated under the machine's own
+                            // control and phase, exactly as for a value callee;
+                            // only the completion differs.
+                            let mut remaining = args;
+                            if remaining.is_empty() {
+                                // **`D8p` — THE CHECKED-APPLICATION SEAM, on the
+                                // source machine's call edge.**
+                                //
+                                // The direct descent has consulted it since
+                                // `D5a`; this edge did not, so a checked-IH
+                                // marker entered in a body whose application the
+                                // SOURCE MACHINE lowers could never be consumed
+                                // and failed closed at the marker's close. The
+                                // seam is the same function, on the same exact
+                                // occurrence and binder ordinal -- no second
+                                // authority, no target lookup, and no new
+                                // identity.
+                                //
+                                // ⛔ Immediately BEFORE the call is written, so
+                                // consumption still precedes the instruction it
+                                // discharges, and after the arguments are in
+                                // hand so an ordinary selected-argument call
+                                // reaches the seat first and leaves the marker
+                                // for the occurrence that owns it.
+                                let disposition = self
+                                    .consume_checked_ih_marker_at_static_worker_call(
+                                        binder_index,
+                                        0,
+                                        static_origin,
+                                    )?;
+                                let before = self.live_source_continuations;
+                                let (called, emission) = self.call_static_worker_with_inputs(
+                                    builder,
+                                    &worker,
+                                    Vec::new(),
+                                    static_origin,
+                                )?;
+                                // `D8p` — the TARGET side, under the same key,
+                                // written only now that the call instruction
+                                // exists and carrying the run it actually took.
+                                #[cfg(test)]
+                                if disposition == CheckedApplicationDisposition::ConsumedHere {
+                                    crate::cranelift_backend::lowering::record_d8p_emitted_target(
+                                        crate::cranelift_backend::lowering::D8pEmittedTarget {
+                                            function: self.defining_function_id,
+                                            application_origin: static_origin,
+                                            target_body_origin: worker.body_origin,
+                                            declared_arity: worker.declared_arity,
+                                            captures: worker.captures.len(),
+                                            supplied_operands: emission.supplied_operands,
+                                        },
+                                    );
+                                }
+                                // `D8f` — the disposition, recorded AFTER the
+                                // call instruction exists. A record here is
+                                // therefore "this exact call was emitted, with
+                                // this disposition", which is what an omission
+                                // control needs: emitted, and not consumed.
+                                #[cfg(test)]
+                                crate::cranelift_backend::lowering::record_d8f_disposition(
+                                    self.defining_function_id,
+                                    static_origin,
+                                    disposition,
+                                );
+                                // `D8j` — the call is emitted and its result is
+                                // in hand under the SAME `control` this arm was
+                                // entered with. Only now may a composed
+                                // obligation be claimed.
+                                // **`D8f` — THE CLAIM DISPOSITION, three cases,
+                                // matched exhaustively.**
+                                match disposition {
+                                    // The `D8j` population: an ordinary composed
+                                    // call, untouched by this seam, claims its
+                                    // causal identity exactly as before.
+                                    CheckedApplicationDisposition::NoPendingApplication
+                                    // The checked application itself, claiming
+                                    // the planner-issued identity once.
+                                    | CheckedApplicationDisposition::ConsumedHere => {
+                                        self.claim_composed_discharge(
+                                            &worker, emission, &called, before,
+                                        )?;
+                                    }
+                                    // ⛔ The declined call. It is emitted
+                                    // unchanged and it claims NOTHING: the
+                                    // identity belongs to the checked
+                                    // application the planner issued it for, and
+                                    // an ordinary selected-argument call
+                                    // answering for it is a second discharge of
+                                    // one obligation. The binding is not
+                                    // reclassified and no identity is minted --
+                                    // this call simply does not answer.
+                                    CheckedApplicationDisposition::PendingAtAnotherOccurrence => {
+                                        #[cfg(test)]
+                                        if d8f_declined_call_claims() {
+                                            self.claim_composed_discharge(
+                                                &worker, emission, &called, before,
+                                            )?;
+                                        }
+                                    }
+                                }
+                                SourceMachineState::Value {
+                                    value: RoutedAnswer::direct(called),
+                                    control,
+                                }
+                            } else {
+                                let first = remaining.remove(0);
+                                control.continuation = SourceContinuation::CallArgument {
+                                    callee: SourceCallee::StaticWorker {
+                                        worker,
+                                        static_origin,
+                                        binder_index,
+                                    },
+                                    remaining,
+                                    lowered: Vec::new(),
+                                    env: env.clone(),
+                                    next: Box::new(control.continuation),
+                                };
+                                SourceMachineState::Eval {
+                                    expr: first,
+                                    env,
+                                    control,
+                                }
+                            }
+                        } else {
+                            control.continuation = SourceContinuation::CallCallee {
+                                args,
+                                env: env.clone(),
+                                next: Box::new(control.continuation),
+                            };
+                            SourceMachineState::Eval {
+                                expr: self.owned_child_occurrence(static_origin, 0, *callee)?,
+                                env,
+                                control,
+                            }
                         }
                     }
                     RuntimeExpr::ComputationalMatch {
@@ -3403,18 +4483,28 @@ impl<'a> Lowering<'a> {
                     // origin. This arm is why a "machine-only" subset could never
                     // have been threaded soundly.
                     other => SourceMachineState::Value {
-                        value: self.lower_expr(
+                        value: RoutedAnswer::direct(self.lower_expr(
                             builder,
                             SourceOccurrence {
                                 expr: &other,
                                 static_origin,
                             },
                             &env,
-                        )?,
+                        )?),
                         control,
                     },
                 },
                 SourceMachineState::Value { value, mut control } => {
+                    // ⭐⭐ `D6a` upstream half -- SPLIT THE PAIR ONCE, HERE.
+                    //
+                    // ⛔ `incoming_route` is the route THIS predecessor arrived
+                    // by. Every transition below that forwards the same operand
+                    // carries it forward; only a transition producing a NEW
+                    // value starts at `DirectScrutinee`. Resetting on a forward
+                    // is the erasure this checkpoint exists to prevent, and it
+                    // is SILENT -- the compile stays green and the checked
+                    // answer quietly takes the closed default.
+                    let RoutedAnswer { value, route: incoming_route } = value;
                     if matches!(value, LoweringOperand::Specialized(Lowered::Trap(_))) {
                         control.continuation = Self::discard_source_prefix(control.continuation);
                     }
@@ -3466,7 +4556,7 @@ impl<'a> Lowering<'a> {
                                     },
                                 )),
                             };
-                            SourceMachineState::Value { value, control }
+                            SourceMachineState::Value { value: RoutedAnswer { value, route: incoming_route }, control }
                         }
                         SourceContinuation::Terminal(SourceContinuationTerminal::ResumeOuter {
                             expected,
@@ -3503,7 +4593,7 @@ impl<'a> Lowering<'a> {
                                 let mut prefix = edge.target.terminal_active_prefix;
                                 prefix.push(EliminatorFrame::InvocationReturn);
                                 self.lower_computational_match_value_composed(
-                                    builder, value, &prefix,
+                                    builder, RoutedAnswer { value, route: incoming_route }, &prefix,
                                 )?
                             };
                             match edge.target.join_plan.representation {
@@ -3553,9 +4643,9 @@ impl<'a> Lowering<'a> {
                         SourceContinuation::LetBody { body, env, next } => {
                             control.continuation = *next;
                             if matches!(value, LoweringOperand::Specialized(Lowered::RecursiveBackedge)) {
-                                SourceMachineState::Value { value, control }
+                                SourceMachineState::Value { value: RoutedAnswer { value, route: incoming_route }, control }
                             } else if matches!(value, LoweringOperand::Specialized(Lowered::Trap(_))) {
-                                SourceMachineState::Value { value, control }
+                                SourceMachineState::Value { value: RoutedAnswer { value, route: incoming_route }, control }
                             } else {
                                 let body_env = env_with_operands([value], &env);
                                 SourceMachineState::Eval {
@@ -3568,7 +4658,7 @@ impl<'a> Lowering<'a> {
                         SourceContinuation::CheckedRecursiveInvocationReturn { instance, next } => {
                             self.leave_checked_recursive_invocation(instance)?;
                             control.continuation = *next;
-                            SourceMachineState::Value { value, control }
+                            SourceMachineState::Value { value: RoutedAnswer { value, route: incoming_route }, control }
                         }
                         SourceContinuation::CheckedComputationalIHInvocationReturn {
                             call_template_id,
@@ -3576,7 +4666,7 @@ impl<'a> Lowering<'a> {
                         } => {
                             if self
                                 .pending_computational_ih_call
-                                .is_some_and(|pending| pending != call_template_id)
+                                .is_some_and(|pending| pending.call_template_id != call_template_id)
                             {
                                 return Err(unsupported(
                                     "OrientedSubcontinuationPlanV1",
@@ -3585,7 +4675,7 @@ impl<'a> Lowering<'a> {
                             }
                             let value = self.finish_checked_computational_ih_marker(value)?;
                             control.continuation = *next;
-                            SourceMachineState::Value { value, control }
+                            SourceMachineState::Value { value: RoutedAnswer { value, route: incoming_route }, control }
                         }
                         SourceContinuation::ReturnFromSelectedCase { delimiter, next } => {
                             let scope =
@@ -3614,7 +4704,7 @@ impl<'a> Lowering<'a> {
                             })?;
                             control.selected = previous;
                             control.continuation = *next;
-                            SourceMachineState::Value { value, control }
+                            SourceMachineState::Value { value: RoutedAnswer { value, route: incoming_route }, control }
                         }
                         SourceContinuation::ApplyRecursorSelection { layer, next } => {
                             #[cfg(test)]
@@ -3647,7 +4737,7 @@ impl<'a> Lowering<'a> {
                                     answer_route,
                                     next,
                                 };
-                            SourceMachineState::Value { value, control }
+                            SourceMachineState::Value { value: RoutedAnswer { value, route: incoming_route }, control }
                         }
                         SourceContinuation::UnwindRecursorSegment {
                             mut stack,
@@ -3696,10 +4786,10 @@ impl<'a> Lowering<'a> {
                                             next,
                                         }),
                                     };
-                                SourceMachineState::Value { value, control }
+                                SourceMachineState::Value { value: RoutedAnswer { value, route: incoming_route }, control }
                             } else {
                                 control.continuation = *next;
-                                SourceMachineState::Value { value, control }
+                                SourceMachineState::Value { value: RoutedAnswer { value, route: incoming_route }, control }
                             }
                         }
                         SourceContinuation::ConstructArgument {
@@ -3719,12 +4809,12 @@ impl<'a> Lowering<'a> {
                             control.continuation = *next;
                             if remaining.is_empty() {
                                 SourceMachineState::Value {
-                                    value: LoweringOperand::Specialized(self.finish_source_constructor(
+                                    value: RoutedAnswer::direct(LoweringOperand::Specialized(self.finish_source_constructor(
                                         builder,
                                         constructor,
                                         static_origin,
                                         lowered,
-                                    )?),
+                                    )?)),
                                     control,
                                 }
                             } else {
@@ -3910,7 +5000,56 @@ impl<'a> Lowering<'a> {
                                         control,
                                     }
                                 }
-                                _ => {
+                                // A runtime boundary word has no compile-time
+                                // template, so it is classified by PHASE before
+                                // any arm asks for a `Lowered` shape. Without
+                                // this arm it fell past every shape test onto
+                                // the refusal below -- a true sentence about the
+                                // wrong thing, naming a cause that is not the
+                                // cause: the value is fine, the question is.
+                                //
+                                // The generic `lower_expr` `Match` emitter and
+                                // the source machine's
+                                // `ComputationalMatchScrutinee` both already
+                                // carry this arm. This seat was the only one of
+                                // the three missing it.
+                                //
+                                // It does NOT delegate to the generic seat's
+                                // `lower_carried_match`: that helper returns a
+                                // value to its caller, while this seat owns a
+                                // continuation, so each case body is lowered
+                                // under the match's original `next` through its
+                                // own source predecessor edge.
+                                //
+                                // Taken as an explicit arm rather than a
+                                // fallback, so this match is exhaustive over
+                                // `LoweringOperand` and a third variant is a
+                                // compile error here rather than a silent
+                                // refusal.
+                                LoweringOperand::Carried(word) => {
+                                    // Family 5 control seam. The operand is
+                                    // already classified `Carried` here, so a
+                                    // refusal below is evidence about the real
+                                    // dispatch decision and nothing else.
+                                    #[cfg(test)]
+                                    if let Some(refusal) = source_carried_control_refusal(
+                                        SourceCarriedControlMutation::RefuseClassifiedCarried,
+                                        "Match",
+                                        "scrutinee is not a constructor value",
+                                    ) {
+                                        return Err(refusal);
+                                    }
+                                    return self.lower_source_carried_match(
+                                        builder,
+                                        word,
+                                        &cases,
+                                        &default,
+                                        static_origin,
+                                        &env,
+                                        control,
+                                    );
+                                }
+                                LoweringOperand::Specialized(_) => {
                                     return Err(unsupported(
                                         "Match",
                                         "scrutinee is not a constructor value",
@@ -3967,12 +5106,44 @@ impl<'a> Lowering<'a> {
                                         .active_recursive_invocations
                                         .last()
                                         .map_or(0, |instance| instance.semantic_depth),
+                                    // ⭐⭐ `D6a` -- THE PREDECESSOR'S ROUTE RAISES THE
+                                    // CONTINUATION'S, and never lowers it.
+                                    //
+                                    // The continuation's own field stays the
+                                    // recursor-layer producer's authority. It is not
+                                    // the sole authority: an exact claimed and emitted
+                                    // continuation-specialization call result arrives
+                                    // here already checked, and letting the
+                                    // continuation's `DirectScrutinee` overwrite that
+                                    // is precisely the drop measured at `ae45e804`.
+                                    answer_route: RoutedAnswer {
+                                        value: LoweringOperand::Carried(word),
+                                        route: incoming_route,
+                                    }
+                                    .raise(answer_route),
                                 };
+                                #[cfg(test)]
+                                let mut frame = frame;
+                                #[cfg(test)]
+                                if d6a_route_mutation()
+                                    == D6aRouteMutation::OverwriteIncomingWithFrameField
+                                {
+                                    record_d6a_route_application();
+                                    frame.answer_route = answer_route;
+                                }
+                                #[cfg(test)]
+                                record_d6a_route_event(D6aRouteEvent::ConsumerRoute {
+                                    seat: D6aConsumerSeat::SourceMachine,
+                                    static_origin,
+                                    incoming: incoming_route,
+                                    frame_field: answer_route,
+                                    joined: frame.answer_route,
+                                });
                                 let eliminated = self
                                     .lower_carried_computational_match(builder, word, frame, &[])?;
                                 control.continuation = *next;
                                 break 'computational_scrutinee SourceMachineState::Value {
-                                    value: eliminated,
+                                    value: RoutedAnswer::direct(eliminated),
                                     control,
                                 };
                             }
@@ -4143,6 +5314,11 @@ impl<'a> Lowering<'a> {
                                     .active_recursive_invocations
                                     .last()
                                     .map_or(0, |instance| instance.semantic_depth),
+                                // `D6a` -- the same source continuation's fact. The
+                                // specialized arm above already consumed it for its own
+                                // selection; a nested CARRIED resumption of this frame must
+                                // see the same route rather than a weaker one.
+                                answer_route,
                             };
                             let activation = self.mint_continuation_activation();
                             let cursor = self.mint_continuation_cursor();
@@ -4307,7 +5483,7 @@ impl<'a> Lowering<'a> {
                             } else {
                                 let first = args.remove(0);
                                 control.continuation = SourceContinuation::CallArgument {
-                                    callee: value,
+                                    callee: SourceCallee::Value(value),
                                     remaining: args,
                                     lowered: Vec::new(),
                                     env: env.clone(),
@@ -4330,11 +5506,100 @@ impl<'a> Lowering<'a> {
                             lowered.push(value);
                             control.continuation = *next;
                             if remaining.is_empty() {
-                                match self
-                                    .source_call_state(builder, callee, lowered, env, control)?
-                                {
-                                    SourceCallOutcome::Continue(state) => state,
-                                    SourceCallOutcome::Complete(value) => return Ok(value),
+                                match callee {
+                                    // **`D8e` — the sole consumer's completion.**
+                                    //
+                                    // ⛔ Straight into the SHARED route-selected
+                                    // emitter with the arguments the machine
+                                    // just evaluated. Nothing is re-evaluated,
+                                    // no target is looked up again, and no
+                                    // operand run is assembled here: captures,
+                                    // the route's suffix and the route's table
+                                    // all live in the one emitter the direct
+                                    // descent uses.
+                                    SourceCallee::StaticWorker {
+                                        worker,
+                                        static_origin,
+                                        binder_index,
+                                    } => {
+                                        // `D8p` — the same seam, at the
+                                        // non-empty argument run's emission
+                                        // seat. The arguments are already
+                                        // lowered, so any ordinary call among
+                                        // them has already reached this seat and
+                                        // already declined the marker.
+                                        let disposition = self
+                                            .consume_checked_ih_marker_at_static_worker_call(
+                                                binder_index,
+                                                lowered.len(),
+                                                static_origin,
+                                            )?;
+                                        let before = self.live_source_continuations;
+                                        let (called, emission) = self
+                                            .call_static_worker_with_inputs(
+                                                builder,
+                                                &worker,
+                                                lowered,
+                                                static_origin,
+                                            )?;
+                                        // `D8p` — the target side, post-instruction.
+                                        #[cfg(test)]
+                                        if disposition
+                                            == CheckedApplicationDisposition::ConsumedHere
+                                        {
+                                            crate::cranelift_backend::lowering::record_d8p_emitted_target(
+                                                crate::cranelift_backend::lowering::D8pEmittedTarget {
+                                                    function: self.defining_function_id,
+                                                    application_origin: static_origin,
+                                                    target_body_origin: worker.body_origin,
+                                                    declared_arity: worker.declared_arity,
+                                                    captures: worker.captures.len(),
+                                                    supplied_operands: emission.supplied_operands,
+                                                },
+                                            );
+                                        }
+                                        // `D8f` — post-instruction, as above.
+                                        #[cfg(test)]
+                                        crate::cranelift_backend::lowering::record_d8f_disposition(
+                                            self.defining_function_id,
+                                            static_origin,
+                                            disposition,
+                                        );
+                                        // `D8j` — the non-empty argument run
+                                        // reached here through `CallArgument`
+                                        // under the machine's own control, and
+                                        // the raw call is now written. This is
+                                        // the seat, and it is after all three.
+                                        //
+                                        // `D8f` — and the same three dispositions
+                                        // decide whether it answers.
+                                        match disposition {
+                                            CheckedApplicationDisposition::NoPendingApplication
+                                            | CheckedApplicationDisposition::ConsumedHere => {
+                                                self.claim_composed_discharge(
+                                                    &worker, emission, &called, before,
+                                                )?;
+                                            }
+                                            CheckedApplicationDisposition::PendingAtAnotherOccurrence => {
+                                                #[cfg(test)]
+                                                if d8f_declined_call_claims() {
+                                                    self.claim_composed_discharge(
+                                                        &worker, emission, &called, before,
+                                                    )?;
+                                                }
+                                            }
+                                        }
+                                        SourceMachineState::Value {
+                                            value: RoutedAnswer::direct(called),
+                                            control,
+                                        }
+                                    }
+                                    SourceCallee::Value(callee) => match self
+                                        .source_call_state(builder, callee, lowered, env, control)?
+                                    {
+                                        SourceCallOutcome::Continue(state) => state,
+                                        SourceCallOutcome::Complete(value) => return Ok(value),
+                                    },
                                 }
                             } else {
                                 let first = remaining.remove(0);
@@ -4831,6 +6096,613 @@ impl<'a> Lowering<'a> {
         self.resume_active_continuation(builder, merged?, suffix_active)
     }
 
+    /// One emitted-case descriptor, resolved BEFORE any block exists.
+    ///
+    /// Every planner and schema question the carried source-machine `Match`
+    /// route asks is answered here. Once the first block is created the
+    /// selector construction consults only these descriptors and the emitted
+    /// carrier helpers, so a malformed table cannot be discovered halfway
+    /// through an emitted graph.
+    fn source_carried_descriptors(
+        &self,
+        cases: &[crate::RuntimeMatchCase],
+        static_origin: StaticOriginId,
+    ) -> Result<Vec<SourceCarriedCase>, CraneliftBackendError> {
+        let mut descriptors = Vec::with_capacity(cases.len());
+        for (index, case) in cases.iter().enumerate() {
+            let emitted = self.source_carried_case_is_emitted(static_origin, index)?;
+            let identity = self
+                .static_transition_plan
+                .case_constructor_identity(static_origin, index)?
+                .tag_abi_word()?;
+            let binders = i64::try_from(case.binders).map_err(|_| {
+                unsupported(
+                    "BoundaryCarrier",
+                    "a case binds more constructor arguments than the carrier ABI can count",
+                )
+            })?;
+            descriptors.push(SourceCarriedCase {
+                index,
+                emitted,
+                identity,
+                binders,
+                borrowed: borrowed_constructor_identity(&self.process_symbols, &case.constructor),
+            });
+        }
+        Ok(descriptors)
+    }
+
+    /// The planner's emission verdict for one ordinary `Match` case, asked per
+    /// case and never defaulted. An origin with no record is a refusal to
+    /// answer, so it fails closed rather than being read as `Reachable`.
+    fn source_carried_case_is_emitted(
+        &self,
+        static_origin: StaticOriginId,
+        index: usize,
+    ) -> Result<bool, CraneliftBackendError> {
+        let status = self
+            .static_transition_plan
+            .case_emission_status(static_origin, index)?
+            .ok_or_else(|| {
+                unsupported(
+                    "Match",
+                    "a carried source match has no planned case-emission verdict",
+                )
+            })?;
+        // Exhaustive over the verdict, with no wildcard: a third status would
+        // be a compile error here rather than silently reading as "do not
+        // emit".
+        Ok(match status {
+            CaseEmissionStatus::Reachable => true,
+            CaseEmissionStatus::Eliminated => false,
+        })
+    }
+
+    /// Lower one preallocated semantic leaf of a carried source match.
+    ///
+    /// The leaf already holds its bindings as block parameters, so the selector
+    /// graph that jumped here is closed. The CALLER mints this leaf's one
+    /// source predecessor and instantiates the prefix on it, then hands the
+    /// resulting control in; this lowers the case body under it. The only
+    /// accepted terminal results are a sealed trap or a `RecursiveBackedge`.
+    #[allow(clippy::too_many_arguments)]
+    fn lower_source_carried_leaf<'b>(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        frame_scope: &mut CheckedFrameBranchScope,
+        static_origin: StaticOriginId,
+        index: usize,
+        body: RuntimeExpr,
+        bindings: Vec<LoweringOperand>,
+        env: &[LoweringEnvironmentBinding],
+        branch_control: SourceControl<'b>,
+    ) -> Result<(), CraneliftBackendError> {
+        let case_body = self.owned_case_body_occurrence(static_origin, index, body)?;
+        let lowered = self.lower_forked_branch(
+            builder,
+            frame_scope,
+            case_body,
+            env_with_operands(bindings, env),
+            branch_control,
+        )?;
+        if self.seal_source_trap_branch(builder, &lowered)? {
+            // A trap terminates this mutually exclusive predecessor.
+            return Ok(());
+        }
+        if !matches!(
+            lowered,
+            LoweringOperand::Specialized(Lowered::RecursiveBackedge)
+        ) {
+            return Err(unsupported(
+                "NativeJoinPlanV1",
+                format!("carried-match leaf {index} did not seal its distinct affine join edge"),
+            ));
+        }
+        Ok(())
+    }
+
+    /// Eliminate a CARRIED scrutinee at the source-machine ordinary `Match`
+    /// seat, under the source machine's own continuation discipline.
+    ///
+    /// A runtime boundary word has no compile-time template, so the case cannot
+    /// be selected at compile time. The dispatch is the carrier ABI's and
+    /// nothing else: the canonical case identity comes from the planner, the tag
+    /// and field count are read through the carrier, and each projected child
+    /// stays `Carried` into the case environment. There is no decode and no
+    /// `Carried -> Lowered` reconstruction anywhere on this path.
+    ///
+    /// This does NOT delegate to `Lowering::lower_carried_match`. That helper
+    /// belongs to the generic `lower_expr` seat, which returns a value to its
+    /// caller; this seat owns a continuation, so each case body must be lowered
+    /// under the match's original `next` through a distinct source predecessor
+    /// edge, and the suffix resumed exactly once at the join.
+    ///
+    /// Case emission is the planner's verdict, not this emitter's: a case the
+    /// scrutinee's closed producer set eliminates is not emitted and its body is
+    /// not lowered. The runtime closed default covers it, so an eliminated
+    /// constructor arriving anyway still reaches a defined outcome rather than
+    /// falling into a neighbouring case.
+    fn lower_source_carried_match<'b>(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        scrutinee: CarriedBoundaryWord,
+        cases: &[crate::RuntimeMatchCase],
+        default: &RuntimeTrap,
+        static_origin: StaticOriginId,
+        env: &[LoweringEnvironmentBinding],
+        suffix_control: SourceControl<'b>,
+    ) -> Result<LoweringOperand, CraneliftBackendError> {
+        // ── PHASE 0 — PREVALIDATE, BEFORE A SINGLE BLOCK EXISTS ──
+        //
+        // A malformed table must fail as an `Err`, not as half an emitted
+        // graph. Every planner and schema question is answered here, including
+        // the carrier arena's pointer type, so nothing below the first
+        // `create_block` asks one.
+        let descriptors = self.source_carried_descriptors(cases, static_origin)?;
+        let pointer_type = builder.func.dfg.value_type(self.carrier_arena()?);
+        let emitted: Vec<usize> = descriptors
+            .iter()
+            .filter(|descriptor| descriptor.emitted)
+            .map(|descriptor| descriptor.index)
+            .collect();
+
+        // The two Result alternatives are resolved INDEPENDENTLY. A decoded
+        // `HostResult` is a fact about the word, not about the case list, so
+        // neither the absence of one alternative nor the absence of both may
+        // route it to representation mismatch -- it takes the closed default
+        // instead. The binder shape is therefore validated only for an
+        // alternative that is actually present.
+        let ok_case = cases
+            .iter()
+            .position(|case| case.constructor == self.process_symbols.result_ok);
+        let err_case = cases
+            .iter()
+            .position(|case| case.constructor == self.process_symbols.result_err);
+        for alternative in [ok_case, err_case].into_iter().flatten() {
+            if cases[alternative].binders != 1 {
+                return Err(unsupported(
+                    "HostResult",
+                    "a present carried Result case must bind exactly one selected payload",
+                ));
+            }
+        }
+
+        // The whole case set must be process-input family: a runtime class test
+        // alone would wrongly demand borrowed identities of unrelated source
+        // constructors, which is why this is decided from the cases.
+        let admits_borrowed = self.process_object
+            && descriptors
+                .iter()
+                .all(|descriptor| descriptor.borrowed.is_some());
+        if admits_borrowed {
+            for descriptor in &descriptors {
+                let (_, arity) = descriptor.borrowed.expect("admitted family");
+                if cases[descriptor.index].binders != arity {
+                    return Err(unsupported(
+                        "Match",
+                        format!(
+                            "{} borrowed arity mismatch",
+                            cases[descriptor.index].constructor
+                        ),
+                    ));
+                }
+            }
+        }
+
+        let (source_prefix_template, terminal) =
+            Self::split_source_prefix(suffix_control.continuation)?;
+        let mut local_completion = None;
+        let target = match terminal {
+            SourcePrefixTerminal::Join(inherited_edge) => {
+                // Family 2a control seam. The prefix split has already
+                // classified this terminal as an inherited join; the hook sits
+                // before the target is used and never rewrites it.
+                #[cfg(test)]
+                if let Some(refusal) = source_carried_control_refusal(
+                    SourceCarriedControlMutation::RefuseSplitInheritedJoin,
+                    "NativeJoinPlanV1",
+                    "MUTATION inherited join acquisition perturbed",
+                ) {
+                    return Err(refusal);
+                }
+                inherited_edge.target
+            }
+            SourcePrefixTerminal::ResumeOuter { root_authority } => {
+                let active = suffix_control
+                    .selected
+                    .as_active(&suffix_control.selected_lineage);
+                let (prefix, suffix_pending, required_kind, site_id) =
+                    self.planned_active_scalar_cut(active)?;
+                let join_id = self.next_source_join;
+                self.next_source_join = self
+                    .next_source_join
+                    .checked_add(1)
+                    .expect("compiler-private source join identity exhausted");
+                let join_plan = std::rc::Rc::new(self.consumed_join_plan_token(static_origin)?);
+                let merge = builder.create_block();
+                self.append_planned_join_params(builder, merge, join_plan.as_ref());
+                local_completion = Some((
+                    merge,
+                    suffix_pending.to_vec(),
+                    required_kind,
+                    site_id,
+                    root_authority,
+                ));
+                SourceJoinTarget {
+                    join_id,
+                    block: merge,
+                    expected_outer: suffix_control.terminal_outer,
+                    required_kind,
+                    join_plan,
+                    result_origin: static_origin,
+                    terminal_active_prefix: prefix,
+                }
+            }
+        };
+        let arm_selected = suffix_control.selected.clone();
+        let arm_lineage = suffix_control.selected_lineage.clone();
+        let arm_outer = suffix_control.terminal_outer;
+
+        // ── PHASE 1 — ALLOCATE EVERY BLOCK ──
+        //
+        // Leaves take their bindings as BLOCK PARAMETERS. That is what makes
+        // the selector graph closable before any body is lowered: a selector
+        // never has to wait for a leaf, it just jumps with the values it read.
+        let mismatch_block = builder.create_block();
+        let default_block = builder.create_block();
+
+        // One carried leaf per emitted case. Constructor and `HostResult` SHARE
+        // a case's carried leaf, which is sound exactly because their payload
+        // shapes agree there: a Result case binds one child, and the
+        // represented route projects one field for it.
+        let mut carried_leaves = Vec::new();
+        for &index in &emitted {
+            let leaf = builder.create_block();
+            for _ in 0..cases[index].binders {
+                builder.append_block_param(leaf, types::I64);
+            }
+            carried_leaves.push((index, leaf));
+        }
+        // Borrowed leaves are DISTINCT, never shared with the carried ones:
+        // their environment is `BorrowedNativeValue` pointers into host memory,
+        // and relabelling those as represented carrier children is precisely
+        // the mislabelling this route must not do.
+        let mut borrowed_leaves = Vec::new();
+        if admits_borrowed {
+            for &index in &emitted {
+                let leaf = builder.create_block();
+                for _ in 0..descriptors[index].borrowed.expect("admitted family").1 {
+                    builder.append_block_param(leaf, pointer_type);
+                }
+                borrowed_leaves.push((index, leaf));
+            }
+        }
+        let leaf_of = |leaves: &[(usize, cranelift_codegen::ir::Block)], index: usize| {
+            leaves
+                .iter()
+                .find(|(candidate, _)| *candidate == index)
+                .map(|(_, block)| *block)
+        };
+
+        // ── PHASE 2 — EMIT AND TERMINATE THE ENTIRE SELECTOR GRAPH ──
+        //
+        // Nothing below lowers a source body. Every path created here ends in a
+        // `brif`, a `jump` or a `return_`, so no block is left live when leaf
+        // lowering begins.
+        let class = self.emit_carrier_class(builder, scrutinee)?;
+        let mut class_test = builder
+            .current_block()
+            .expect("carried source match block");
+
+        {
+            // Emitted unconditionally: whether the word IS a `HostResult` is a
+            // runtime fact, so the selector exists even when the source cases
+            // mention neither alternative. Each alternative resolves to its own
+            // leaf, or to the shared default when it is absent or eliminated.
+            let host_result = builder.create_block();
+            let next_class = builder.create_block();
+            if builder.current_block() != Some(class_test) {
+                builder.switch_to_block(class_test);
+            }
+            let is_host_result = builder.ins().icmp_imm(
+                cranelift_codegen::ir::condcodes::IntCC::Equal,
+                class,
+                BoundaryClass::HostResult as i64,
+            );
+            builder
+                .ins()
+                .brif(is_host_result, host_result, &[], next_class, &[]);
+
+            builder.switch_to_block(host_result);
+            let success = self.emit_carrier_host_success(builder, scrutinee)?;
+            let payload = self.emit_carrier_host_payload(builder, scrutinee)?;
+            let alternative_leaf = |alternative: Option<usize>| {
+                alternative
+                    .and_then(|index| leaf_of(&carried_leaves, index))
+                    .unwrap_or(default_block)
+            };
+            let ok_target = alternative_leaf(ok_case);
+            let err_target = alternative_leaf(err_case);
+            let ok_args: Vec<_> = if ok_target == default_block {
+                Vec::new()
+            } else {
+                vec![payload.word.into()]
+            };
+            let err_args: Vec<_> = if err_target == default_block {
+                Vec::new()
+            } else {
+                vec![payload.word.into()]
+            };
+            builder
+                .ins()
+                .brif(success, ok_target, &ok_args, err_target, &err_args);
+            class_test = next_class;
+        }
+
+        if admits_borrowed {
+            let borrowed = builder.create_block();
+            let next_class = builder.create_block();
+            if builder.current_block() != Some(class_test) {
+                builder.switch_to_block(class_test);
+            }
+            let is_borrowed = builder.ins().icmp_imm(
+                cranelift_codegen::ir::condcodes::IntCC::Equal,
+                class,
+                BoundaryClass::BorrowedOpaque as i64,
+            );
+            builder
+                .ins()
+                .brif(is_borrowed, borrowed, &[], next_class, &[]);
+
+            builder.switch_to_block(borrowed);
+            let pointer = self.emit_carrier_scalar(builder, scrutinee)?;
+            let kind = builder
+                .ins()
+                .load(types::I64, MemFlags::trusted(), pointer, 0);
+            Self::require_i64(builder, kind, 2);
+            let tag = builder
+                .ins()
+                .load(types::I64, MemFlags::trusted(), pointer, 8);
+            let arity = builder
+                .ins()
+                .load(types::I64, MemFlags::trusted(), pointer, 24);
+            let fields = builder
+                .ins()
+                .load(pointer_type, MemFlags::trusted(), pointer, 16);
+            let mut borrowed_test = builder
+                .current_block()
+                .expect("borrowed carried source match block");
+            for &index in &emitted {
+                let (expected_tag, expected_arity) =
+                    descriptors[index].borrowed.expect("admitted family");
+                let leaf = leaf_of(&borrowed_leaves, index)
+                    .expect("every emitted case has a borrowed leaf when admitted");
+                let selected = builder.create_block();
+                let next = builder.create_block();
+                if builder.current_block() != Some(borrowed_test) {
+                    builder.switch_to_block(borrowed_test);
+                }
+                let matched = builder.ins().icmp_imm(
+                    cranelift_codegen::ir::condcodes::IntCC::Equal,
+                    tag,
+                    expected_tag,
+                );
+                builder.ins().brif(matched, selected, &[], next, &[]);
+
+                builder.switch_to_block(selected);
+                Self::require_i64(builder, arity, expected_arity as i64);
+                if expected_arity != 0 {
+                    Self::require_nonzero(builder, fields);
+                }
+                let projected: Vec<_> = (0..expected_arity)
+                    .map(|position| {
+                        builder
+                            .ins()
+                            .iadd_imm(fields, (position * 32) as i64)
+                            .into()
+                    })
+                    .collect();
+                builder.ins().jump(leaf, &projected);
+                borrowed_test = next;
+            }
+            builder.switch_to_block(borrowed_test);
+            builder.ins().jump(default_block, &[]);
+            class_test = next_class;
+        }
+
+        // The represented-constructor chain, and the residual class test. A
+        // class this case set never admitted reaches `mismatch_block`.
+        let constructor_block = builder.create_block();
+        if builder.current_block() != Some(class_test) {
+            builder.switch_to_block(class_test);
+        }
+        let is_constructor = builder.ins().icmp_imm(
+            cranelift_codegen::ir::condcodes::IntCC::Equal,
+            class,
+            BoundaryClass::Constructor as i64,
+        );
+        builder
+            .ins()
+            .brif(is_constructor, constructor_block, &[], mismatch_block, &[]);
+
+        builder.switch_to_block(constructor_block);
+        let tag = self.emit_carrier_tag(builder, scrutinee)?;
+        let field_count = self.emit_carrier_field_count(builder, scrutinee)?;
+        let mut tag_test = builder
+            .current_block()
+            .expect("represented carried source match block");
+        for &index in &emitted {
+            let leaf =
+                leaf_of(&carried_leaves, index).expect("every emitted case has a carried leaf");
+            let selected = builder.create_block();
+            let next = builder.create_block();
+            if builder.current_block() != Some(tag_test) {
+                builder.switch_to_block(tag_test);
+            }
+            let identity = descriptors[index].identity;
+            let matched = builder.ins().icmp_imm(
+                cranelift_codegen::ir::condcodes::IntCC::Equal,
+                tag,
+                identity as i64,
+            );
+            builder.ins().brif(matched, selected, &[], next, &[]);
+
+            builder.switch_to_block(selected);
+            let binders = descriptors[index].binders;
+            // The declared arity is checked against the word actually
+            // delivered, at runtime, which is where a disagreement between a
+            // case header and a boundary value belongs.
+            Self::require_i64(builder, field_count, binders);
+            let mut projected = Vec::with_capacity(cases[index].binders);
+            for position in 0..cases[index].binders {
+                let child = self.emit_carrier_field(builder, scrutinee, position)?;
+                projected.push(child.word.into());
+            }
+            builder.ins().jump(leaf, &projected);
+            tag_test = next;
+        }
+        builder.switch_to_block(tag_test);
+        builder.ins().jump(default_block, &[]);
+
+        // The representation this case set never decoded. It is NOT the match's
+        // default: nothing was decoded, so no alternative was ruled out. It
+        // mints no predecessor, consumes no branch frame, joins nothing, and
+        // does not lower the default.
+        builder.switch_to_block(mismatch_block);
+        let mismatch = builder
+            .ins()
+            .iconst(types::I64, CARRIED_REPRESENTATION_MISMATCH_STATUS);
+        builder.ins().return_(&[mismatch]);
+
+        // ── PHASE 3 — LOWER ONLY THE PREALLOCATED SEMANTIC LEAVES ──
+        let mut frame_scope =
+            CheckedFrameBranchScope::capture(&self.consumed_subcontinuation_frames);
+
+        for (index, leaf) in carried_leaves {
+            builder.switch_to_block(leaf);
+            let bindings: Vec<_> = builder
+                .block_params(leaf)
+                .to_vec()
+                .into_iter()
+                .map(|word| LoweringOperand::Carried(CarriedBoundaryWord { word }))
+                .collect();
+            let edge = self.mint_source_predecessor(target.clone());
+            let continuation =
+                Self::instantiate_source_prefix_template(&source_prefix_template, edge)?;
+            let branch_control = SourceControl {
+                continuation,
+                selected: arm_selected.clone(),
+                selected_lineage: arm_lineage.clone(),
+                terminal_outer: arm_outer,
+            };
+            self.lower_source_carried_leaf(
+                builder,
+                &mut frame_scope,
+                static_origin,
+                index,
+                cases[index].body.clone(),
+                bindings,
+                env,
+                branch_control,
+            )?;
+        }
+
+        for (index, leaf) in borrowed_leaves {
+            builder.switch_to_block(leaf);
+            let bindings: Vec<_> = builder
+                .block_params(leaf)
+                .to_vec()
+                .into_iter()
+                .map(|pointer| {
+                    LoweringOperand::Specialized(Lowered::BorrowedNativeValue { pointer })
+                })
+                .collect();
+            let edge = self.mint_source_predecessor(target.clone());
+            let continuation =
+                Self::instantiate_source_prefix_template(&source_prefix_template, edge)?;
+            let branch_control = SourceControl {
+                continuation,
+                selected: arm_selected.clone(),
+                selected_lineage: arm_lineage.clone(),
+                terminal_outer: arm_outer,
+            };
+            self.lower_source_carried_leaf(
+                builder,
+                &mut frame_scope,
+                static_origin,
+                index,
+                cases[index].body.clone(),
+                bindings,
+                env,
+                branch_control,
+            )?;
+        }
+
+        // The shared semantic default, lowered exactly once. `default` is an
+        // ATOM of the match occurrence rather than a child of it, so the honest
+        // origin for this synthesized term is the match occurrence's own;
+        // `Trap` is a leaf, so no child is derived from it. Do not mint an
+        // origin here.
+        builder.switch_to_block(default_block);
+        let edge = self.mint_source_predecessor(target.clone());
+        let continuation =
+            Self::instantiate_source_prefix_template(&source_prefix_template, edge)?;
+        let default_control = SourceControl {
+            continuation,
+            selected: arm_selected.clone(),
+            selected_lineage: arm_lineage.clone(),
+            terminal_outer: arm_outer,
+        };
+        let lowered = self.lower_forked_branch(
+            builder,
+            &mut frame_scope,
+            OwnedSourceOccurrence {
+                expr: RuntimeExpr::Trap(default.clone()),
+                static_origin,
+            },
+            env.to_vec(),
+            default_control,
+        )?;
+        if !self.seal_source_trap_branch(builder, &lowered)?
+            && !matches!(
+                lowered,
+                LoweringOperand::Specialized(Lowered::RecursiveBackedge)
+            )
+        {
+            return Err(unsupported(
+                "NativeJoinPlanV1",
+                "carried-match default predecessor did not seal its distinct affine join edge",
+            ));
+        }
+
+        // ── PHASE 4 — UNION ONCE, FINISH ONCE ──
+        self.consumed_subcontinuation_frames = frame_scope.finish();
+        let Some((merge, suffix_pending, required_kind, _site_id, root_authority)) =
+            local_completion
+        else {
+            return Ok(LoweringOperand::Specialized(Lowered::RecursiveBackedge));
+        };
+        let merged = self.finish_planned_join(
+            builder,
+            merge,
+            target.join_plan.as_ref(),
+            Some(required_kind),
+            "NativeJoinPlanV1",
+        );
+        let suffix_active = ActiveContinuationFrame {
+            activation: suffix_control.selected.activation,
+            cursor: suffix_control.selected.cursor,
+            parent: suffix_control.selected.parent,
+            pending: &suffix_pending,
+            selected_ancestry: &suffix_control.selected.selected_ancestry,
+            source_lineage: &suffix_control.selected_lineage,
+            source_selected_cursor: Some(suffix_control.selected.cursor),
+            selected_scope: suffix_control.selected.selected_scope.as_ref(),
+        };
+        self.restore_root_terminal_authority(root_authority, suffix_control.terminal_outer)?;
+        self.resume_active_continuation(builder, merged?, suffix_active)
+    }
+
     fn lower_source_dynamic_constructor_match<'b>(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -5117,8 +6989,9 @@ impl<'a> Lowering<'a> {
                         ),
                     ));
                 }
+                // Continued source evaluation: unwrap only, no crossing.
                 let mut call_env = bound_values(args);
-                extend_specialized(&mut call_env, captures);
+                extend_captures(&mut call_env, captures);
                 call_env.extend(env);
                 Ok(SourceCallOutcome::Continue(SourceMachineState::Eval {
                     expr: self.machine_body_occurrence(body)?,
@@ -5127,11 +7000,30 @@ impl<'a> Lowering<'a> {
                 }))
             }
             Lowered::DeclarationClosure {
+                reference,
                 symbol,
                 captures,
                 params,
                 body,
             } => {
+                // `RT-DECL-CLOSURE-PORT` `D4`, consumer 3 of 3 -- the
+                // source-machine route. Its arguments are already operands, so
+                // it hands them to the shared ordering directly; the arity
+                // check lives there for every consumer rather than once here.
+                if self.body_emission_authority == BodyEmissionAuthority::FunctionizedUnits {
+                    // ⭐ Crossing into a declared generated unit here, rather
+                    // than inside `call_declared_unit_target` later. ⛔ All
+                    // inputs cross at ONE common transfer coordinate — there is
+                    // no per-argument pairing on this route — and the
+                    // coordinate is inert: an aggregate carries its own
+                    // producer authority and is preflighted against it, and a
+                    // non-aggregate queries no aggregate ownership at all.
+                    let args = self.carry_source_call_inputs(builder, body, args)?;
+                    let called = self.call_declaration_closure_unit(
+                        builder, reference, &symbol, &params, captures, args,
+                    )?;
+                    return Ok(SourceCallOutcome::Complete(called));
+                }
                 if params.len() != args.len() {
                     return Err(unsupported(
                         "Call",
@@ -5144,7 +7036,13 @@ impl<'a> Lowering<'a> {
                 }
                 let body = self.machine_body_occurrence(body)?;
                 self.lower_source_declaration_call(
-                    builder, symbol, captures, body, args, env, control,
+                    builder,
+                    symbol,
+                    captures,
+                    body,
+                    args,
+                    env,
+                    control,
                 )
             }
             mut recursor @ Lowered::ComputationalRecursorClosure { .. } => {
@@ -5196,6 +7094,13 @@ impl<'a> Lowering<'a> {
                 let (activation, invocation) =
                     boundary.expect("recursor closure carries an invocation segment");
                 let recursive_unit_body = invocation.recursive_unit_body;
+                        // `D5a` checkpoint 4 step 1 — read the retained source
+                        // coordinates BEFORE the segment is installed, beside the
+                        // existing pre-move field read. Both are facts of the
+                        // invocation, so both are taken while it is still in hand
+                        // rather than reconstructed afterwards.
+                        let carried_coordinates =
+                            CarriedInvocationCoordinates::of(&invocation)?;
                 if source_active_cursor(
                     &control.selected,
                     &control.selected_lineage,
@@ -5245,16 +7150,27 @@ impl<'a> Lowering<'a> {
                             BodyEmissionAuthority::FunctionizedUnits
                         )
                     }) {
-                        let value =
-                            self.call_declared_recursive_position_unit(builder, body, &args)?;
+                        let coordinates = carried_coordinates;
+                        let args = self.carry_source_call_inputs(builder, body, args)?;
+                        let value = self.call_declared_recursive_position_unit(
+                            builder,
+                            body,
+                            &args,
+                            Some(coordinates),
+                        )?;
                         return Ok(SourceCallOutcome::Continue(SourceMachineState::Value {
-                            value,
+                            // ⛔ `D6a`: a declared recursive-position UNIT call is
+                            // not a lawful producer, and its result crosses a
+                            // function boundary besides -- which carries only the
+                            // word. It starts direct; a caller with an exact
+                            // claimed call identity re-attests its own.
+                            value: RoutedAnswer::direct(value),
                             control: suspended,
                         }));
                     }
                     Self::reject_carried_residual_arguments(args.len())?;
                     return Ok(SourceCallOutcome::Continue(SourceMachineState::Value {
-                        value: LoweringOperand::Carried(word),
+                        value: RoutedAnswer::direct(LoweringOperand::Carried(word)),
                         control: suspended,
                     }));
                 }
@@ -5274,7 +7190,7 @@ impl<'a> Lowering<'a> {
                         checked_ih_invocation,
                     )?;
                     return Ok(SourceCallOutcome::Continue(SourceMachineState::Value {
-                        value: LoweringOperand::Specialized(Lowered::BoundedNat(predecessor)),
+                        value: RoutedAnswer::direct(LoweringOperand::Specialized(Lowered::BoundedNat(predecessor))),
                         control: suspended,
                     }));
                 } else {
@@ -5301,8 +7217,22 @@ impl<'a> Lowering<'a> {
                     }
                     // Two roles, as elsewhere on this path: ordered unit-call
                     // inputs, or an environment prefix. Only the second binds.
-                    let mut call_inputs = args;
-                    call_inputs.extend(captures.into_iter().map(LoweringOperand::Specialized));
+                    // ⚠ The ARGUMENTS cross here; the CAPTURES do not, and that
+                    // is a stated boundary rather than an oversight. A capture
+                    // arrives inside an already-lowered `Lowered::Closure`, so
+                    // a specialized one still reaches
+                    // `call_declared_unit_target`'s fallback — where, since it
+                    // carries its own producer certificate, it authorizes
+                    // itself.
+                    let mut call_inputs = if matches!(
+                        self.body_emission_authority,
+                        BodyEmissionAuthority::FunctionizedUnits
+                    ) {
+                        self.carry_source_call_inputs(builder, body, args)?
+                    } else {
+                        args
+                    };
+                    call_inputs.extend(captures);
                     let mut suspended = armed.suspended;
                     suspended.continuation = self.install_recursor_invocation(
                         suspended.continuation,
@@ -5314,13 +7244,20 @@ impl<'a> Lowering<'a> {
                         self.body_emission_authority,
                         BodyEmissionAuthority::FunctionizedUnits
                     ) {
+                        let coordinates = carried_coordinates;
                         let value = self.call_declared_recursive_position_unit(
                             builder,
                             body,
                             &call_inputs,
+                            Some(coordinates),
                         )?;
                         return Ok(SourceCallOutcome::Continue(SourceMachineState::Value {
-                            value,
+                            // ⛔ `D6a`: a declared recursive-position UNIT call is
+                            // not a lawful producer, and its result crosses a
+                            // function boundary besides -- which carries only the
+                            // word. It starts direct; a caller with an exact
+                            // claimed call identity re-attests its own.
+                            value: RoutedAnswer::direct(value),
                             control: suspended,
                         }));
                     }
@@ -5340,7 +7277,7 @@ impl<'a> Lowering<'a> {
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         symbol: RuntimeSymbol,
-        captures: Vec<Lowered>,
+        captures: Vec<LoweringOperand>,
         body: OwnedSourceOccurrence,
         args: Vec<LoweringOperand>,
         env: Vec<LoweringEnvironmentBinding>,
@@ -5349,7 +7286,7 @@ impl<'a> Lowering<'a> {
         let _checked_invocation = self.consume_checked_recursive_invocation_call(&symbol)?;
         if !self.declaration_is_recursive(&symbol) {
             let mut call_env = bound_values(args);
-            extend_specialized(&mut call_env, captures);
+            extend_captures(&mut call_env, captures);
             call_env.extend(env);
             return Ok(SourceCallOutcome::Continue(SourceMachineState::Eval {
                 expr: body,
@@ -5392,7 +7329,7 @@ impl<'a> Lowering<'a> {
             }
             if let Some(induction) = active.induction {
                 return Ok(SourceCallOutcome::Continue(SourceMachineState::Value {
-                    value: LoweringOperand::Specialized(induction),
+                    value: RoutedAnswer::direct(LoweringOperand::Specialized(induction)),
                     control,
                 }));
             }
@@ -5464,7 +7401,7 @@ impl<'a> Lowering<'a> {
             .rev()
             .map(LoweringOperand::Specialized)
             .collect::<Vec<_>>();
-        call_inputs.extend(captures.into_iter().map(LoweringOperand::Specialized));
+        call_inputs.extend(captures);
         let call_env = env_with_operands(call_inputs, &env);
         let lowered = self.lower_source_machine_with_continuation(builder, body, call_env, control);
         self.active_recursive_declarations.pop();
@@ -5539,9 +7476,9 @@ impl<'a> Lowering<'a> {
         continuation_origin: StaticOriginId,
         producer_alternative: usize,
         recursive_position: usize,
-        ordinary_inputs: &[LoweringOperand],
+        fields: &[LoweringOperand],
         producer_env: &[LoweringEnvironmentBinding],
-    ) -> Result<Option<LoweringOperand>, CraneliftBackendError> {
+    ) -> Result<Option<RoutedAnswer>, CraneliftBackendError> {
         let alternative = u32::try_from(producer_alternative).map_err(|_| {
             unsupported("ComputationalMatch", "case index exceeds addressable range")
         })?;
@@ -5551,12 +7488,20 @@ impl<'a> Lowering<'a> {
                 "recursive position exceeds addressable range",
             )
         })?;
+        #[cfg(test)]
+        d5a_trace(format!(
+            "CLAIM entry defining={:?} construct={producer_construct_origin:?} \
+             continuation={continuation_origin:?} alt={alternative} pos={position}",
+            self.defining_unit
+        ));
         // The claim regime exists only while the unit-definition pass is open.
         // Outside it -- a direct lowering harness, or an authority that never
         // opens the ledger -- there is no ledger to claim against and no
         // close() to satisfy, so the producer keeps its existing route. This
         // is the ledger's own presence, not a guess about the caller.
         if self.continuation_claims.is_none() {
+            #[cfg(test)]
+            d5a_trace("  CLAIM outcome=NoLedger".to_string());
             return Ok(None);
         }
         let Some(identity) = self.static_transition_plan.continuation_call_binding_for(
@@ -5566,12 +7511,441 @@ impl<'a> Lowering<'a> {
             position,
         )?
         else {
+            #[cfg(test)]
+            d5a_trace("  CLAIM outcome=NoBinding".to_string());
             return Ok(None);
         };
+        #[cfg(test)]
+        d5a_trace(format!("  CLAIM bound identity={identity:?}"));
+        self.claim_and_call_resolved_continuation(
+            builder,
+            &identity,
+            fields,
+            recursive_position,
+            producer_env,
+        )
+            .map(Some)
+    }
+
+    /// **`RT-DECL-CLOSURE-PORT` `D5a` — the claim/call machinery, factored to
+    /// run after identity resolution and shared by both consumption seats.**
+    ///
+    /// ⭐ The split is the whole point of `D5a` contract 4. The retained-frame
+    /// seat resolves its identity from the four-field selector because the
+    /// active computational frame still holds alternative and position; the
+    /// detached-result seat resolves the *same kind* of identity from the
+    /// planner's result-edge projection because that frame is gone. ⛔ Neither
+    /// seat is privileged and neither fakes the other's operands: what is
+    /// common — claim once under the defining owner, resolve this Function's
+    /// own declared target, append the projected captures, emit one direct
+    /// call, record the `Inst` — lives here exactly once.
+    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D3b` (re-cut) — resolve the DIRECT
+    /// EMISSION claim**, the one consumer that reads `producer_env`.
+    ///
+    /// ⛔ **It takes only `views.direct_emission`.** There is no arm that falls
+    /// back to the capture view, and none that searches for "whichever claim
+    /// fits": the two consumers hold different environments, which is exactly
+    /// what `D3c` measured, so borrowing the other's index is the defect.
+    ///
+    /// ⛔ **Root provenance is not consulted.** Both root arms are lawful here;
+    /// what must hold is that the claim names *this* seat or *this* frame.
+    fn resolve_direct_emission_claim(
+        &self,
+        requested: &ContinuationSourceSlotAuthority,
+        views: ContinuationAvailabilityViews,
+        defining_owner: ContinuationEmissionOwner,
+        seat: ContinuationDirectEmissionSeat,
+    ) -> Result<u32, CraneliftBackendError> {
+        // ⛔ The complete requested slot is threaded in, not reassembled here.
+        // The alias rule tests exact equality of the whole record, so a seam that
+        // rebuilt it would be a second definition of "the same value".
+        let coordinate = requested.coordinate;
+        let Some(claim) = views.direct_emission else {
+            return Err(unsupported(
+                "ContinuationSpecialization",
+                format!(
+                    "a continuation input carries no direct-emission availability claim, so \
+                     nothing says where this emission seat holds {coordinate:?}; \
+                     RT-CONTSRC-PRODUCER-LOCAL D3b refuses rather than reading the \
+                     context-capture claim, which is an index into a different environment"
+                ),
+            ));
+        };
+        match claim {
+            ContinuationEnvironmentClaim::CurrentLexical {
+                emission_owner,
+                producer_result_origin,
+                emission_origin,
+                lexical_environment_origin,
+                nearest_alias_index,
+            } => {
+                // ⛔ A current-lexical claim is authority over a PREDECLARED
+                // retained environment. A generated context lowers a raw body
+                // and does not stand in the producer's semantic environment, so
+                // the claim is refused BEFORE any operand run is indexed.
+                let ContinuationEmissionOwner::Predeclared(owner) = defining_owner else {
+                    return Err(unsupported(
+                        "ContinuationSpecialization",
+                        "a current-lexical availability claim was presented to a generated \
+                         emission context, which holds no retained lexical environment for the \
+                         producer; its nearest-alias index has nothing here to index and \
+                         RT-CONTSRC-PRODUCER-LOCAL D3b refuses rather than reading it as a \
+                         frame slot",
+                    ));
+                };
+                if emission_owner != owner {
+                    return Err(unsupported(
+                        "ContinuationSpecialization",
+                        format!(
+                            "a current-lexical claim names emission owner {emission_owner:?}, \
+                             which is not the unit currently being defined ({owner:?}), so its \
+                             index counts binders in an environment this seat never stands in"
+                        ),
+                    ));
+                }
+                if seat.emission_origin != emission_origin
+                    || seat.producer_result_origin != producer_result_origin
+                {
+                    return Err(unsupported(
+                        "ContinuationSpecialization",
+                        "a current-lexical claim is keyed to a different emission occurrence \
+                         than the one now emitting, so the binder depth it counted is not the \
+                         depth in force here",
+                    ));
+                }
+                // `D3b` — the two CONSUMPTION-boundary mutations.
+                //
+                // ⛔ Applied here, between the claim and its revalidation, and
+                // nowhere else. They perturb what this consumer INDEXES WITH,
+                // which is the decision the revalidation below exists to check;
+                // perturbing the claim earlier would measure the planner instead.
+                //
+                // ⚠ **Re-seated by the re-cut.** These previously fired inside
+                // `resolve_continuation_immediate`, which the re-cut deleted, and
+                // for one commit they fired nowhere at all -- the row kept
+                // asserting while measuring the unmutated route. That is why the
+                // row asserts `applications > 0` before it asserts anything about
+                // the refusal.
+                #[cfg(test)]
+                let nearest_alias_index = {
+                    use crate::cranelift_backend::lowering::{
+                        d3b_consumer_mutation, record_d3b_consumer_application,
+                        D3bConsumerMutation,
+                    };
+                    match d3b_consumer_mutation() {
+                        D3bConsumerMutation::Exact => nearest_alias_index,
+                        D3bConsumerMutation::ConsumeLocatorIndex => {
+                            match coordinate {
+                                ContinuationSourceCoordinate::ProducerLocal {
+                                    locator, ..
+                                } => {
+                                    record_d3b_consumer_application();
+                                    locator.environment_index
+                                }
+                                // ⛔ Declines rather than perturbing an entry
+                                // root: an entry coordinate carries no locator,
+                                // so there is no introduction index to consume
+                                // and a substitute would measure an invented
+                                // number.
+                                ContinuationSourceCoordinate::EntryAbi { .. } => {
+                                    nearest_alias_index
+                                }
+                            }
+                        }
+                        D3bConsumerMutation::ShiftProducerLocalSlot => match coordinate {
+                            ContinuationSourceCoordinate::ProducerLocal { .. } => {
+                                record_d3b_consumer_application();
+                                nearest_alias_index.wrapping_add(1)
+                            }
+                            ContinuationSourceCoordinate::EntryAbi { .. } => nearest_alias_index,
+                        },
+                    }
+                };
+                // ⭐ The claim's index is CHECKED against the planner's own walk
+                // of this seat, never re-derived here. See
+                // `verify_current_lexical_availability`.
+                verify_current_lexical_availability(
+                    &self.static_transition_plan,
+                    emission_owner,
+                    producer_result_origin,
+                    emission_origin,
+                    lexical_environment_origin,
+                    requested,
+                    nearest_alias_index,
+                )?;
+                Ok(nearest_alias_index)
+            }
+            ContinuationEnvironmentClaim::EntryFrame {
+                frame,
+                declared_slot,
+            } => {
+                // The direct-emission consumer reads an entry frame only when
+                // the emitting frame IS that frame -- a generated context
+                // emitting from its own operand run.
+                self.verify_entry_frame(coordinate, frame, declared_slot, defining_owner)?;
+                Ok(declared_slot)
+            }
+        }
+    }
+
+    /// **`D3b` (re-cut) — resolve the CONTEXT-CAPTURE claim**, the consumer that
+    /// reads `function_local.defining_abi_operands`.
+    ///
+    /// ⛔ A current-lexical claim is **refused outright** here: this consumer
+    /// holds an entry-frame operand run and no semantic environment at all, so a
+    /// nearest-alias index has nothing to index. That refusal is by **consumer
+    /// environment identity**, not by root domain.
+    fn resolve_context_capture_claim(
+        &self,
+        coordinate: ContinuationSourceCoordinate,
+        views: ContinuationAvailabilityViews,
+        defining_owner: ContinuationEmissionOwner,
+    ) -> Result<u32, CraneliftBackendError> {
+        let Some(claim) = views.context_capture else {
+            return Err(unsupported(
+                "ContinuationSpecialization",
+                format!(
+                    "a generated context capture carries no context-capture availability claim, \
+                     so nothing says where this frame holds {coordinate:?}; \
+                     RT-CONTSRC-PRODUCER-LOCAL D3b refuses rather than reading the \
+                     direct-emission claim, whose index counts binders in a lexical environment \
+                     this consumer does not hold"
+                ),
+            ));
+        };
+        match claim {
+            ContinuationEnvironmentClaim::CurrentLexical { .. } => Err(unsupported(
+                "ContinuationSpecialization",
+                "a current-lexical availability claim was presented to the entry-frame capture \
+                 consumer, which holds an ABI operand run and no semantic environment; a \
+                 nearest-alias lexical index is not a frame slot and \
+                 RT-CONTSRC-PRODUCER-LOCAL D3b refuses rather than indexing with it",
+            )),
+            ContinuationEnvironmentClaim::EntryFrame {
+                frame,
+                declared_slot,
+            } => {
+                self.verify_entry_frame(coordinate, frame, declared_slot, defining_owner)?;
+                Ok(declared_slot)
+            }
+        }
+    }
+
+    /// **`D3b` (re-cut) — an entry-frame claim is lawful only where the frame it
+    /// names is the frame this consumer actually holds, AND that frame really
+    /// declares a member for the full coordinate at the declared slot.**
+    ///
+    /// ⛔ Membership is the check, not a numeric agreement. The retired law
+    /// compared `immediate_slot` against `source_abi_position`, which is a
+    /// relation between a frame position and a ROOT position — the coupling
+    /// `D3c` falsified.
+    fn verify_entry_frame(
+        &self,
+        coordinate: ContinuationSourceCoordinate,
+        frame: ContinuationFrameIdentity,
+        declared_slot: u32,
+        defining_owner: ContinuationEmissionOwner,
+    ) -> Result<(), CraneliftBackendError> {
+        match (frame, defining_owner) {
+            (
+                ContinuationFrameIdentity::Predeclared(named),
+                ContinuationEmissionOwner::Predeclared(held),
+            ) => {
+                if named != held {
+                    return Err(unsupported(
+                        "ContinuationSpecialization",
+                        format!(
+                            "an entry-frame claim names predeclared frame {named:?}, which is \
+                             not the frame being defined ({held:?}); its declared slot indexes \
+                             an operand run this consumer does not hold"
+                        ),
+                    ));
+                }
+                // ⛔ **Membership, at the exact predeclared descriptor.** A
+                // ProducerLocal member cannot be invented here: the entry source
+                // enumeration produces exactly the entry ABI run, so a mid-body
+                // value is simply absent and this refuses.
+                verify_predeclared_entry_frame_membership(
+                    &self.static_transition_plan,
+                    named,
+                    coordinate,
+                    declared_slot,
+                )
+            }
+            (
+                ContinuationFrameIdentity::GeneratedContext {
+                    context: claimed_context,
+                    specialization,
+                    worker_body_origin,
+                },
+                ContinuationEmissionOwner::Specialization(held),
+            ) => {
+                if specialization != held {
+                    return Err(unsupported(
+                        "ContinuationSpecialization",
+                        format!(
+                            "an entry-frame claim names the generated context of \
+                             specialization {specialization:?}, which is not the specialization \
+                             whose frame is being defined ({held:?})"
+                        ),
+                    ));
+                }
+                // ⭐⭐ **The three-sided revalidation the ruling asks for.** The
+                // claim is finalized, so it carries both the resolved
+                // `ContinuationContextId` and the key it was resolved from. This
+                // re-resolves that key against the plan in hand and checks the
+                // answer AGREES with the recorded id.
+                //
+                // ⛔ Not redundant with finalization. Finalization proves the key
+                // resolved uniquely *in the plan it ran over*; this proves the
+                // consumer is holding that same plan. The two could only disagree
+                // if a claim were carried across plans -- which is precisely the
+                // failure that must not be able to hide behind a plausible id.
+                let context = self
+                    .static_transition_plan
+                    .continuation_context_for(specialization, worker_body_origin)?
+                    .ok_or_else(|| {
+                        unsupported(
+                            "ContinuationSpecialization",
+                            "an entry-frame claim names a generated context frame that the \
+                             planner never interned, so no declared capture run exists to \
+                             discharge it",
+                        )
+                    })?;
+                // `D4b` — the BEHAVIOURAL non-vacuity counter and the identity
+                // mutation, both on the live consumer path rather than in a
+                // construction control.
+                #[cfg(test)]
+                let claimed_context = {
+                    crate::cranelift_backend::lowering::record_d4b_generated_frame_consumption();
+                    match crate::cranelift_backend::lowering::d4b_frame_mutation() {
+                        crate::cranelift_backend::lowering::D4bFrameMutation::Exact => {
+                            claimed_context
+                        }
+                        // ⛔ Perturbs the RECORDED id, which is exactly the input
+                        // the agreement check reads. The key it resolves from is
+                        // left intact, so what reds is the disagreement and not a
+                        // failure to resolve.
+                        crate::cranelift_backend::lowering::D4bFrameMutation::WrongClaimedContext => {
+                            claimed_context.d4b_displaced()
+                        }
+                    }
+                };
+                if context.id() != claimed_context {
+                    return Err(unsupported(
+                        "ContinuationSpecialization",
+                        format!(
+                            "an entry-frame claim carries generated context {claimed_context:?}, \
+                             but its own (specialization, worker body) key resolves to {:?} in \
+                             the plan being lowered; the recorded identity and the key it was \
+                             resolved from disagree",
+                            context.id()
+                        ),
+                    ));
+                }
+                let captures = context.captures()?;
+                let mut found = None;
+                for (position, capture) in captures.iter().enumerate() {
+                    if capture.coordinate != coordinate {
+                        continue;
+                    }
+                    if found.is_some() {
+                        return Err(unsupported(
+                            "ContinuationSpecialization",
+                            "a generated context declares two members for one continuation \
+                             coordinate, so the declared slot is ambiguous; \
+                             RT-CONTSRC-PRODUCER-LOCAL D3b refuses rather than taking the first",
+                        ));
+                    }
+                    found = Some(position);
+                }
+                let position = found.ok_or_else(|| {
+                    unsupported(
+                        "ContinuationSpecialization",
+                        format!(
+                            "a generated context declares no member for {coordinate:?}, so its \
+                             frame cannot make that value available; this fails closed rather \
+                             than falling back to a root position"
+                        ),
+                    )
+                })?;
+                let expected = u32::try_from(position)
+                    .ok()
+                    .and_then(|position| context.parameters().checked_add(position))
+                    .ok_or_else(|| {
+                        unsupported(
+                            "ContinuationSpecialization",
+                            "generated context capture slot exhausted",
+                        )
+                    })?;
+                if expected != declared_slot {
+                    return Err(unsupported(
+                        "ContinuationSpecialization",
+                        format!(
+                            "an entry-frame claim declares slot {declared_slot} for \
+                             {coordinate:?}, but the generated context declares that member at \
+                             slot {expected}; the two disagree, so at least one of them names a \
+                             different value"
+                        ),
+                    ));
+                }
+                Ok(())
+            }
+            (ContinuationFrameIdentity::Predeclared(named), ContinuationEmissionOwner::Specialization(held)) => {
+                Err(unsupported(
+                    "ContinuationSpecialization",
+                    format!(
+                        "an entry-frame claim names predeclared frame {named:?} while the frame \
+                         being defined is the generated context of {held:?}; a predeclared \
+                         entry run is not reachable from a generated context and \
+                         RT-CONTSRC-PRODUCER-LOCAL D3b refuses rather than indexing its own"
+                    ),
+                ))
+            }
+            (
+                ContinuationFrameIdentity::GeneratedContext { specialization, .. },
+                ContinuationEmissionOwner::Predeclared(held),
+            ) => Err(unsupported(
+                "ContinuationSpecialization",
+                format!(
+                    "an entry-frame claim names the generated context of {specialization:?} while the \
+                     frame being defined is predeclared {held:?}; a generated context's capture \
+                     run is not this function's entry run"
+                ),
+            )),
+        }
+    }
+    fn claim_and_call_resolved_continuation(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        identity: &ContinuationCallIdentity,
+        // `D9` — the producer constructor's WHOLE lowered field run and the
+        // ruled recursive position, not a pre-assembled ordinary run. ⛔ The
+        // assembly moved here because `unit` is resolved here: both callers
+        // previously built their own run from the nonrecursive fields alone,
+        // and each carried a comment claiming the captures were appended by the
+        // other side. One authority, one assembly, both callers.
+        fields: &[LoweringOperand],
+        recursive_position: usize,
+        producer_env: &[LoweringEnvironmentBinding],
+    ) -> Result<RoutedAnswer, CraneliftBackendError> {
+        let identity = identity.clone();
         let defining = self.defining_unit.ok_or_else(|| {
             unsupported(
                 "ContinuationSpecialization",
                 "a continuation claim was reached with no unit currently being defined",
+            )
+        })?;
+        // `D5a` — the EMISSION owner of the context currently executing, which
+        // is a different question from which predeclared unit's body this is.
+        // ⛔ Not derived from `defining`: a generated specialization context
+        // lowers a raw body and would otherwise be mistaken for that raw body's
+        // predeclared owner, which is the whole conflation being removed.
+        let defining_owner = self.defining_emission_owner.ok_or_else(|| {
+            unsupported(
+                "ContinuationSpecialization",
+                "a continuation claim was reached with no emission owner bound for the context \
+                 currently being defined",
             )
         })?;
         // The EXACT target, resolved first.
@@ -5652,8 +8026,8 @@ impl<'a> Lowering<'a> {
             self.static_transition_plan
                 .emittable_units()?
                 .iter()
-                .map(|unit| unit.function())
-                .find(|owner| *owner != defining)
+                .map(|unit| ContinuationEmissionOwner::Predeclared(unit.function()))
+                .find(|owner| *owner != defining_owner)
                 .ok_or_else(|| {
                     unsupported(
                         "ContinuationSpecialization",
@@ -5663,10 +8037,10 @@ impl<'a> Lowering<'a> {
                     )
                 })?
         } else {
-            defining
+            defining_owner
         };
         #[cfg(not(test))]
-        let claimed_owner = defining;
+        let claimed_owner = defining_owner;
         let ledger = self.continuation_claims.as_mut().ok_or_else(|| {
             unsupported(
                 "ContinuationSpecialization",
@@ -5674,6 +8048,11 @@ impl<'a> Lowering<'a> {
             )
         })?;
         ledger.claim_exact(&identity, claimed_owner)?;
+        #[cfg(test)]
+        d5a_trace(format!(
+            "  CLAIM outcome=Claimed target={:?} owner={claimed_owner:?}",
+            identity.target()
+        ));
         #[cfg(test)]
         if mutation == ContinuationEmissionMutation::ClaimTokenTwice {
             ledger.claim_exact(&identity, claimed_owner)?;
@@ -5695,25 +8074,612 @@ impl<'a> Lowering<'a> {
                     "the claimed target has no projected continuation unit",
                 )
             })?;
-        let mut inputs = ordinary_inputs.to_vec();
-        for input in unit.continuation_inputs()? {
-            if input.source_owner != defining {
+        // ⭐⭐ **`RT-CONTSRC-PRODUCER-LOCAL` `D9` — THE ORDINARY RUN IS THE
+        // PLANNER'S ENVELOPE, not the nonrecursive fields alone.**
+        //
+        // ⛔ **What this replaced, and why it was a defect rather than a
+        // shortfall.** The previous assembly filtered the ruled recursive field
+        // out of `args` and stopped, under a comment claiming *"captures are
+        // appended by the shared machinery from the planner's own ordered
+        // projection"*. **No such append exists**: the shared machinery adds the
+        // continuation inputs and nothing else. So a continuation whose selected
+        // worker has captures was called with the nonrecursive prefix only, and
+        // the callee's declared `Parameter` run went unfilled. Measured by the
+        // Architect on the `AC-1` row (`evt_1y7h08xd7ermp`): a callee declaring
+        // 6 `Parameter` + 2 `Capture` received 1 ordinary + 2 continuation
+        // inputs.
+        //
+        // ⭐ The values were never missing. The selected recursive field IS the
+        // closure, and its ordered capture vector is already in hand here at the
+        // exact source-bearing seat -- this node's landed phase-bearing
+        // closure-capture representation put it there. The envelope says which
+        // of them go where.
+        //
+        // ⛔ The envelope is the planner's ORDERED sequence and is consumed in
+        // its own order. Each role is resolved from the authority that owns it:
+        // a nonrecursive field from its **exact lowered source position**, a
+        // worker capture from the **selected closure's own ordered capture
+        // vector at that exact ordinal**. ⛔ A capture ordinal is NOT a generic
+        // environment index and is never used as one -- that is the cross-plane
+        // aliasing this node removed, and reintroducing it here would alias the
+        // closure's capture run onto the producer's environment.
+        let envelope = unit.ordinary_envelope()?;
+        // `D9b` — the envelope perturbations, under test only. ⛔ Each moves ONE
+        // fact of the planner's own sequence and leaves the assembler, the field
+        // run and the selected closure untouched, so a refusal is attributable
+        // to the moved role rather than to a rewritten assembly. Applied to the
+        // sequence the assembler is about to read, which is the producer input
+        // the role relation is about.
+        #[cfg(test)]
+        let envelope = crate::cranelift_backend::lowering::d9_perturb_envelope(envelope);
+        // `D9b` — the assembled run, recorded per role position AFTER assembly.
+        // ⛔ Recorded as a keyed sequence, never a multiset: a bag of five
+        // capture values proves only that the right values exist somewhere, and
+        // is satisfied by any permutation of them.
+        #[cfg(test)]
+        let recorded_envelope = envelope.clone();
+        // The selected recursive field, by the ruled position. Its identity is
+        // checked against the planner's own worker facts before a single
+        // capture is read from it, so a capture taken below is known to have
+        // come from the closure the plan selected.
+        let selected = fields.get(recursive_position).ok_or_else(|| {
+            unsupported(
+                "ContinuationSpecialization",
+                "the ruled recursive position names no field of the planned producer constructor",
+            )
+        })?;
+        let (selected_captures, selected_body, selected_arity) = match selected {
+            LoweringOperand::Specialized(Lowered::Closure {
+                captures,
+                params,
+                body,
+            }) => (captures, *body, params.len()),
+            _ => {
                 return Err(unsupported(
                     "ContinuationSpecialization",
                     format!(
-                        "a continuation input names source owner {:?}, which is not the unit \
-                         currently being defined",
-                        input.source_owner
+                        "the ruled recursive field at position {recursive_position} is not a retained \
+                         closure, so this continuation's selected worker has no capture run to \
+                         assemble from"
                     ),
                 ));
             }
+        };
+        if selected_body != unit.worker_body_origin() {
+            return Err(unsupported(
+                "ContinuationSpecialization",
+                format!(
+                    "the ruled recursive field is a closure over body {selected_body:?}, but this \
+                     continuation's selected worker names body {:?}",
+                    unit.worker_body_origin()
+                ),
+            ));
+        }
+        if selected_arity != unit.worker_declared_arity() as usize {
+            return Err(unsupported(
+                "ContinuationSpecialization",
+                format!(
+                    "the ruled recursive field is a closure of arity {selected_arity}, but this \
+                     continuation's selected worker declares {}",
+                    unit.worker_declared_arity()
+                ),
+            ));
+        }
+        if selected_captures.len() != unit.worker_capture_count() {
+            return Err(unsupported(
+                "ContinuationSpecialization",
+                format!(
+                    "the ruled recursive field closes over {} values, but this continuation's \
+                     selected worker declares {} captures",
+                    selected_captures.len(),
+                    unit.worker_capture_count()
+                ),
+            ));
+        }
+        let mut ordinary = Vec::with_capacity(envelope.len());
+        // ⛔ Capture roles are consumed in ascending contiguous ordinal order
+        // from zero. The envelope is a SEQUENCE, so two roles carrying swapped
+        // ordinals is a different run, and taking each ordinal as it comes
+        // without this check would assemble that different run silently.
+        let mut next_capture_ordinal = 0u32;
+        let mut seen_capture = false;
+        for (role_position, role) in envelope.iter().enumerate() {
+            match role {
+                ContinuationOrdinaryEnvelopeRole::NonrecursiveConstructorField {
+                    source_position,
+                } => {
+                    if seen_capture {
+                        return Err(unsupported(
+                            "ContinuationSpecialization",
+                            format!(
+                                "the ordinary envelope holds a nonrecursive field at role \
+                                 position {role_position} after a worker capture; the ruled \
+                                 envelope is the nonrecursive prefix followed by the capture run, \
+                                 and a call assembled from a permuted envelope fills the callee's \
+                                 declared parameters with the wrong values"
+                            ),
+                        ));
+                    }
+                    let source = *source_position as usize;
+                    if source == recursive_position {
+                        return Err(unsupported(
+                            "ContinuationSpecialization",
+                            format!(
+                                "the ordinary envelope names source position {source} as a \
+                                 nonrecursive field, but that is the ruled recursive position; \
+                                 the selected recursive field is a compiler-only member and never \
+                                 an ordinary operand"
+                            ),
+                        ));
+                    }
+                    let field = fields.get(source).ok_or_else(|| {
+                        unsupported(
+                            "ContinuationSpecialization",
+                            format!(
+                                "the ordinary envelope names source position {source}, outside \
+                                 the planned producer constructor's {}-field run",
+                                fields.len()
+                            ),
+                        )
+                    })?;
+                    // ⛔ Cloned WHOLE, at its own phase. A carried field stays
+                    // carried; re-wrapping it as specialized here would be the
+                    // cross-plane aliasing this node removed.
+                    ordinary.push(field.clone());
+                }
+                ContinuationOrdinaryEnvelopeRole::WorkerCapture {
+                    ordinal,
+                    closure_origin,
+                    ..
+                } => {
+                    seen_capture = true;
+                    if *closure_origin != unit.worker_closure_origin() {
+                        return Err(unsupported(
+                            "ContinuationSpecialization",
+                            format!(
+                                "the ordinary envelope's capture at role position {role_position} \
+                                 names closure occurrence {closure_origin:?}, but this \
+                                 continuation's selected worker is closure {:?}; a capture read \
+                                 from another closure's run is another closure's value",
+                                unit.worker_closure_origin()
+                            ),
+                        ));
+                    }
+                    if *ordinal != next_capture_ordinal {
+                        return Err(unsupported(
+                            "ContinuationSpecialization",
+                            format!(
+                                "the ordinary envelope's capture at role position {role_position} \
+                                 names ordinal {ordinal}, where the ruled run's next ordinal is \
+                                 {next_capture_ordinal}; the capture run is contiguous from zero \
+                                 in envelope order, and two roles with exchanged ordinals \
+                                 assemble a different call"
+                            ),
+                        ));
+                    }
+                    let capture = selected_captures.get(*ordinal as usize).ok_or_else(|| {
+                        unsupported(
+                            "ContinuationSpecialization",
+                            format!(
+                                "the ordinary envelope names capture ordinal {ordinal}, outside \
+                                 the selected closure's {}-value capture run",
+                                selected_captures.len()
+                            ),
+                        )
+                    })?;
+                    // ⛔ The operand is taken WHOLE, at its own phase. A carried
+                    // capture stays carried: this is the phase-bearing edge, and
+                    // re-reading it as a specialized template here is what the
+                    // representation exists to prevent.
+                    ordinary.push(capture.clone());
+                    next_capture_ordinal = next_capture_ordinal.wrapping_add(1);
+                }
+            }
+        }
+        if next_capture_ordinal as usize != selected_captures.len() {
+            return Err(unsupported(
+                "ContinuationSpecialization",
+                format!(
+                    "the ordinary envelope consumed {next_capture_ordinal} of the selected \
+                     closure's {} captures; the whole capture run is the callee's declared \
+                     parameter tail and a short run leaves declared parameters unfilled",
+                    selected_captures.len()
+                ),
+            ));
+        }
+        // The final cardinality, against the continuation's own declared
+        // ordinary-parameter count. ⛔ Checked against the DECLARATION rather
+        // than against the envelope's length: the two are separate planner
+        // facts, and comparing the assembled run with the sequence it was
+        // assembled from would be an identity.
+        if ordinary.len() != unit.ordinary_parameters() as usize {
+            return Err(unsupported(
+                "ContinuationSpecialization",
+                format!(
+                    "the assembled ordinary run holds {} operands but this continuation declares \
+                     {} ordinary parameters",
+                    ordinary.len(),
+                    unit.ordinary_parameters()
+                ),
+            ));
+        }
+        // `D9b` — the assembled run, recorded per role position AFTER assembly
+        // and AFTER the declared-header cardinality validation above.
+        //
+        // ⛔ **The order is the point, and it was wrong.** This recorder used to
+        // stand immediately BEFORE that check, so a run the assembler was about
+        // to REJECT still entered the positive relation. The row that reads this
+        // log asserts a property of runs the compiler accepted; admitting a
+        // rejected one would let a refusal contribute the very evidence that it
+        // did not happen.
+        //
+        // ⛔ Recorded as a keyed sequence, never a multiset: a bag of capture
+        // values proves only that the right values exist somewhere, and is
+        // satisfied by any permutation of them. The assembler's INPUTS are
+        // recorded beside it so the expectation can be derived without reading
+        // the assembled run.
+        #[cfg(test)]
+        crate::cranelift_backend::lowering::record_d9_assembly(
+            crate::cranelift_backend::lowering::D9Assembly {
+                unit: unit.id(),
+                roles: recorded_envelope
+                    .iter()
+                    .map(crate::cranelift_backend::lowering::d9_role_key)
+                    .collect(),
+                operands: ordinary
+                    .iter()
+                    .map(crate::cranelift_backend::lowering::d9_operand_identity)
+                    .collect(),
+                fields: fields
+                    .iter()
+                    .map(crate::cranelift_backend::lowering::d9_operand_identity)
+                    .collect(),
+                captures: selected_captures
+                    .iter()
+                    .map(crate::cranelift_backend::lowering::d9_operand_identity)
+                    .collect(),
+            },
+        );
+        let mut inputs = ordinary;
+        #[cfg(test)]
+        d5a_trace(format!(
+            "  CAPTURES defining={defining:?} consumer={:?} producer={:?} env_len={} inputs={:?}",
+            unit.consumer_owner(),
+            unit.producer_owner(),
+            producer_env.len(),
+            unit.continuation_inputs()?
+                .iter()
+                .map(|input| input.coordinate)
+                .collect::<Vec<_>>()
+        ));
+        // `RT-CONTSRC-PRODUCER-LOCAL` `D4a` — the observatory's seam half.
+        //
+        // ⛔ **It observes and returns nothing.** It stands ahead of the
+        // coordinate refusal below precisely because that refusal is still in
+        // force: `D4a` measures the operands a `D3b` consumer WOULD index, and
+        // measuring them is not consuming them. Test-only; the refusal below is
+        // untouched and still fires on every one of these inputs.
+        #[cfg(test)]
+        for input in unit
+            .continuation_inputs()?
+            .into_iter()
+            .filter(|_| crate::cranelift_backend::lowering::d4a_armed())
+        {
+            use crate::cranelift_backend::lowering::{
+                d4a_describe_binding, d4a_record_seam, d4a_slot_selection,
+                ContinuationEnvironmentClaim, ContinuationSourceCoordinate, D4aSeamObservation,
+                D4aSlotSelection,
+            };
+            let ContinuationSourceCoordinate::ProducerLocal { binding, locator } = input.coordinate
+            else {
+                continue;
+            };
+            // `D3b` re-cut — the observatory reads the DIRECT-EMISSION view,
+            // which is the one this seat consumes. ⛔ Not "whichever view has a
+            // current-lexical claim": taking the context-capture view here would
+            // measure an operand run this seat does not hold.
+            let Some(ContinuationEnvironmentClaim::CurrentLexical {
+                nearest_alias_index, ..
+            }) = input.availability.direct_emission
+            else {
+                continue;
+            };
+            let locator_index = locator.environment_index;
+            // `D4a` mutation point. ⭐ The mutation perturbs WHICH INDEX the
+            // instrument reads, which is exactly the choice a `D3b` consumer
+            // will have to make. Production is not routed through it.
+            let selected = match d4a_slot_selection() {
+                D4aSlotSelection::Exact | D4aSlotSelection::SwapSlots => nearest_alias_index,
+                D4aSlotSelection::UseLocatorIndex => locator_index,
+            };
+            let at = |index: u32| d4a_describe_binding(producer_env.get(index as usize));
+            let (nearest_alias_operand, locator_operand) =
+                if d4a_slot_selection() == D4aSlotSelection::SwapSlots {
+                    (at(locator_index), at(selected))
+                } else {
+                    (at(selected), at(locator_index))
+                };
+            d4a_record_seam(D4aSeamObservation {
+                binding_origin: binding.binding_origin,
+                nearest_alias_index,
+                locator_index,
+                nearest_alias_operand,
+                locator_operand,
+            });
+        }
+        // `RT-CONTSRC-PRODUCER-LOCAL` `D3c` — the entry-ABI observatory's seat
+        // half.
+        //
+        // ⛔ **It observes and returns nothing**, exactly like `D4a`'s half
+        // above, and it is `#[cfg(test)]` throughout.
+        //
+        // ⚠ This comment previously added that "the resolution below is
+        // untouched and still copies `source_abi_position` into the immediate
+        // slot". That was true while `D3c` was a measurement-only checkpoint and
+        // is now false: the resolution below consumes the planner-issued
+        // nearest-exact-alias availability, and copying a root ABI position is
+        // precisely the defect `D3c` measured and `D3b` removed. The observatory
+        // itself is unchanged — what changed is what it observes.
+        //
+        // ⭐ It records the emitting environment and the entry ABI operand run
+        // **as production holds them**, and does no reasoning: the control
+        // re-derives where the entry value actually sits. The instrument must
+        // not be the oracle it is used to test.
+        #[cfg(test)]
+        if crate::cranelift_backend::lowering::d3c_armed()
+            && matches!(defining_owner, ContinuationEmissionOwner::Predeclared(_))
+        {
+            use crate::cranelift_backend::lowering::{
+                d3c_position_selection, d3c_record_seat, d4a_describe_binding,
+                ContinuationSourceCoordinate as D3cCoordinate, D3cPositionSelection,
+                D3cSeatObservation,
+            };
+            let vector = unit.continuation_inputs()?;
+            let entry_abi_inputs = vector
+                .iter()
+                .filter(|i| matches!(i.coordinate, D3cCoordinate::EntryAbi { .. }))
+                .count();
+            let producer_local_inputs = vector
+                .iter()
+                .filter(|i| matches!(i.coordinate, D3cCoordinate::ProducerLocal { .. }))
+                .count();
+            let emission_environment = producer_env
+                .iter()
+                .map(|binding| d4a_describe_binding(Some(binding)))
+                .collect::<Vec<_>>();
+            let abi_operands = self.function_local.defining_abi_operands.len();
+            // The independent source-descriptor authority. Both facts come
+            // from the slot walk's recorded KINDS, so the derived position
+            // below is computed from the descriptor and never found by looking
+            // for the operand in the environment.
+            let source_parameter_run = self
+                .function_local
+                .defining_abi_slot_kinds
+                .iter()
+                .filter(|kind| **kind == AbiSlotKind::Parameter)
+                .count();
+            for input in &vector {
+                let D3cCoordinate::EntryAbi {
+                    source_abi_position, ..
+                } = input.coordinate
+                else {
+                    continue;
+                };
+                // The entry oracle: production's own record of the operand that
+                // arrived at this ABI position, taken at unit entry from the
+                // slot walk, with no environment index in play.
+                let entry_operand = d4a_describe_binding(
+                    self.function_local
+                        .defining_abi_operands
+                        .get(source_abi_position as usize)
+                        .map(|operand| LoweringEnvironmentBinding::Value(operand.clone()))
+                        .as_ref(),
+                );
+                // `D3c` mutation point. The selection perturbs WHICH POSITION
+                // of the real emission environment the instrument reads: the
+                // measured one, or the root ABI position that the RETIRED
+                // `RootIsImmediate` substitution used. Production today reads
+                // neither -- it resolves `CurrentLexical`'s
+                // `nearest_alias_index`. The root position itself is still
+                // lawful production provenance on the `EntryAbi` coordinate;
+                // only indexing an environment with it is the retired shape.
+                let observed_position = match d3c_position_selection() {
+                    D3cPositionSelection::SourceAbiPosition => Some(source_abi_position),
+                    D3cPositionSelection::MeasuredImmediate => emission_environment
+                        .iter()
+                        .position(|operand| *operand == entry_operand)
+                        .and_then(|position| u32::try_from(position).ok()),
+                };
+                let observed_operand = match observed_position {
+                    Some(position) => d4a_describe_binding(producer_env.get(position as usize)),
+                    None => "none".to_string(),
+                };
+                d3c_record_seat(D3cSeatObservation {
+                    entry_abi_inputs,
+                    producer_local_inputs,
+                    source_abi_position,
+                    entry_operand,
+                    abi_operands,
+                    source_slot_kind: self
+                        .function_local
+                        .defining_abi_slot_kinds
+                        .get(source_abi_position as usize)
+                        .copied(),
+                    source_parameter_run,
+                    emission_environment: emission_environment.clone(),
+                    observed_position,
+                    observed_operand,
+                });
+            }
+        }
+        let mut resolved_slots: Vec<(ContinuationSourceCoordinate, u32)> = Vec::new();
+        for input in unit.continuation_inputs()? {
+            // `RT-CONTSRC-PRODUCER-LOCAL` `D1` — present a producer-local
+            // coordinate to this seam, so its refusal is measured rather than
+            // merely written. ⛔ Applied BEFORE the domain match, because the
+            // question is what the match does with a domain it cannot locate.
+            #[cfg(test)]
+            let input = {
+                let mut input = input;
+                if d5a_route_mutation() == D5aRouteMutation::PresentProducerLocalCoordinate {
+                    record_d5a_route_application();
+                    input.coordinate = ContinuationSourceCoordinate::producer_local_probe();
+                }
+                input
+            };
+            // `RT-CONTSRC-PRODUCER-LOCAL` `D1` `D3` consumer 3 of 3 — the
+            // emission resolver. ⛔ Exhaustive over the coordinate domains with
+            // no default and no fallthrough: this seam indexes an environment,
+            // and a domain it has not been taught to locate must refuse rather
+            // than index with whatever integer it can reach.
+            // Retained for the `D5a` route mutation below, which rewrites an
+            // availability using the ROOT position and must keep doing so.
+            #[cfg(test)]
+            let source_abi_position = match input.coordinate {
+                ContinuationSourceCoordinate::EntryAbi {
+                    source_abi_position, ..
+                } => source_abi_position,
+                ContinuationSourceCoordinate::ProducerLocal { .. } => u32::MAX,
+            };
+            // `D5a` checkpoint 4 step 3 -- the capture projection's three
+            // reaching mutations. ⛔ Each perturbs one COORDINATE the projection
+            // supplies; the two guards below are untouched.
+            #[cfg(test)]
+            let input = {
+                let mut input = input;
+                match d5a_route_mutation() {
+                    // ⭐ **The re-cut sharpens this row rather than porting it.**
+                    // Under the retired law "read the root position as the
+                    // immediate slot" was a type-level substitution; `D3c`
+                    // measured it as the live defect, so it is now expressed as
+                    // what it actually is — the claim's index replaced by
+                    // `source_abi_position` with the claim's ENVIRONMENT left
+                    // intact. That is the substitution `D3c` flipped, and it is
+                    // now caught by the planner walk rather than by an equality.
+                    D5aRouteMutation::ReadRootPositionAsImmediateSlot => {
+                        record_d5a_route_application();
+                        input.availability.direct_emission = input
+                            .availability
+                            .direct_emission
+                            .map(|claim| d3b_replace_claim_index(claim, source_abi_position));
+                    }
+                    // ⛔ Scoped to the SPECIALIZATION arm, whose direct-emission
+                    // claim is an entry-frame one. Applied to a predeclared
+                    // emitter the current-lexical revalidation refuses first, and
+                    // the row would name the bounds guard while measuring the
+                    // membership one.
+                    D5aRouteMutation::PerturbImmediateSlotOutOfRange => {
+                        if matches!(defining_owner, ContinuationEmissionOwner::Specialization(_)) {
+                            record_d5a_route_application();
+                            let out_of_range =
+                                u32::try_from(producer_env.len()).unwrap_or(u32::MAX);
+                            input.availability.direct_emission = input
+                                .availability
+                                .direct_emission
+                                .map(|claim| d3b_replace_claim_index(claim, out_of_range));
+                        }
+                    }
+                    // ⛔ Scoped to the PREDECLARED arm, whose direct-emission
+                    // claim is current-lexical. `+1` moves the nearest-alias index
+                    // off the binder depth the planner walked, which the
+                    // revalidation must catch.
+                    D5aRouteMutation::PerturbPredeclaredImmediateSlot => {
+                        if matches!(defining_owner, ContinuationEmissionOwner::Predeclared(_)) {
+                            if let Some(claim) = input.availability.direct_emission {
+                                record_d5a_route_application();
+                                let moved = d3b_claim_index(claim).wrapping_add(1);
+                                input.availability.direct_emission =
+                                    Some(d3b_replace_claim_index(claim, moved));
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+                input
+            };
+            // `RT-CONTSRC-PRODUCER-LOCAL` `D2b` — the emission seam matches the
+            // AVAILABILITY domain, exactly as it already matches the coordinate
+            // domain above. ⛔ No wildcard: `D2b` projects the two producer-local
+            // availabilities and `D3` teaches this seam to consume them. Until
+            // then a lexical index must not be handed to `producer_env`, which
+            // is an ABI operand run — the two are different environments, and
+            // indexing one with the other's index names a different value.
+            //
+            // ⭐ Unreachable today by construction, since the coordinate match
+            // above has already refused every producer-local coordinate and the
+            // projection only builds these arms for that domain. It is written
+            // anyway because "unreachable" is a claim about the current
+            // projection, and this seam must not be the place that discovers it
+            // was wrong.
+            // `RT-CONTSRC-PRODUCER-LOCAL` `D3b` — the seam resolves the
+            // (coordinate, availability) PAIR, not each half in turn, and it
+            // does so AFTER the `D5a` route mutations so that what they perturb
+            // is what this reads.
+            //
+            // ⛔ **Pairing is the unit because the domains are not independent.**
+            // The projection builds `EntryAbi` availability only for an entry
+            // coordinate and the two producer-local availabilities only for a
+            // producer-local one, so a crossed pair is not a case to handle but
+            // a statement that the projection and this seam disagree about what
+            // the value IS. Matching the halves separately lets a crossed pair
+            // through whenever both halves are individually well-formed, which
+            // is exactly the shape that reads as safe.
+            let immediate_slot = self.resolve_direct_emission_claim(
+                &input.requested_source_slot(),
+                input.availability,
+                defining_owner,
+                ContinuationDirectEmissionSeat {
+                    producer_result_origin: unit.producer_result_origin(),
+                    emission_origin: unit.producer_construct_origin(),
+                },
+            )?;
+            // `D3b` (re-cut) — INJECTIVITY, over the whole emission.
+            //
+            // ⭐ **The re-cut widens this law, and that is a consequence of the
+            // correction rather than an extra.** Under the retired representation
+            // the law had to be scoped to the producer-local domain, because an
+            // entry-ABI `immediate_slot` was a position in the ABI frame while a
+            // producer-local index was a position in the lexical frame, and
+            // comparing the two integers was itself the cross-frame conflation.
+            //
+            // ⛔ Now every claim at one direct-emission seat names a position in
+            // **the same environment** — this seat's own. So two inputs
+            // resolving to one slot is unambiguously two values claiming one
+            // place, and at least one of them would be emitted carrying the
+            // other's operand. It is the consumption-side dual of the planner's
+            // refusal of a coordinate present at two positions of the seat.
+            if let Some((seen, _)) = resolved_slots
+                .iter()
+                .find(|(_, slot)| *slot == immediate_slot)
+            {
+                if *seen != input.coordinate {
+                    return Err(unsupported(
+                        "ContinuationSpecialization",
+                        format!(
+                            "two distinct continuation inputs of one emission resolve to the \
+                             same immediate slot {immediate_slot}: {seen:?} and {:?}. One \
+                             position cannot hold both values, so at least one would be emitted \
+                             carrying the other's operand",
+                            input.coordinate
+                        ),
+                    ));
+                }
+            }
+            resolved_slots.push((input.coordinate, immediate_slot));
             let binding = producer_env
-                .get(input.source_abi_position as usize)
+                .get(immediate_slot as usize)
                 .ok_or_else(|| {
                     unsupported(
                         "ContinuationSpecialization",
-                        "a continuation input names a source ABI position outside the exact \
-                         producer environment",
+                        format!(
+                            "a continuation input names immediate slot {} outside the emitting \
+                             context's environment of {} bindings; note this is the IMMEDIATE \
+                             slot, whose meaning is fixed by the availability domain {:?} and \
+                             not by any root position beside it",
+                            immediate_slot,
+                            producer_env.len(),
+                            input.availability,
+                        ),
                     )
                 })?;
             inputs.push(
@@ -5760,7 +8726,360 @@ impl<'a> Lowering<'a> {
                 "a causal token emitted more than one direct continuation call",
             ));
         }
-        Ok(Some(returned))
+        #[cfg(test)]
+        d5a_trace("  CLAIM outcome=CallEmitted".to_string());
+        // ⭐⭐ `D6a` upstream half — PRODUCER 2, and this is the only place it
+        // fires. The authority is the opaque `ContinuationCallIdentity` this
+        // function consumed: the owner/affine claim has succeeded above and the
+        // emitted callee has been checked against `identity.target()`, so the
+        // value being returned is the result of that exact call and nothing
+        // else. ⛔ Nothing about the origin, the frame, the owner, the tag or
+        // the ABI is consulted, and a static-worker or raw unit call cannot
+        // reach this line at all.
+        //
+        // The trace records `identity.target()` — the authority's OWN exact
+        // identity, read back out of the value this function consumed. ⛔ Not
+        // `target`, which is the emitter's input and would agree with itself.
+        #[cfg(test)]
+        record_d6a_route_event(D6aRouteEvent::CallResultRaised {
+            target: identity.target(),
+        });
+        #[cfg(test)]
+        if d6a_route_mutation() == D6aRouteMutation::DropCallResultRoute {
+            record_d6a_route_application();
+            return Ok(RoutedAnswer::direct(returned));
+        }
+        Ok(RoutedAnswer::checked(returned))
+    }
+
+    /// **`RT-DECL-CLOSURE-PORT` `D5a` — the detached-result consumption seat.**
+    ///
+    /// Where fixed-point discovery detaches a producer as an ordinary unit
+    /// result, the active computational frame is already gone by the time the
+    /// result exists, so the four-field selector's operands do not exist here.
+    /// ⛔ They are not reconstructed and not faked: authority comes from the
+    /// planner's own result-edge projection for the unit being defined, taken
+    /// **before** this function was defined.
+    ///
+    /// This seat sits after the exact retained result is lowered and **before**
+    /// [`Lowering::transfer_unit_result_into_carrier`], allocation, publication
+    /// or join — which is where the landed object fixture was measured to
+    /// refuse (`UNIT-RESULT transfer origin=36` immediately precedes
+    /// `BOUNDARY-REFUSAL`).
+    ///
+    /// ## What each outcome means, because "zero" is the one that reads wrong
+    ///
+    /// - **No residual edge** — this owner has no planner-issued call left to
+    ///   discharge here, either because it never had one or because the
+    ///   retained-frame seat already emitted it. The ordinary path is correct
+    ///   and untouched. ⚠ This is *not* the contract's "zero member is a hard
+    ///   stop": an owner that genuinely owes a call and emits none is caught by
+    ///   the whole-pass `planned = resolved = declared = emitted` equality,
+    ///   which is the global affine closure of contract 5. A local stop here
+    ///   would red every unit in the program that lawfully owns no call.
+    /// - **More than one residual edge** — an unresolved multi-member
+    ///   composition. ⛔ Rejected. One result value cannot discharge two causal
+    ///   calls, and picking one would make lowering the authority for a fact the
+    ///   planner owns.
+    /// - **Exactly one** — the ruled case. The lowered result must *be* the
+    ///   planned constructor at that edge's construct origin, checked against
+    ///   the planner's own identity rather than against its name or shape.
+    ///
+    /// ## The five guards, and how each one is reached
+    ///
+    /// ⭐ These were carried as **explicitly unexercised** through checkpoints 1
+    /// to 3: the only fixture reaching this seat refused further along, so a
+    /// control written then would have compared a red against a red. Checkpoint
+    /// 4 made the route positive, and each is now red by its own reaching
+    /// mutation on the witness that compiles —
+    /// `d5a_the_detached_result_seats_five_guards_are_each_reached_by_a_real_mutation`,
+    /// with the [`D5aRouteMutation`] variant named beside it:
+    ///
+    /// | guard | reaching mutation |
+    /// |---|---|
+    /// | multi-member projection | `DuplicateResidualEdge` |
+    /// | result is not a constructor | `CarryNonConstructorResult` |
+    /// | identity disagreement | `StripLoweredConstructorIdentity` |
+    /// | position outside the field run | `PerturbRecursivePosition` |
+    /// | field run versus declared run | `PerturbOrdinaryParameterCount` |
+    ///
+    /// ⛔ Every one perturbs what this seat is **handed**, never the guard that
+    /// inspects it.
+    pub(super) fn eliminate_detached_producer_continuation(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        result_edges: &[ContinuationResultEdge],
+        lowered: LoweringOperand,
+        unit_env: &[LoweringEnvironmentBinding],
+    ) -> Result<LoweringOperand, CraneliftBackendError> {
+        let mut residual = result_edges
+            .iter()
+            .filter(|edge| {
+                // ⭐⭐ `RT-CONTSRC-PRODUCER-LOCAL` `D8k` — the residual is what
+                // NEITHER verified form has discharged.
+                //
+                // A causal call answered by a composed source continuation is
+                // not detached: the producer's constructor was eliminated in
+                // place and the obligation was met by the raw-worker call the
+                // source machine made. Before this, only a direct emission
+                // could clear an edge, which is why the declaration-owned
+                // composed witness refused here — the seat asked the unit to
+                // RETURN a producer constructor the composed path exists to
+                // consume.
+                //
+                // ⛔ **The claim, not only the verified relation, and that
+                // ordering is forced.** This seat runs while the function is
+                // still being built; `composed_discharges` is populated from
+                // `pending_composed_discharges` only once the CLIF is finished,
+                // which is strictly later. Reading the verified relation alone
+                // here would always see it empty and clear nothing.
+                //
+                // ⇒ What makes this sound is that an unverified claim cannot
+                // survive to an artifact: `verify_recorded_composed_discharges`
+                // runs before this function is published and refuses the whole
+                // compile if any claim fails. So no object exists in which a
+                // claim that was never verified suppressed a residual. That is
+                // a property of the ORDER of the two passes, and it is why
+                // neither may be moved without re-deriving it.
+                let claimed = self
+                    .function_local
+                    .pending_composed_discharges
+                    .iter()
+                    .any(|pending| pending.identity == edge.identity);
+                !self
+                    .function_local
+                    .continuation_emissions
+                    .contains_key(&edge.identity)
+                    && !self
+                        .function_local
+                        .composed_discharges
+                        .contains_key(&edge.identity)
+                    && !claimed
+            })
+            .collect::<Vec<_>>();
+        // `D5a` checkpoint 4 step 3 — the multi-member reaching mutation.
+        //
+        // ⛔ The SAME edge presented twice, not a fabricated second one: what the
+        // guard rejects is two undischarged causal calls landing on one result
+        // value, and a synthesized edge would additionally differ in identity,
+        // leaving the refusal attributable to either fact.
+        #[cfg(test)]
+        if d5a_route_mutation() == D5aRouteMutation::DuplicateResidualEdge {
+            if let Some(first) = residual.first().copied() {
+                residual.push(first);
+            }
+        }
+        // `D5a` checkpoint 4 step 3 — the non-constructor reaching mutation.
+        //
+        // A carried boundary word is a real operand of the only other class this
+        // seat can be handed, so the guard rejects the case it names rather than
+        // a shape invented for the test.
+        #[cfg(test)]
+        let lowered = if d5a_route_mutation() == D5aRouteMutation::CarryNonConstructorResult
+            && !residual.is_empty()
+        {
+            LoweringOperand::Carried(CarriedBoundaryWord {
+                word: builder.ins().iconst(types::I64, 0),
+            })
+        } else {
+            lowered
+        };
+        // `D5a` checkpoint 4 step 3 — the identity-disagreement reaching
+        // mutation. The result stays a specialized constructor with the same
+        // fields; only its synthesized identity is withdrawn, so what the guard
+        // reads is exactly the planner-identity comparison and nothing else.
+        #[cfg(test)]
+        let lowered = if d5a_route_mutation() == D5aRouteMutation::StripLoweredConstructorIdentity
+            && !residual.is_empty()
+        {
+            match lowered {
+                LoweringOperand::Specialized(Lowered::Constructor {
+                    constructor,
+                    synthesized_identity: _,
+                    occurrence,
+                    args,
+                }) => LoweringOperand::Specialized(Lowered::Constructor {
+                    constructor,
+                    synthesized_identity: None,
+                    // `D7` — carried through UNCHANGED, because this mutation's
+                    // whole claim is that it withdraws the identity and nothing
+                    // else. Withdrawing the occurrence as well would make the
+                    // guard's refusal attributable to either field, and the row
+                    // would stop measuring the identity comparison it names.
+                    occurrence,
+                    args,
+                }),
+                other => other,
+            }
+        } else {
+            lowered
+        };
+        let edge = match residual.as_slice() {
+            [] => return Ok(lowered),
+            [edge] => *edge,
+            _ => {
+                return Err(unsupported(
+                    "ContinuationSpecialization",
+                    format!(
+                        "the detached-result seat projected {} undischarged causal calls onto one \
+                         unit result; a multi-member projection is a hard stop, never a preference \
+                         rule, because one result value cannot discharge two causal calls",
+                        residual.len()
+                    ),
+                ));
+            }
+        };
+        #[cfg(test)]
+        d5a_trace(format!(
+            "  DETACHED-SEAT edge result={:?} construct={:?} pos={} target={:?}",
+            edge.producer_result_origin,
+            edge.producer_construct_origin,
+            edge.recursive_position,
+            edge.identity.target()
+        ));
+        // Contract 4, first clause: validate the specialized result's PLANNED
+        // constructor identity and field run.
+        //
+        // ⛔ The check runs against the planner's identity for the projected
+        // construct origin -- not against the constructor's name, its arity
+        // alone, or the presence of a closure among its fields. Using the
+        // emitted closure shape as the selector is exactly what contract 3
+        // forbids; here the shape is not consulted at all, and a result that is
+        // not the planned constructor rejects instead of being carried.
+        let LoweringOperand::Specialized(Lowered::Constructor {
+            synthesized_identity,
+            args,
+            ..
+        }) = &lowered
+        else {
+            return Err(unsupported(
+                "ContinuationSpecialization",
+                "a projected causal call reached the detached-result seat with a unit result that \
+                 is not a specialized constructor, so the planned producer constructor it must \
+                 replace is not present",
+            ));
+        };
+        let planned_identity = self
+            .static_transition_plan
+            .constructor_symbol_identity(edge.producer_construct_origin)?;
+        if *synthesized_identity != Some(planned_identity) {
+            return Err(unsupported(
+                "ContinuationSpecialization",
+                "the unit result at a projected causal edge is not the planner's own constructor \
+                 for that edge's producer Construct origin",
+            ));
+        }
+        // `D5a` checkpoint 4 step 3 — the out-of-range reaching mutation. Taken
+        // as the planned constructor's own arity, so the perturbation is "one
+        // past the field run" by construction rather than a literal that a
+        // wider constructor would quietly bring back into range.
+        #[cfg(test)]
+        let position = if d5a_route_mutation() == D5aRouteMutation::PerturbRecursivePosition {
+            args.len()
+        } else {
+            edge.recursive_position as usize
+        };
+        #[cfg(not(test))]
+        let position = edge.recursive_position as usize;
+        if position >= args.len() {
+            return Err(unsupported(
+                "ContinuationSpecialization",
+                "a projected causal edge names a ruled recursive position outside the planned \
+                 constructor's field run",
+            ));
+        }
+        let unit = self
+            .static_transition_plan
+            .continuation_units()?
+            .into_iter()
+            .find(|unit| unit.id() == edge.identity.target())
+            .ok_or_else(|| {
+                unsupported(
+                    "ContinuationSpecialization",
+                    "the projected target has no continuation unit",
+                )
+            })?;
+        // `D5a` checkpoint 4 step 3 — the field-run reaching mutation.
+        //
+        // ⛔ Applied AFTER the position guard above, so the two are separable:
+        // the position it reads is still the ruled one and still in range, and
+        // the only thing that moves is the declared ordinary run this count is
+        // compared against.
+        #[cfg(test)]
+        let ordinary_declared = if d5a_route_mutation()
+            == D5aRouteMutation::PerturbOrdinaryParameterCount
+        {
+            unit.ordinary_parameters() as usize + 1
+        } else {
+            unit.ordinary_parameters() as usize
+        };
+        #[cfg(not(test))]
+        let ordinary_declared = unit.ordinary_parameters() as usize;
+        // The field run, against the PLANNER'S OWN stated relation:
+        // `nonrecursive_field_count = ordinary_parameters - worker_capture_count`
+        // (`ContinuationUnit::ordinary_envelope`). Every field but the ruled
+        // recursive one becomes an ordinary operand, and the selected worker's
+        // capture run is the rest of the declared parameter tail.
+        //
+        // ⛔ **This used to read `args.len() != ordinary_declared + 1`, and that
+        // is the pre-`D9` premise surviving as a precondition.** It is the same
+        // defect `D9` removed one level down — *"the ordinary run is the
+        // nonrecursive fields alone"* — left behind at the guard ABOVE the
+        // assembly when the assembly itself was corrected. It is exact whenever
+        // the selected worker has zero captures, which is every witness this
+        // crate had, so nothing measured it. On a worker with captures it
+        // refuses a LAWFUL producer: a 2-field constructor whose continuation
+        // declares 3 ordinary parameters (1 nonrecursive + 2 captures) is
+        // exactly the ruled shape, and the old form rejected it as a
+        // disagreement.
+        let nonrecursive_declared = ordinary_declared
+            .checked_sub(unit.worker_capture_count())
+            .ok_or_else(|| {
+                unsupported(
+                    "ContinuationSpecialization",
+                    format!(
+                        "this continuation declares {ordinary_declared} ordinary parameters but its \
+                         selected worker declares {} captures, so the ruled envelope has no \
+                         nonrecursive prefix",
+                        unit.worker_capture_count()
+                    ),
+                )
+            })?;
+        if args.len() != nonrecursive_declared + 1 {
+            return Err(unsupported(
+                "ContinuationSpecialization",
+                format!(
+                    "the planned producer constructor has {} fields but its continuation declares \
+                     {ordinary_declared} ordinary parameters over a selected worker with {} \
+                     captures, leaving a {nonrecursive_declared}-field nonrecursive prefix; with \
+                     exactly the ruled recursive field omitted the field run must exceed that \
+                     prefix by one",
+                    args.len(),
+                    unit.worker_capture_count()
+                ),
+            ));
+        }
+        let identity = edge.identity.clone();
+        // ⚠ `D6a`: this result becomes the defining unit's own result and
+        // therefore crosses a FUNCTION BOUNDARY, which carries only the word.
+        // The route is dropped here on purpose -- the caller re-attests from
+        // its own exact claimed call identity, and a callee that wrote a hidden
+        // route bit is exactly what the transport contract forbids.
+        // `D9` — the whole planned field run, at its own phase, plus the ruled
+        // position. The assembly is the shared seat's.
+        let field_run = args
+            .iter()
+            .map(|arg| LoweringOperand::Specialized(arg.clone()))
+            .collect::<Vec<_>>();
+        Ok(self
+            .claim_and_call_resolved_continuation(
+                builder,
+                &identity,
+                &field_run,
+                position,
+                unit_env,
+            )?
+            .value)
     }
 
     /// **`D3` -- the callee-only consumer.**
@@ -5786,7 +9105,47 @@ impl<'a> Lowering<'a> {
         static_origin: StaticOriginId,
         env: &[LoweringEnvironmentBinding],
     ) -> Result<LoweringOperand, CraneliftBackendError> {
-        let supplied = u32::try_from(args.len()).map_err(|_| {
+        // Explicit arguments in source order: argument `i` is child `1 + i` of
+        // the `Call` occurrence, the callee being child `0`.
+        //
+        // ⛔ **This is the direct descent's argument phase and only its own.**
+        // `D8e`'s source-machine consumer evaluates its arguments under the
+        // machine's control and phase instead, and enters at
+        // [`Self::call_static_worker_with_inputs`] below. The two share every
+        // line after this point, which is the whole reason the split is here and
+        // not lower: captures, the route's suffix, the route's table and the
+        // emitted call are one assembly with one owner.
+        let inputs = args
+            .iter()
+            .enumerate()
+            .map(|(position, argument)| {
+                let argument = self.child_occurrence(static_origin, 1 + position, argument)?;
+                self.lower_expr(builder, argument, env)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        self.call_static_worker_with_inputs(builder, worker, inputs, static_origin)
+            // `D8j` — direct descent DISCARDS the emission handle. It is not a
+            // composed consumption and has no causal obligation to answer for;
+            // dropping the handle here is that statement, made where the
+            // decision belongs.
+            .map(|(operand, _)| operand)
+    }
+
+    /// **The route-selected static-worker emitter, from evaluated arguments
+    /// onward.** Shared verbatim by the direct descent and by `D8e`'s
+    /// source-machine consumer; neither reassembles any part of it.
+    fn call_static_worker_with_inputs(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        worker: &StaticWorkerBinding,
+        mut inputs: Vec<LoweringOperand>,
+        static_origin: StaticOriginId,
+    ) -> Result<(LoweringOperand, StaticWorkerEmission), CraneliftBackendError> {
+        // ⛔ Arity is checked HERE, not in either caller. The explicit-argument
+        // run is exactly `inputs` at entry -- captures are appended below -- so
+        // this is the one place both consumers can be held to the declared
+        // arity without either restating it.
+        let supplied = u32::try_from(inputs.len()).map_err(|_| {
             unsupported("Call", "call argument count exceeds addressable range")
         })?;
         if supplied != worker.declared_arity {
@@ -5799,39 +9158,158 @@ impl<'a> Lowering<'a> {
             ));
         }
 
-        // Explicit arguments in source order: argument `i` is child `1 + i` of
-        // the `Call` occurrence, the callee being child `0`.
-        let mut inputs = args
-            .iter()
-            .enumerate()
-            .map(|(position, argument)| {
-                let argument = self.child_occurrence(static_origin, 1 + position, argument)?;
-                self.lower_expr(builder, argument, env)
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-
         // Stored captures follow, unchanged. A carried capture stays carried:
         // there is deliberately no conversion on this edge, which is the whole
         // reason the binding holds operands rather than templates.
         inputs.extend(worker.captures.iter().cloned());
 
+        // `RT-DECL-CLOSURE-PORT` `D5a` -- the generated-context capture suffix.
+        //
+        // ⭐ The prefix above is untouched, which is the point: the raw worker's
+        // operand run is exactly what it always was, and a context call is that
+        // run plus the enclosing specialization's continuation inputs. That is
+        // why "keep raw fn2's ABI unchanged" and "carry the inputs across the
+        // worker execution" are not in tension -- one is a prefix of the other.
+        //
+        // ⛔ Guarded on the exact body origin. A suffix appended to some other
+        // worker call would be an arity error against a frame that might be
+        // large enough to absorb it silently.
+        // `D5a` checkpoint 4 step 3 -- the raw run, captured before the suffix
+        // so the two are separable in the event log below. ⭐ "No suffix" and
+        // "a suffix of length zero" are different facts and one total cannot
+        // tell them apart.
+        #[cfg(test)]
+        let raw_operands = inputs.len();
+        // ⭐ **`RT-CONTSRC-PRODUCER-LOCAL` `D6b` — THE ROUTE IS CONSUMED HERE,
+        // and it decides BOTH halves of the call: the operand run and the
+        // callee.** The two must be decided by one fact, because they are one
+        // contract -- a generated context's ABI has a capture run the raw body
+        // does not, so appending the suffix to a raw target, or omitting it from
+        // a context target, is an arity disagreement against a frame that may be
+        // large enough to absorb it silently.
+        //
+        // ⛔ The pre-`D6b` reading -- "append iff
+        // `generated_context_captures.worker_body_origin == worker.body_origin`"
+        // -- is *blind by construction* now that `D6a` binds two workers over
+        // one body origin. It answers the same for the induction hypothesis and
+        // for the selected recursive argument, which are exactly the two the
+        // suffix must separate. The body-origin equality is retained below, but
+        // demoted to a consistency check on the route's own choice.
+        match worker.route {
+            StaticWorkerCallRoute::GeneratedContext => {
+                // The enclosing specialization's continuation inputs, carried
+                // across this worker execution. Absent is a hard stop: a
+                // context-routed call with no suffix to append means the
+                // binding named a context this frame never stashed operands
+                // for, and calling it would underflow the context's ABI.
+                let extra = self
+                    .function_local
+                    .generated_context_captures
+                    .as_ref()
+                    .ok_or_else(|| {
+                        unsupported(
+                            "Call",
+                            format!(
+                                "a static worker binding for body origin {:?} is routed to a \
+                                 generated context, but this frame stashed no continuation-input \
+                                 suffix for any body",
+                                worker.body_origin
+                            ),
+                        )
+                    })?;
+                if extra.worker_body_origin != worker.body_origin {
+                    return Err(unsupported(
+                        "Call",
+                        format!(
+                            "a context-routed static worker binding names body origin {:?}, but \
+                             the stashed continuation-input suffix belongs to body {:?}",
+                            worker.body_origin, extra.worker_body_origin
+                        ),
+                    ));
+                }
+                // `D8g` — WITHHOLD THE SUFFIX, under test only. The sole
+                // producer of the generated-context capture run is withheld and
+                // the raw run and the call itself stay exact, so the difference
+                // this isolates is the suffix and nothing else.
+                #[cfg(test)]
+                let withhold = crate::cranelift_backend::lowering::d8g_mutation()
+                    == crate::cranelift_backend::lowering::D8gMutation::WithholdContextSuffix;
+                #[cfg(not(test))]
+                let withhold = false;
+                if withhold {
+                    #[cfg(test)]
+                    crate::cranelift_backend::lowering::record_d8g_mutation_application();
+                } else {
+                    inputs.extend(extra.operands.iter().cloned());
+                }
+            }
+            StaticWorkerCallRoute::RawWorker => {
+                // ⛔ Appends NOTHING, unconditionally -- not even when this
+                // frame does hold a suffix for this very body origin, which is
+                // precisely the `D6a` case where the induction hypothesis
+                // beside this binding is context-routed over the same body.
+                // "No suffix" and "a suffix of length zero" stay different
+                // facts, and this arm is the first.
+            }
+        }
+
         // Resolve the exact target FIRST. The mutation below perturbs only what
         // the consumer is handed, never what the binding named.
-        let exact = self
-            .function_local
-            .worker_calls
+        //
+        // `D6b` -- from the route's OWN table. In a retargeted specialization
+        // `worker_calls[body]` is the generated context and the raw callee
+        // survives only in `raw_worker_calls`; taking whichever entry exists is
+        // the inference `D6a` made impossible.
+        // `D8g` — WRONG TABLE, under test only. Each route reads the other's
+        // table. The call key, the binding, the route field and the operand run
+        // are all untouched; only which table answers moves, which is the one
+        // producer input the table-choice relation is about.
+        #[cfg(test)]
+        let swap_tables = if crate::cranelift_backend::lowering::d8g_mutation()
+            == crate::cranelift_backend::lowering::D8gMutation::WrongTable
+        {
+            crate::cranelift_backend::lowering::record_d8g_mutation_application();
+            true
+        } else {
+            false
+        };
+        #[cfg(not(test))]
+        let swap_tables = false;
+        let (table, table_name) = match (worker.route, swap_tables) {
+            (StaticWorkerCallRoute::GeneratedContext, false)
+            | (StaticWorkerCallRoute::RawWorker, true) => {
+                (&self.function_local.worker_calls, "worker_calls")
+            }
+            (StaticWorkerCallRoute::RawWorker, false)
+            | (StaticWorkerCallRoute::GeneratedContext, true) => {
+                (&self.function_local.raw_worker_calls, "raw_worker_calls")
+            }
+        };
+        let exact = table
             .get(&worker.body_origin)
             .cloned()
             .ok_or_else(|| {
                 unsupported(
                     "Call",
                     format!(
-                        "no worker call target for body origin {:?} was declared into this \
-                         function",
-                        worker.body_origin
+                        "no {table_name} target for body origin {:?} was declared into this \
+                         function, so the {:?} route has no callee. ⛔ This never falls back to \
+                         the other route's table: a raw call answered by a generated context \
+                         would underflow that context's capture run, and a context call answered \
+                         by the raw body would drop the continuation inputs the context exists \
+                         to carry",
+                        worker.body_origin, worker.route
                     ),
                 )
             })?;
+        // `D8g` — the emitted callee identity, captured where the table
+        // answered. The FuncRef, not the origin: the two routes share a worker
+        // body origin by design, so only this separates them.
+        #[cfg(test)]
+        let emitted_callee = {
+            use cranelift_codegen::entity::EntityRef;
+            exact.function.index() as u32
+        };
 
         // `AC-5` clause (b): the redirect selects a **distinct** target by
         // `AC-6`'s definition of same-shape -- **same declared arity and same
@@ -5846,12 +9324,16 @@ impl<'a> Lowering<'a> {
         //
         // No candidate is a loud failure, never a fall back to exact: a silent
         // fallback would make this control vacuously green.
+        // `D6b` -- the redirect searches the SAME table the exact resolution
+        // used. Searching `worker_calls` while the exact answer came from
+        // `raw_worker_calls` would make the mutation a route swap rather than
+        // the same-shape redirect `AC-5` names, and the resulting red would be
+        // attributable to the wrong mechanism.
         #[cfg(test)]
         let target = if STATIC_WORKER_MUTATION.with(std::cell::Cell::get)
             == StaticWorkerMutation::RedirectResolvedWorkerTarget
         {
-            self.function_local
-                .worker_calls
+            table
                 .iter()
                 .find(|(origin, call)| {
                     **origin != worker.body_origin
@@ -5885,14 +9367,73 @@ impl<'a> Lowering<'a> {
             ));
         }
 
-        self.call_declared_unit_target(
+        let emitted = self.call_declared_unit_target(
             builder,
             target,
             &inputs,
             #[cfg(test)]
             None,
-        )
-        .map(|(operand, _inst)| operand)
+        )?;
+        // `D5a` -- the emission half of the marker's ordered log. ⛔ Recorded
+        // AFTER the instruction exists, so "consumed before emitted" is a fact
+        // about the log's order rather than about where the line was written.
+        #[cfg(test)]
+        record_d5a_marker_event(D5aMarkerEvent::WorkerCallEmitted {
+            body_origin: worker.body_origin,
+            raw_operands,
+            supplied_operands: inputs.len(),
+            route: worker.route,
+        });
+        // `D8g` — the same instant, recorded with the facts a keyed relation
+        // needs: which body is emitting, which call occurrence, the decoded raw
+        // callee, its declared contract, the route that chose the table, the run
+        // the instruction carried, and whether the binding answers for a
+        // composed causal obligation.
+        //
+        // ⛔ This is the ONE emitter the functionized and composed populations
+        // share. Recording here is what lets `D8g` relate two different programs
+        // at one seat rather than compare two logs that merely look alike.
+        #[cfg(test)]
+        crate::cranelift_backend::lowering::record_d8g_emission(
+            crate::cranelift_backend::lowering::D8gEmission {
+                function: self.defining_function_id,
+                call_origin: static_origin,
+                target_body_origin: worker.body_origin,
+                declared_arity: worker.declared_arity,
+                captures: worker.captures.len(),
+                route: worker.route,
+                raw_operands,
+                supplied_operands: inputs.len(),
+                composed_discharge: worker.composed_continuation_authority().is_ok(),
+                emitted_callee,
+            },
+        );
+        // `D8j` — the instruction is HANDED BACK, not recorded. Which consumer
+        // may answer for a causal obligation with it is the caller's question,
+        // and both this emitter's callers reach here.
+        // ⭐ The operand run is reported from the vector that was just written,
+        // read adjacent to the call that consumed it. ⛔ Not recomputed from the
+        // binding's declared arity and captures: that is the quantity
+        // verification 4b compares this against, and deriving both from one
+        // source would make the comparison an identity.
+        let emission = StaticWorkerEmission {
+            inst: emitted.1,
+            supplied_operands: inputs.len(),
+        };
+        // `D8j` verification 4b's discriminator, applied AFTER the real vector
+        // was assembled and emitted. ⛔ It moves the EVIDENCE about the run, not
+        // the run: the call that was written is unchanged, and every other input
+        // to the verifier stays exact.
+        #[cfg(test)]
+        let emission = if d8j_mutation() == D8jMutation::SupplyOperandCountDisagreesWithTarget {
+            StaticWorkerEmission {
+                supplied_operands: emission.supplied_operands.saturating_add(1),
+                ..emission
+            }
+        } else {
+            emission
+        };
+        Ok((emitted.0, emission))
     }
 
     /// **`D2` -- the binder-lowering helper.** Lowers a `Let`'s bound value
@@ -5980,9 +9521,21 @@ impl<'a> Lowering<'a> {
         let narrowing_restored = false;
         if carried == 0 || narrowing_restored {
             // All-specialized: preserve the existing compile-time closure.
+            //
+            // ⭐ **The narrowing STAYS on this branch, and deleting it would
+            // make `AC-5` mutation 1 vacuous.** `captures` is now phase-bearing,
+            // so storing the operands unchanged would compile — and under
+            // `RestoreCarriedCaptureNarrowing` a carried capture would then sail
+            // through the very fold the mutation exists to force it into,
+            // turning the control into the identity. On the exact path
+            // `carried == 0`, so this is a total unwrap-and-reassert; under the
+            // mutation it is the pre-node refusal, unchanged.
             return Ok(LoweringEnvironmentBinding::Value(
                 LoweringOperand::Specialized(Lowered::Closure {
-                    captures: specialized_operands_at(&lowered_captures, "a closure capture")?,
+                    captures: specialized_operands_at(&lowered_captures, "a closure capture")?
+                        .into_iter()
+                        .map(LoweringOperand::Specialized)
+                        .collect(),
                     params: params.clone(),
                     body: body.static_origin,
                 }),
@@ -6001,8 +9554,188 @@ impl<'a> Lowering<'a> {
             declared_arity,
             captures.len(),
             lowered_captures,
+            // `D6a` — an ordinary lexical closure binder. There is no enclosing
+            // specialization here, so the planner issued no generated context
+            // for this occurrence and the raw body is the only callee it can
+            // ever have named.
+            StaticWorkerCallRoute::RawWorker,
+            // `D8i` — a lexical-closure capsule answers for no composed causal
+            // obligation. Stated, not defaulted.
+            ContinuationDischarge::DirectSpecializationCall,
         )
         .map(LoweringEnvironmentBinding::StaticWorker)
+    }
+
+    /// **`D7` -- THE PRE-EMISSION CAPTURE-CONTRACT GATE for a retained callable
+    /// whose environment is mixed-phase.**
+    ///
+    /// ⭐⭐ **Membership in `worker_templates` is necessary and INSUFFICIENT, and
+    /// that is the whole reason this exists.** The measured stop that opened this
+    /// checkpoint had a template for its body origin and still could not be
+    /// represented; "the planner knows this closure" answers *whether* a contract
+    /// was issued, never *what it says*. A capsule that closes over a carried
+    /// word commits the callee to reading that word out of an activation-frame
+    /// slot at an exact ordinal, so every one of those facts is checked **before
+    /// any function definition or object emission**, not discovered when the
+    /// callee loads the wrong offset.
+    ///
+    /// ⛔ **No policy is invented here.** The expected capture slot is projected
+    /// from [`expected_capture_slot`], the same authority that laid the
+    /// descriptor, so carrier, ownership, storage owner, width, alignment and
+    /// ordinal are compared against the planner's own answer rather than against
+    /// a second copy of the rule that could drift from it.
+    ///
+    /// The one fact this layer adds is **phase admissibility**, which the ABI
+    /// plane cannot state because it has no operands: a `Carried` capture is an
+    /// invocation-time SSA word, so it is lawful only in a slot the **activation
+    /// frame** owns. `ArtifactStatic` material is minted before execution begins
+    /// -- a seed capture's lane -- and no word this activation computes can be
+    /// that, so a carried capture in a seed slot is refused rather than stored.
+    fn validate_retained_callable_capture_contract(
+        &self,
+        closure_origin: StaticOriginId,
+        body_origin: StaticOriginId,
+        provenance: AbiCaptureProvenance,
+        declared_arity: usize,
+        captures: &[LoweringOperand],
+    ) -> Result<(), CraneliftBackendError> {
+        // 1. Exactly one planner-issued template for this exact body.
+        //
+        // ⭐ Uniqueness is upstream and structural: `worker_templates` is keyed
+        // by body origin, and the population walk that fills it already refuses
+        // when "two emittable units claim the same body origin". So the only
+        // failure this lookup can still see is OMISSION -- which is the half a
+        // keyed map cannot make unrepresentable.
+        let target = self
+            .function_local
+            .worker_templates
+            .get(&body_origin)
+            .ok_or_else(|| {
+                unsupported(
+                    "RetainedCallableCaptureContract",
+                    format!(
+                        "a mixed-phase retained callable at {closure_origin:?} has no planner-issued \
+                         worker template for body origin {body_origin:?} in this function"
+                    ),
+                )
+            })?;
+
+        // 2. The record is keyed by the callable SOURCE BODY, so a disagreement
+        //    here is a wrong-body contract rather than a lookup miss.
+        if target.call_site_origin != body_origin {
+            return Err(unsupported(
+                "RetainedCallableCaptureContract",
+                format!(
+                    "the worker template reached for body origin {body_origin:?} is keyed by \
+                     source body {:?}",
+                    target.call_site_origin
+                ),
+            ));
+        }
+
+        // 3. Declared arity and capture count, against the descriptor header.
+        if target.header.parameters as usize != declared_arity {
+            return Err(unsupported(
+                "RetainedCallableCaptureContract",
+                format!(
+                    "worker descriptor declares {} parameters but the retained callable declares \
+                     {declared_arity}",
+                    target.header.parameters
+                ),
+            ));
+        }
+        if target.header.captures as usize != captures.len() {
+            return Err(unsupported(
+                "RetainedCallableCaptureContract",
+                format!(
+                    "worker descriptor declares {} captures but {} were projected from the \
+                     retained definition",
+                    target.header.captures,
+                    captures.len()
+                ),
+            ));
+        }
+
+        // 4. The ORDERED capture run, taken in slot order. Its length must agree
+        //    with the header independently -- the header and the slot run are two
+        //    recorded facts, and a gate that trusted one to speak for the other
+        //    would be blind to exactly the descriptor it exists to reject.
+        let capture_slots = target
+            .slots
+            .iter()
+            .filter(|slot| slot.kind == AbiSlotKind::Capture)
+            .collect::<Vec<_>>();
+        if capture_slots.len() != captures.len() {
+            return Err(unsupported(
+                "RetainedCallableCaptureContract",
+                format!(
+                    "worker descriptor's slot run declares {} capture slots against a header of \
+                     {} and {} projected captures",
+                    capture_slots.len(),
+                    target.header.captures,
+                    captures.len()
+                ),
+            ));
+        }
+
+        for (position, (slot, capture)) in capture_slots.iter().zip(captures).enumerate() {
+            let ordinal = u32::try_from(position).map_err(|_| {
+                unsupported(
+                    "RetainedCallableCaptureContract",
+                    "retained callable capture count exceeds addressable range",
+                )
+            })?;
+            // 5. Phase admissibility, then ordinal/provenance/owner/lifetime in
+            //    ONE comparison
+            //    against the planner's own projection. ⛔ Comparing field by
+            //    field here would let a field added to `AbiSlot` later go
+            //    unchecked; whole-slot equality cannot.
+            //
+            //    Ordinal density falls out of this rather than needing its own
+            //    pass: slot *i* of the capture run must carry ordinal *i*, so a
+            //    duplicated, permuted or gapped ordinal fails here.
+            //    ⚠ **The phase check runs FIRST, and the order is load-bearing
+            //    rather than stylistic.** Behind the whole-slot equality below
+            //    it would be DEAD for the only provenance production calls this
+            //    with: equality already forces a lexical capture's slot to be
+            //    `ValueWord`, whose storage owner is the activation frame, so no
+            //    descriptor could ever reach the phase arm. Asking whether the
+            //    refusal could be provoked at all is what surfaced that -- a
+            //    guard nothing can trip is not a guard.
+            match capture {
+                // A compile-time template is lawful in any capture slot: it is
+                // read where the descriptor says, whatever owns that storage.
+                LoweringOperand::Specialized(_) => {}
+                // ⛔ An invocation-time word cannot inhabit storage minted
+                // before execution began, nor the persistent store.
+                LoweringOperand::Carried(_) => {
+                    if slot.storage_owner != AbiStorageOwner::ActivationFrame {
+                        return Err(unsupported(
+                            "RetainedCallableCaptureContract",
+                            format!(
+                                "capture {position} of the retained callable at \
+                                 {closure_origin:?} arrived carried, but its slot's storage is \
+                                 owned by {:?} -- an invocation-time word cannot inhabit storage \
+                                 that outlives the activation that computes it",
+                                slot.storage_owner
+                            ),
+                        ));
+                    }
+                }
+            }
+            let expected = expected_capture_slot(provenance, ordinal);
+            if **slot != expected {
+                return Err(unsupported(
+                    "RetainedCallableCaptureContract",
+                    format!(
+                        "capture {position} of the retained callable at {closure_origin:?} \
+                         declares slot {slot:?} but its {provenance:?} provenance projects \
+                         {expected:?}"
+                    ),
+                ));
+            }
+        }
+        Ok(())
     }
 
     /// **`D2` -- THE SOLE CONSTRUCTION ROUTE for a static worker binding.**
@@ -6022,6 +9755,13 @@ impl<'a> Lowering<'a> {
     /// rejects before any worker call could be emitted. `captures` arrive as
     /// `LoweringOperand` and are stored unchanged: a carried capture stays
     /// carried, and nothing here converts a phase.
+    ///
+    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D6a`** — `route` is supplied by the
+    /// caller, which is the only party that knows the **role** the binding is
+    /// being built for. Nothing here derives it: every check below is against
+    /// the raw template contract and is identical on both routes, which is
+    /// exactly why the route cannot be recovered from anything this function
+    /// validates. See [`StaticWorkerCallRoute`].
     pub(super) fn construct_static_worker_binding(
         &self,
         closure_origin: StaticOriginId,
@@ -6029,6 +9769,13 @@ impl<'a> Lowering<'a> {
         declared_arity: u32,
         source_capture_count: usize,
         captures: Vec<LoweringOperand>,
+        route: StaticWorkerCallRoute,
+        // `D8i` — REQUIRED, so omission is a compile error rather than a silent
+        // `DirectSpecializationCall`. ⛔ Not an `Option`, not defaulted, and not
+        // inferred from `route`: the two facets are independent, and a caller
+        // that has not decided which causal obligation its binding may answer
+        // for has not finished building it.
+        discharge: ContinuationDischarge,
     ) -> Result<StaticWorkerBinding, CraneliftBackendError> {
         // 1. The capture vector agrees with the retained definition. The caller
         //    builds it from the retained children, so a disagreement means the
@@ -6044,19 +9791,24 @@ impl<'a> Lowering<'a> {
             ));
         }
 
-        // 2. This function has a declared static-body target for `body_origin`.
-        //    A missing target is the "worker body was never declared into this
-        //    function" fact, and it rejects here rather than at emission.
+        // 2. This function has the RAW TEMPLATE contract for `body_origin`.
+        //
+        // `D5a` checkpoint 1: this reads `worker_templates`, not `unit_calls`.
+        // The template is the raw worker's own descriptor and carries no
+        // `FuncRef`, so every check below is about the raw contract even when
+        // the call this binding eventually drives has been retargeted to a
+        // generated context. ⛔ Reading the call target here instead would
+        // validate the context against the raw closure's arity and either
+        // reject a lawful retarget or, worse, silently accept a wrong one.
         let target = self
             .function_local
-            .unit_calls
+            .worker_templates
             .get(&body_origin)
             .ok_or_else(|| {
                 unsupported(
                     "StaticWorkerBinding",
                     format!(
-                        "no declared static-body target for worker body origin {body_origin:?} \
-                         in this function"
+                        "no raw worker template for body origin {body_origin:?} in this function"
                     ),
                 )
             })?;
@@ -6159,11 +9911,92 @@ impl<'a> Lowering<'a> {
             ));
         }
 
+        // ⭐ `D7` — the ORDERED capture contract, on the route that already
+        // owned the count. Checks 1-6 above validate the descriptor's shape;
+        // this validates the capture RUN against it, so the binder route and the
+        // value route are gated by one function rather than two spellings that
+        // can drift.
+        self.validate_retained_callable_capture_contract(
+            closure_origin,
+            body_origin,
+            AbiCaptureProvenance::Lexical,
+            declared_arity as usize,
+            &captures,
+        )?;
+        // `D8i` — the defect switch, applied to the SUPPLIED facet and only to
+        // an ordinary one. ⛔ It substitutes a real, planner-issued authority
+        // taken from the target population, searched for an emission owner that
+        // is not this unit's. Nothing here fabricates an identity, because
+        // nothing outside planning can.
+        #[cfg(test)]
+        let discharge = if crate::cranelift_backend::lowering::d8i_foreign_authority()
+            && matches!(discharge, ContinuationDischarge::DirectSpecializationCall)
+        {
+            let mut foreign = None;
+            for target in self.static_transition_plan.composed_call_targets()? {
+                if Some(target.call_identity().emission_owner()) != self.defining_emission_owner {
+                    foreign = Some(target.call_identity().clone());
+                    break;
+                }
+            }
+            match foreign {
+                Some(identity) => ContinuationDischarge::ComposedSourceContinuation(identity),
+                None => discharge,
+            }
+        } else {
+            discharge
+        };
+
+        // ⭐⭐ `D8i` — THE AUTHORITY GUARD, and it is about the OWNER.
+        //
+        // A composed authority names the emission owner its own causal call
+        // belongs to; `D8h` held the target and the token to that agreement at
+        // minting. This binding is being built inside one defining emission
+        // owner's pass. If the two differ, the binding would transport an
+        // obligation belonging to a function that is not the one emitting it,
+        // and a later discharge would answer for a call this frame cannot make.
+        //
+        // ⛔ Refused, not corrected: there is no lawful repair, because the
+        // right authority for this owner may not exist at all. And checked HERE
+        // rather than at consumption -- a binding that never should have
+        // carried the authority must not exist to be consumed, and `D8j` must
+        // not have to re-litigate provenance it was handed.
+        if let ContinuationDischarge::ComposedSourceContinuation(identity) = &discharge {
+            if Some(identity.emission_owner()) != self.defining_emission_owner {
+                return Err(unsupported(
+                    "StaticWorkerBinding",
+                    format!(
+                        "a composed causal authority names emission owner {:?}, but this binding \
+                         is being constructed under {:?}; a binding cannot transport an \
+                         obligation that belongs to a different emitter",
+                        identity.emission_owner(),
+                        self.defining_emission_owner
+                    ),
+                ));
+            }
+        }
+
+        // The observation, written AFTER every validation, from the facet the
+        // call site supplied.
+        #[cfg(test)]
+        crate::cranelift_backend::lowering::record_d8i_discharge(
+            crate::cranelift_backend::lowering::D8iDischargeRecord {
+                body_origin,
+                composed: match &discharge {
+                    ContinuationDischarge::DirectSpecializationCall => None,
+                    ContinuationDischarge::ComposedSourceContinuation(identity) => {
+                        Some((identity.emission_owner(), identity.target()))
+                    }
+                },
+            },
+        );
         Ok(StaticWorkerBinding {
             closure_origin,
             body_origin,
             declared_arity,
             captures,
+            route,
+            discharge,
         })
     }
 
@@ -6468,10 +10301,29 @@ impl<'a> Lowering<'a> {
             .static_transition_plan
             .constructor_symbol_identity(origin)?
             .tag_abi_word()?;
-        let word = self.emit_carrier_alloc(
+        // ⛔ **This was an unconditional `PersistentGround`, and it is the
+        // defect `D7`'s aggregate subclosure exists to remove.** Every carried
+        // aggregate was allocated persistent regardless of its children, so a
+        // constructor over an invocation-owned child became a persistent parent
+        // naming storage that dies first — the dangling relation `store_field`
+        // refuses, surfacing at runtime as `BOUNDARY_ERR_ESCAPE` rather than at
+        // the producer that created it.
+        let (occurrence, class) = self.aggregate_carrier_authority(
+            origin,
+            &Lowered::Constructor {
+                constructor: RuntimeSymbol::from(constructor),
+                synthesized_identity: None,
+                occurrence: None,
+                args: Vec::new(),
+            },
+            PlannedAggregateShape::Constructor,
+        )?;
+        let word = self.emit_checked_aggregate_alloc(
             builder,
-            BoundaryTag::PersistentGround,
-            BoundaryClass::Constructor,
+            GovernedAllocationSite::CarriedConstructor,
+            occurrence,
+            PlannedAggregateShape::Constructor,
+            class,
             args.len(),
         )?;
         self.emit_carrier_store_tag_id(builder, word, identity)?;
@@ -6999,22 +10851,537 @@ impl<'a> Lowering<'a> {
     /// Keeping this as a distinct operation makes the S1 boundary mechanical:
     /// a recursive position cannot accidentally return to source-body
     /// re-lowering without bypassing the one operation that emits its call.
+    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D8d` — the one target-derived environment
+    /// binding, at the selected recursive source-order position.**
+    ///
+    /// `None` for every nonrecursive position, and for a recursive position the
+    /// planner issued no [`ComposedCallTarget`] for. ⛔ That second `None` is
+    /// the **ordinary non-specialized path**, not a gap: it is the same shape
+    /// `continuation_call_binding_for` already uses, where no binding means the
+    /// producer keeps its existing route untouched. The entire pre-`D5a`
+    /// population lives there.
+    ///
+    /// ⛔ The selector is the exact `D8a` five-field one, and every field is
+    /// supplied from a fact this seat already holds: the defining unit's
+    /// emission owner, the deferred constructor's own occurrence, the active
+    /// computational frame's origin, the selected case index, and this position.
+    /// Nothing is derived from the lowered value's shape, from arity, or from
+    /// which of the two targets exists.
+    ///
+    /// ## What comes from where, and why it is split that way
+    ///
+    /// | fact | source |
+    /// |---|---|
+    /// | closure occurrence, raw body, declared arity, capture **count** | the planner-issued target |
+    /// | capture **operands** | the lowered closure at this position |
+    ///
+    /// ⭐ That split is the established `D6a` idiom, not a compromise. Identity
+    /// and shape are planner facts and lowering may not re-derive them; the
+    /// operands are runtime values that only this frame holds, and the planner
+    /// carries provenance for them rather than the values themselves. The
+    /// constructor then re-checks the two against each other, so a divergence
+    /// refuses rather than silently binding a short capture run.
+    ///
+    /// ⛔ The route is [`StaticWorkerCallRoute::RawWorker`], fixed by `D6a`'s
+    /// law that a selected recursive argument takes the raw worker
+    /// unconditionally. It is **not selected** here — nothing reads route
+    /// eligibility to decide it, which would be the route-selected emission this
+    /// checkpoint excludes.
+    ///
+    /// Fails closed when the planner names a target and the lowered value at
+    /// that position is not a closure: the planner's provenance says it is one,
+    /// so a disagreement is two authorities differing about the same source
+    /// position, and binding either answer would pick a winner.
+    fn composed_recursive_argument_binding(
+        &self,
+        case: &crate::RuntimeComputationalMatchCase,
+        construct_origin: StaticOriginId,
+        frame_origin: StaticOriginId,
+        alternative: usize,
+        position: usize,
+        lowered: &Lowered,
+    ) -> Result<Option<StaticWorkerBinding>, CraneliftBackendError> {
+        if !case.recursive_positions.contains(&position) {
+            return Ok(None);
+        }
+        // No defining owner means no unit-definition pass is open, so there is
+        // no owner to key the selector on. The producer keeps its existing
+        // route, as it does when the claim ledger is absent.
+        #[cfg(test)]
+        d8d_record_site();
+        let Some(emission_owner) = self.defining_emission_owner else {
+            return Ok(None);
+        };
+        let alternative = u32::try_from(alternative).map_err(|_| {
+            unsupported("ComputationalMatch", "case index exceeds addressable range")
+        })?;
+        let recursive_position = u32::try_from(position).map_err(|_| {
+            unsupported(
+                "ComputationalMatch",
+                "recursive position exceeds addressable range",
+            )
+        })?;
+
+        let selector = (
+            emission_owner,
+            construct_origin,
+            frame_origin,
+            alternative,
+            recursive_position,
+        );
+        let Some(target) = self
+            .static_transition_plan
+            .composed_call_targets()?
+            .into_iter()
+            .find(|target| target.selector() == selector)
+        else {
+            return Ok(None);
+        };
+
+        let Lowered::Closure { captures, .. } = lowered else {
+            return Err(unsupported(
+                "ComputationalMatch",
+                format!(
+                    "the planner issued a composed-call target at recursive position \
+                     {position}, whose provenance names a closure occurrence, but this frame \
+                     lowered {} there; two authorities disagree about one source position and \
+                     binding either would be choosing between them",
+                    lowered_value_kind(lowered)
+                ),
+            ));
+        };
+
+        #[cfg(test)]
+        d8d_record_binding();
+        let worker = target.worker();
+        self.construct_static_worker_binding(
+            worker.closure_origin(),
+            worker.body_origin(),
+            worker.declared_arity(),
+            worker.captures().len(),
+            captures.clone(),
+            StaticWorkerCallRoute::RawWorker,
+            // ⭐ `D8i` — the transported authority, taken from `D8h`'s pairing
+            // on this exact target and carried unchanged. ⛔ Not resolved again
+            // here: the target already carries the identity its own five-field
+            // coordinate selects, and a second lookup would be a second
+            // authority for one fact.
+            ContinuationDischarge::ComposedSourceContinuation(target.call_identity().clone()),
+        )
+        .map(Some)
+    }
+
+    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D8j` — CLAIM one composed discharge.**
+    ///
+    /// Reached from `D8e`'s two source-machine static-worker completions and
+    /// from nowhere else. By the time it runs, the raw-worker call has been
+    /// emitted by the shared route-selected emitter and its result is in hand
+    /// under the control the seat was entered with.
+    ///
+    /// ⛔ **Installing the binding, beginning the argument run, or seeing a
+    /// worker-shaped value is not discharge, and none of those reaches here.**
+    /// The two callers are the completions, after the emitter.
+    ///
+    /// ⭐ This performs verifications 1 and 2 — the ones whose evidence exists
+    /// now — and records the rest for the finished CLIF. Verifications 3, 4 and
+    /// 5 need the instruction stream, which does not exist until the function
+    /// is finalized; claiming them here would mean asserting facts about
+    /// instructions nobody has read.
+    fn claim_composed_discharge(
+        &mut self,
+        worker: &StaticWorkerBinding,
+        emission: StaticWorkerEmission,
+        result: &LoweringOperand,
+        source_control_before: usize,
+    ) -> Result<(), CraneliftBackendError> {
+        // Whether a composed obligation is owed at all is the BINDING's own
+        // statement, read from the facet `D8i` transports.
+        //
+        // ⛔ The test switch below forces the attempt on an ordinary binding.
+        // That population is unreachable in production -- an ordinary binding
+        // owes nothing and this arm is not entered for one -- but it is
+        // reachable by a defect, which is what separates this guard from the
+        // owner-collision refusal `D8b` deleted: that one's population the
+        // planner proved impossible, and no switch could instantiate it.
+        // ⛔ Under the switch the binding itself is replaced by an ORDINARY
+        // clone of the very binding that was about to discharge -- same
+        // closure, body, arity, captures and route, direct facet. That is what
+        // makes the refusal below attributable to the facet and to nothing
+        // else. ⭐ The composed arm cannot be built here even to undo it: it
+        // needs a planner-issued identity.
+        #[cfg(test)]
+        let ordinary_clone;
+        #[cfg(test)]
+        let worker = if d8j_mutation() == D8jMutation::DischargeFromOrdinaryBinding {
+            ordinary_clone = StaticWorkerBinding {
+                discharge: ContinuationDischarge::DirectSpecializationCall,
+                ..worker.clone()
+            };
+            &ordinary_clone
+        } else {
+            worker
+        };
+        #[cfg(test)]
+        let attempt = matches!(
+            worker.discharge,
+            ContinuationDischarge::ComposedSourceContinuation(_)
+        ) || d8j_mutation() == D8jMutation::DischargeFromOrdinaryBinding;
+        #[cfg(not(test))]
+        let attempt = matches!(
+            worker.discharge,
+            ContinuationDischarge::ComposedSourceContinuation(_)
+        );
+        if !attempt {
+            return Ok(());
+        }
+        // ⭐ The authority is obtained THROUGH the accessor, which is what makes
+        // an ordinary binding refuse here rather than silently discharge
+        // nothing.
+        let identity = worker.composed_continuation_authority()?.clone();
+        // `D8o` correction 4 — the EMITTER BODY, recorded at the real composed
+        // claim seam from the live ambient fields plus the Function being
+        // defined. ⛔ Never inferred from `identity.emission_owner()`: that is
+        // the field the owner guard below validates, so reading it here would
+        // make the population question answer itself.
+        #[cfg(test)]
+        crate::cranelift_backend::lowering::record_d8o_composed_claim_body(
+            self.defining_function_id,
+            self.defining_emission_owner,
+        );
+
+        // `D8j` verification 1 -- the identity came from the exact paired
+        // planner target.
+        //
+        // ⛔ Resolved by finding the target whose OWN pairing is this identity,
+        // then holding that target's worker provenance against the binding.
+        // Searching by body origin or by the binding's shape would be the
+        // reconstruction `D8h` forbids, and would also answer for the wrong
+        // layer wherever two layers share a body.
+        let targets = self.static_transition_plan.composed_call_targets()?;
+        #[cfg(test)]
+        let identity = match d8j_mutation() {
+            // A different EXACT identity, taken from the population -- the
+            // shape a same-symbol shortcut would produce. ⛔ Not fabricated:
+            // nothing outside planning can build one.
+            D8jMutation::SubstituteAnotherExactIdentity => targets
+                .iter()
+                .map(|target| target.call_identity().clone())
+                .find(|candidate| *candidate != identity)
+                .unwrap_or(identity),
+            _ => identity,
+        };
+        let mut paired = None;
+        for target in &targets {
+            if *target.call_identity() == identity {
+                if paired.is_some() {
+                    return Err(unsupported(
+                        "ContinuationDischarge",
+                        "two composed-call targets carry one causal identity, so a discharge \
+                         cannot say which coordinate it answers for",
+                    ));
+                }
+                paired = Some(target);
+            }
+        }
+        let paired = paired.ok_or_else(|| {
+            unsupported(
+                "ContinuationDischarge",
+                "a composed discharge presents a causal identity no composed-call target is \
+                 paired with, so the authority did not come from the planner target this \
+                 consumption is standing in for",
+            )
+        })?;
+        let declared_operands = paired
+            .worker()
+            .captures()
+            .len()
+            .checked_add(paired.worker().declared_arity() as usize)
+            .ok_or_else(|| {
+                unsupported("ContinuationDischarge", "declared operand run exceeds range")
+            })?;
+        if paired.worker().body_origin() != worker.body_origin
+            || paired.worker().declared_arity() != worker.declared_arity
+            || paired.worker().captures().len() != worker.captures.len()
+        {
+            return Err(unsupported(
+                "ContinuationDischarge",
+                format!(
+                    "a composed discharge's paired target names worker body {:?} with arity {} \
+                     and {} captures, but the binding being consumed names {:?} with arity {} \
+                     and {} captures; the authority and the callee come from different targets",
+                    paired.worker().body_origin(),
+                    paired.worker().declared_arity(),
+                    paired.worker().captures().len(),
+                    worker.body_origin,
+                    worker.declared_arity,
+                    worker.captures.len()
+                ),
+            ));
+        }
+
+        // `D8j` verification 2 -- the CLAIMING function is the identity's own
+        // emission owner.
+        //
+        // ⛔ Independent of `D8i`'s construction-time guard, and deliberately
+        // re-derived: that one asked whether the binding could be BUILT here,
+        // this asks whether this function may ANSWER with it. A binding can
+        // legitimately be constructed in one pass and, were it ever to travel,
+        // consumed in another.
+        #[cfg(test)]
+        let claiming = match d8j_mutation() {
+            D8jMutation::WrongClaimingOwner => None,
+            _ => self.defining_emission_owner,
+        };
+        #[cfg(not(test))]
+        let claiming = self.defining_emission_owner;
+        if claiming != Some(identity.emission_owner()) {
+            return Err(unsupported(
+                "ContinuationDischarge",
+                format!(
+                    "a composed discharge claims a causal call owned by {:?}, but the function \
+                     making the claim is {claiming:?}; only the emitting owner may answer for \
+                     its own causal call",
+                    identity.emission_owner()
+                ),
+            ));
+        }
+
+        // Recorded for the finished CLIF. ⛔ Suppressible under test so that
+        // "the call was emitted and nothing was discharged" is a state the row
+        // can distinguish from a correct run.
+        #[cfg(test)]
+        if d8j_mutation() == D8jMutation::SuppressDischargeAfterRealCall {
+            return Ok(());
+        }
+        let inst = emission.inst;
+        self.function_local
+            .pending_composed_discharges
+            .push(PendingComposedDischarge {
+                identity,
+                inst,
+                worker_body_origin: worker.body_origin,
+                declared_operands,
+                supplied_operands: emission.supplied_operands,
+                result: match result {
+                    LoweringOperand::Carried(word) => Some(word.word),
+                    LoweringOperand::Specialized(_) => None,
+                },
+                source_control: (source_control_before, self.live_source_continuations),
+            });
+        Ok(())
+    }
+
     fn call_declared_recursive_position_unit(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         body_origin: StaticOriginId,
         inputs: &[LoweringOperand],
+        coordinates: Option<CarriedInvocationCoordinates>,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
-        let result = self.call_declared_unit(
-            builder,
-            body_origin,
-            inputs,
-            #[cfg(test)]
-            None,
-        )?;
+        // `RT-DECL-CLOSURE-PORT` `D5a` checkpoint 4 step 1 — THE CARRIED
+        // INVOCATION BINDING.
+        //
+        // The binding is resolved from the invocation's retained source
+        // coordinates through planner authority. ⛔ Lowering supplies only the
+        // coordinates it already holds; it does not reconstruct the binding
+        // from `body_origin`, from the callee's ABI shape, from the existence
+        // of a context, or by taking a first match — the planner rejects an
+        // ambiguous resolution rather than choosing.
+        // `D5a` checkpoint 4 step 3 -- perturb the RETAINED SOURCE COORDINATES
+        // the invocation presents, so the lookup is asked for a coordinate the
+        // planner never issued. ⛔ The lookup is untouched: what moves is the
+        // key, which is the thing the ruling says the binding must be resolved
+        // by.
+        #[cfg(test)]
+        let coordinates = coordinates.map(|mut coordinates| {
+            if d5a_route_mutation() == D5aRouteMutation::PerturbCarriedInvocationCoordinates {
+                record_d5a_route_application();
+                coordinates.recursive_position = coordinates.recursive_position.wrapping_add(1);
+            }
+            coordinates
+        });
+        let context = match coordinates {
+            Some(coordinates) => self.static_transition_plan.carried_invocation_context(
+                coordinates.continuation_origin,
+                coordinates.recursive_position,
+                body_origin,
+            )?,
+            None => None,
+        };
+        // ⛔ FAIL CLOSED, over BOTH ways of arriving at "no context".
+        //
+        // A site that cannot supply the coordinates cannot be *asked* whether
+        // it should retarget; a site whose coordinates resolve to nothing was
+        // asked and got no answer. Either way, emitting the raw call is a miss
+        // that looks exactly like a lawful ordinary call. It is only safe when
+        // no context exists for this body at all.
+        //
+        // ⭐⭐ The second half is new. This test used to guard the missing-
+        // coordinates arm ALONE, so perturbed-but-present coordinates fell
+        // straight through to the raw target. On this witness that still
+        // refused — but only incidentally, because the superseded body has no
+        // `Function` left to call. Had it remained executable, the retarget
+        // would have been dropped in silence. ⇒ The guard belongs to the
+        // outcome, not to one of the two routes into it.
+        if context.is_none()
+            && self
+                .static_transition_plan
+                .continuation_contexts()?
+                .iter()
+                .any(|context| context.worker_body_origin() == body_origin)
+        {
+            return Err(unsupported(
+                "ContinuationSpecialization",
+                format!(
+                    "a carried recursive-position invocation of body {body_origin:?} resolved no \
+                     generated execution context, and that body has one; emitting the raw target \
+                     here would drop the retarget silently rather than refuse it. Retained source \
+                     coordinates presented: {:?}",
+                    coordinates.map(|c| (c.continuation_origin, c.recursive_position)),
+                ),
+            ));
+        }
+        #[cfg(test)]
+        d5a_trace(format!(
+            "  CARRIED-INVOCATION body={body_origin:?} coords={:?} -> {}",
+            coordinates.map(|c| (c.continuation_origin, c.recursive_position)),
+            match context {
+                Some(context) => format!("context {context:?}"),
+                None => "raw target".to_string(),
+            }
+        ));
+        let result = match context {
+            Some(context) => self.call_declared_context(builder, context, body_origin, inputs)?,
+            None => self.call_declared_unit(
+                builder,
+                body_origin,
+                inputs,
+                #[cfg(test)]
+                None,
+            )?,
+        };
         #[cfg(test)]
         RECURSIVE_POSITION_UNIT_CALLS.with(|calls| calls.set(calls.get() + 1));
         Ok(result)
+    }
+
+    /// Emit the one exact retargeted callee for a carried invocation.
+    ///
+    /// ⭐ Only the **callee** moves. The call is the same already-planned
+    /// emitted call, at the same site, with the same operand prefix and the
+    /// same causal ancestry; its source edge, its predecessor and its
+    /// provenance are untouched. That is what makes this a retarget rather than
+    /// a deletion.
+    fn call_declared_context(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        context: ContinuationContextId,
+        body_origin: StaticOriginId,
+        inputs: &[LoweringOperand],
+    ) -> Result<LoweringOperand, CraneliftBackendError> {
+        let target = self
+            .function_local
+            .context_calls
+            .get(&context)
+            .cloned()
+            .ok_or_else(|| {
+                unsupported(
+                    "ContinuationSpecialization",
+                    format!(
+                        "the generated execution context bound to body {body_origin:?} was not                          declared into this function"
+                    ),
+                )
+            })?;
+        // `D5a` checkpoint 4 step 1b — THE EXACT CAPTURE SUFFIX.
+        //
+        // The context declares a frame of `parameters + captures`; the carried
+        // invocation supplies the parameter run, so retargeting its callee
+        // without appending the captures is a call that does not match the
+        // frame it now names. ⛔ Appended in the context's DECLARED ORDER, and
+        // taken only from the immediate slots the planner assigned -- nothing
+        // is reconstructed from the raw worker, chosen by shape, or routed
+        // through a runtime transport.
+        let view = self
+            .static_transition_plan
+            .continuation_contexts()?
+            .into_iter()
+            .find(|candidate| candidate.id() == context)
+            .ok_or_else(|| {
+                unsupported(
+                    "ContinuationSpecialization",
+                    "the bound generated context has no projected view",
+                )
+            })?;
+        let defining_owner = self.defining_emission_owner.ok_or_else(|| {
+            unsupported(
+                "ContinuationSpecialization",
+                "a carried invocation retarget was reached with no emission owner bound for the                  context currently being defined",
+            )
+        })?;
+        let mut inputs = inputs.to_vec();
+        for capture in view.captures()? {
+            // `RT-CONTSRC-PRODUCER-LOCAL` `D1` — present a producer-local
+            // coordinate to this seam, so its refusal is measured rather than
+            // merely written. ⛔ Applied BEFORE the domain match, because the
+            // question is what the match does with a domain it cannot locate.
+            #[cfg(test)]
+            let capture = {
+                let mut capture = capture;
+                if d5a_route_mutation() == D5aRouteMutation::PresentProducerLocalCoordinate {
+                    record_d5a_route_application();
+                    capture.coordinate = ContinuationSourceCoordinate::producer_local_probe();
+                }
+                capture
+            };
+            // `RT-CONTSRC-PRODUCER-LOCAL` `D1` `D3` consumer 3 of 3, context
+            // half. ⛔ Exhaustive over the coordinate domains with no default,
+            // for the same reason as the specialization seam: this reads an ABI
+            // operand run, which a producer-local value is not in.
+            // `RT-CONTSRC-PRODUCER-LOCAL` `D3b` — the same pairing resolver as
+            // the emission seam, told what THIS seam is holding.
+            //
+            // ⛔ `ContinuationImmediateSeat::AbiOperandRun` is not a weaker
+            // `Emission`: this seam holds an ABI operand run and no semantic
+            // environment at all, so a current-lexical nearest-alias index has
+            // nothing here to index and is refused rather than read as an ABI
+            // position. The generated-context capture arm IS resolvable here,
+            // because a capture slot is a position in exactly this run.
+            let immediate_slot = self.resolve_context_capture_claim(
+                capture.coordinate,
+                capture.availability,
+                defining_owner,
+            )?;
+            // `RT-CONTSRC-PRODUCER-LOCAL` `D2b` — the availability domain, matched
+            // exhaustively with no wildcard exactly as the coordinate domain is
+            // above. `D3` teaches this seam the two producer-local arms; until
+            // then it must not index `defining_abi_operands` — an ABI operand run
+            // — with a lexical environment index.
+            let operand = self
+                .function_local
+                .defining_abi_operands
+                .get(immediate_slot as usize)
+                .ok_or_else(|| {
+                    unsupported(
+                        "ContinuationSpecialization",
+                        format!(
+                            "a generated context capture names immediate slot {} outside the                              emitting function's {} ABI operands; note this is the IMMEDIATE                              slot, whose meaning is fixed by the availability domain {:?}",
+                            immediate_slot,
+                            self.function_local.defining_abi_operands.len(),
+                            capture.availability,
+                        ),
+                    )
+                })?
+                .clone();
+            inputs.push(operand);
+        }
+        self.call_declared_unit_target(
+            builder,
+            target,
+            &inputs,
+            #[cfg(test)]
+            None,
+        )
+        .map(|(operand, _inst)| operand)
     }
 
     /// Resolve the declared body unit of a callable recursive position in the
@@ -7169,7 +11536,18 @@ impl<'a> Lowering<'a> {
         eliminator: ComputationalEliminatorFrame<'_>,
         remaining_eliminators: &[EliminatorFrame<'_>],
     ) -> Result<LoweringOperand, CraneliftBackendError> {
+        #[cfg(test)]
+        record_d6a_route_event(D6aRouteEvent::CarriedEliminationEntered {
+            static_origin: eliminator.static_origin,
+            route: eliminator.answer_route,
+            cases: eliminator.cases.len(),
+        });
         if eliminator.cases.is_empty() {
+            #[cfg(test)]
+            record_d6a_route_event(D6aRouteEvent::CarriedDefaultSealed {
+                static_origin: eliminator.static_origin,
+                route: eliminator.answer_route,
+            });
             return Ok(LoweringOperand::Specialized(Lowered::Trap(
                 eliminator.default.clone(),
             )));
@@ -7406,12 +11784,132 @@ impl<'a> Lowering<'a> {
             builder.switch_to_block(next);
         }
 
-        let defaulted = LoweringOperand::Specialized(Lowered::Trap(eliminator.default.clone()));
-        if !self.seal_source_trap_branch(builder, &defaulted)? {
-            return Err(unsupported(
-                "ComputationalMatch",
-                "the carried computational match's closed default did not seal its branch",
-            ));
+        // ── ⭐⭐ `RT-DECL-CLOSURE-PORT` `D6a` — THE CHECKED-ANSWER FALLBACK ──
+        //
+        // Reached only after **every** ordinary case's exact planner-issued tag
+        // has been compared and missed. ⛔ That ordering is the mechanism, not a
+        // convenience: an ordinary carried `ITree` constructor still takes its
+        // own case, and this arm can never shadow one.
+        //
+        // The checked recursive worker returns the checked *answer*
+        // (`Result::Ok` on the governed witness), which the **specialized** arm
+        // sends to the unique guarded `ITree::Ret` continuation. The carried arm
+        // used to ask instead whether that answer was literally an `ITree`
+        // constructor — it is not — and seal the closed default. This restores
+        // the same guarded route on the same fact.
+        //
+        // ⛔ **No phase forgery.** The carried word is fed to the return case's
+        // one retained argument **as itself**: nothing is decoded, converted to
+        // `Lowered`, recovered as a template, or selected at runtime, and no
+        // constructor is matched by name. The guard is a compile-time property
+        // of the case *topology*, identical to the specialized arm's, and the
+        // word never participates in it.
+        let checked_answer_fallback = eliminator.answer_route
+            == SourceComputationalAnswerRoute::CheckedSelectedRecursor
+            && px8tr_deforested_answer_route_enabled();
+        let return_case = if checked_answer_fallback {
+            // The strict existing topology, re-derived here exactly as the
+            // specialized arm derives it: one `Ret` case with one binder, one
+            // `Vis` case, two cases total, and no checked control markers in the
+            // return body.
+            let mut returns = eliminator.cases.iter().enumerate().filter(|(_, case)| {
+                case.argument_binders == 1 && case.constructor.ends_with("::ITree::Ret")
+            });
+            let return_case = returns.next();
+            let exact_return = returns.next().is_none();
+            let mut visible = eliminator
+                .cases
+                .iter()
+                .filter(|case| case.constructor.ends_with("::ITree::Vis"));
+            let exact_visible =
+                visible.next().is_some() && visible.next().is_none() && eliminator.cases.len() == 2;
+            return_case.filter(|(_, return_case)| {
+                exact_return
+                    && exact_visible
+                    && source_case_has_no_checked_control_markers(&return_case.body)
+            })
+        } else {
+            None
+        };
+
+        if let Some((return_index, return_case)) = return_case {
+            // ⭐ The EMISSION discriminator for this branch.
+            //
+            // ⚠ Deliberately not `DeforestedAnswerResumed`. That event is
+            // recorded while lowering the **specialized** branch and is
+            // therefore compile-time evidence about a choice the emitted CFG
+            // makes elsewhere — it cannot testify that a *carried* runtime word
+            // took this route, and reusing it here would make a compile-time
+            // fact read as a runtime one. This says only what it knows: the
+            // carried route was emitted, for this frame, into this return case.
+            // The runtime half is the linked artifact's exit status.
+            #[cfg(test)]
+            px8tr_record_trap_provenance(Px8trTrapProvenanceEvent::CarriedAnswerRouteEmitted {
+                checked_frame_id: eliminator
+                    .checked_frame_id
+                    .expect("checked answer routes carry exact frame ids"),
+                return_constructor: return_case.constructor.clone(),
+            });
+            #[cfg(test)]
+            record_d6a_route_event(D6aRouteEvent::CarriedFallbackEmitted {
+                static_origin: eliminator.static_origin,
+            });
+            // The one retained argument is the SAME carried word. ⛔ Not a
+            // projected field of it: the checked answer is the value the return
+            // case binds, and projecting would ask the carrier for structure
+            // this route never claimed it has.
+            let mut case_env =
+                vec![LoweringEnvironmentBinding::Value(LoweringOperand::Carried(scrutinee))];
+            case_env.extend(eliminator.env.to_vec());
+            let body =
+                self.case_body_occurrence(eliminator.static_origin, return_index, &return_case.body)?;
+            let body_origin = body.static_origin;
+            // ⭐ Lowered through the ORDINARY continuation of this eliminator,
+            // exactly as a non-recursive case body beside it is. The eliminated
+            // value returns to `SourceContinuation::ComputationalMatchScrutinee`,
+            // which resumes the original source control — so the source
+            // continuation after the return case is observed, and a helper that
+            // returned an isolated value could not stand in for it.
+            let lowered = if remaining_eliminators.is_empty() {
+                self.lower_expr(builder, body, &case_env)?
+            } else {
+                self.lower_computational_producer_expr(
+                    builder,
+                    body,
+                    &case_env,
+                    remaining_eliminators,
+                )?
+            };
+            if !matches!(
+                lowered,
+                LoweringOperand::Specialized(Lowered::RecursiveBackedge)
+            ) {
+                let word = self.carried_join_arm(
+                    builder,
+                    body_origin,
+                    lowered,
+                    None,
+                    "a carried checked-answer arm",
+                )?;
+                builder.ins().jump(merge, &[word.word.into()]);
+            }
+        } else {
+            // ⛔ Every other way of arriving here keeps the existing closed
+            // default, unchanged: `DirectScrutinee`, a disabled fallback,
+            // malformed or ambiguous return topology, and every unmatched
+            // ordinary carried scrutinee.
+            #[cfg(test)]
+            record_d6a_route_event(D6aRouteEvent::CarriedDefaultSealed {
+                static_origin: eliminator.static_origin,
+                route: eliminator.answer_route,
+            });
+            let defaulted = LoweringOperand::Specialized(Lowered::Trap(eliminator.default.clone()));
+            if !self.seal_source_trap_branch(builder, &defaulted)? {
+                return Err(unsupported(
+                    "ComputationalMatch",
+                    "the carried computational match's closed default did not seal its branch",
+                ));
+            }
         }
 
         builder.switch_to_block(merge);
@@ -7539,8 +12037,13 @@ impl<'a> Lowering<'a> {
                 body,
                 ..
             } => {
-                self.enter_checked_computational_ih_invocation(*call_template_id)?;
+                // `D8f` — same derivation, same reason.
                 let body = self.child_occurrence(static_origin, 0, body)?;
+                self.enter_checked_computational_ih_invocation(
+                    *call_template_id,
+                    body.expr,
+                    body.static_origin,
+                )?;
                 let value = self.lower_expr(builder, body, env)?;
                 self.finish_checked_computational_ih_marker(value)
             }
@@ -7558,6 +12061,18 @@ impl<'a> Lowering<'a> {
             RuntimeExpr::Let { value, body } => {
                 let value = self.child_occurrence(static_origin, 0, value)?;
                 let bound = self.lower_binder(builder, value, env)?;
+                // `RT-CONTSRC-PRODUCER-LOCAL` `D4a` — the binder-creation seat.
+                // ⭐ The observatory's independent half: the operand and the
+                // occurrence that creates it are both in hand HERE, with no
+                // environment index involved. Test-only; production is
+                // unchanged.
+                #[cfg(test)]
+                if crate::cranelift_backend::lowering::d4a_armed() {
+                    crate::cranelift_backend::lowering::d4a_record_created(
+                        value.static_origin,
+                        crate::cranelift_backend::lowering::d4a_describe_binding(Some(&bound)),
+                    );
+                }
                 // The two short-circuits below are value-shaped, so they read
                 // through the binding rather than around it. A static worker
                 // binding is neither a backedge nor a trap, so it falls
@@ -7713,6 +12228,12 @@ impl<'a> Lowering<'a> {
                         self.static_transition_plan
                             .constructor_symbol_identity(static_origin)?,
                     ),
+                    // `D7` -- the allocation lane is the second fact resolved
+                    // at the producer and carried with the template.
+                    occurrence: Some(self.static_transition_plan.source_aggregate_occurrence(
+                        static_origin,
+                        PlannedAggregateShape::Constructor,
+                    )?),
                     args: specialized_operands_at(&lowered_args, "a constructor argument")?,
                 }))
             }
@@ -7993,16 +12514,37 @@ impl<'a> Lowering<'a> {
                     .enumerate()
                     .map(|(position, (name, expr))| {
                         let expr = self.child_occurrence(static_origin, position, expr)?;
-                        Ok((name.clone(), self.lower_expr(builder, expr, env)?))
+                        Ok((position, name.clone(), self.lower_expr(builder, expr, env)?))
                     })
                     .collect::<Result<Vec<_>, CraneliftBackendError>>()?;
                 let lowered_fields = lowered_fields
                     .into_iter()
-                    .map(|(name, value)| {
-                        Ok((name, value.specialized_at("a record field's value")?))
+                    .map(|(position, name, value)| {
+                        Ok(LoweredRecordField {
+                            name,
+                            // ⭐ `D7` — the field SCHEMA is resolved at the
+                            // producer, beside the ownership record, and for the
+                            // same reason: a record forwarded through a `Var` or
+                            // handed to a call arrives where the plan cannot
+                            // lawfully be re-queried for it. ⛔ The `name` above
+                            // is the compile-time spelling and is never the key.
+                            identity: Some(
+                                self.static_transition_plan
+                                    .record_field_identity(static_origin, position)?,
+                            ),
+                            value: value.specialized_at("a record field's value")?,
+                        })
                     })
                     .collect::<Result<Vec<_>, CraneliftBackendError>>()?;
                 Ok(LoweringOperand::Specialized(Lowered::Record {
+                    // ⭐ `D7` — resolved AT THE PRODUCER and carried with the
+                    // template, exactly as the `Construct` arms resolve theirs.
+                    // This is the one place a source record's ownership record
+                    // may be looked up: everywhere downstream is a use.
+                    occurrence: Some(self.static_transition_plan.source_aggregate_occurrence(
+                        static_origin,
+                        PlannedAggregateShape::Record,
+                    )?),
                     fields: lowered_fields,
                 }))
             }
@@ -8039,7 +12581,7 @@ impl<'a> Lowering<'a> {
                     }
                     // ── the pre-existing SPECIALIZED route, unchanged ──────
                     LoweringOperand::Specialized(lowered) => {
-                        let Lowered::Record { fields } = lowered else {
+                        let Lowered::Record { fields, .. } = lowered else {
                             return Err(unsupported(
                                 "Project",
                                 "record projection needs a record value",
@@ -8047,7 +12589,7 @@ impl<'a> Lowering<'a> {
                         };
                         fields
                             .into_iter()
-                            .find_map(|(name, value)| (name == *field).then_some(value))
+                            .find_map(|held| (held.name == *field).then_some(held.value))
                             .map(LoweringOperand::Specialized)
                             .ok_or_else(|| unsupported("Project", format!("missing field {field}")))
                     }
@@ -8067,7 +12609,13 @@ impl<'a> Lowering<'a> {
                 let body = self.child_occurrence(static_origin, 0, body)?;
                 let lowered_captures = captures
                     .iter()
-                    .map(|symbol| self.lower_seed_capture(builder, symbol))
+                    .map(|symbol| {
+                        // Seed captures are resolved to JIT-time ground values,
+                        // so this arm asserts the phase; there is no carried
+                        // seed capture for it to lose.
+                        self.lower_seed_capture(builder, symbol)
+                            .map(LoweringOperand::Specialized)
+                    })
                     .collect::<Result<Vec<_>, _>>()?;
                 Ok(LoweringOperand::Specialized(Lowered::Closure {
                     captures: lowered_captures,
@@ -8096,8 +12644,44 @@ impl<'a> Lowering<'a> {
                         self.lower_expr(builder, capture, env)
                     })
                     .collect::<Result<Vec<_>, _>>()?;
+                // ⭐⭐ **`D7` — THE closure-capture cell, and the seat the
+                // framed reaching row stops at.**
+                //
+                // A lexical capture reaches this closure at its own phase, and a
+                // capture that arrived through a declared ABI slot is `Carried`.
+                // The former `specialized_operands_at` fold demanded a
+                // compile-time template for every one of them, so a lawfully
+                // mixed environment had no representation at all and refused
+                // here — even when, as measured, the enclosing aggregate stays a
+                // specialized template and nothing ever crosses a boundary.
+                //
+                // ⛔ Storing the operands unchanged does not make the capsule
+                // transferable. `boundary_transfer_admissibility` still refuses
+                // the outer closure **before** descending into these captures,
+                // so a carried capture cannot become a way to reach the carrier
+                // through a callable that is itself refused.
+                //
+                // ⭐ The gate runs on the MIXED case only, and the scoping is
+                // deliberate. An all-specialized lexical closure is the
+                // pre-existing shape and does not require a planner-issued
+                // worker template to exist at all; demanding one would reject
+                // programs this node never touched. A carried capture is what
+                // creates the obligation, because it is what commits the callee
+                // to loading an exact activation-frame slot.
+                if captures
+                    .iter()
+                    .any(|capture| matches!(capture, LoweringOperand::Carried(_)))
+                {
+                    self.validate_retained_callable_capture_contract(
+                        static_origin,
+                        body.static_origin,
+                        AbiCaptureProvenance::Lexical,
+                        params.len(),
+                        &captures,
+                    )?;
+                }
                 Ok(LoweringOperand::Specialized(Lowered::Closure {
-                    captures: specialized_operands_at(&captures, "a closure capture")?,
+                    captures,
                     params: params.clone(),
                     body: body.static_origin,
                 }))
@@ -8132,6 +12716,20 @@ impl<'a> Lowering<'a> {
                         env.get(*index as usize)
                     {
                         let worker = worker.clone();
+                        // **`D5a` — the checked-IH marker is consumed HERE, on
+                        // the application, before a single instruction of it is
+                        // emitted.** Every identity is cross-checked against the
+                        // checked plan first; a refusal leaves the marker
+                        // pending so closeout still fails closed.
+                        // `D8f` — the occurrence of THIS call, so a marker is
+                        // consumed only by the application the plan issued it
+                        // for. An ordinary selected-argument call reaching this
+                        // seat with a marker pending leaves it pending.
+                        self.consume_checked_ih_marker_at_static_worker_call(
+                            u64::from(*index),
+                            args.len(),
+                            static_origin,
+                        )?;
                         return self.call_static_worker(
                             builder,
                             &worker,
@@ -8161,6 +12759,16 @@ impl<'a> Lowering<'a> {
                                 ),
                             ));
                         }
+                        // ⭐ **Each input crosses the boundary at ITS OWN
+                        // caller-side occurrence.** The exact origins are
+                        // already issued two lines up — `child_occurrence` for
+                        // every argument and every capture — and the
+                        // predecessor threw them away, leaving
+                        // `call_declared_unit_target` to transfer whatever
+                        // arrived specialized at `target.origin`, the callee's
+                        // scheduling entry. Nothing new is derived here and no
+                        // body is searched; the answer the planner already gave
+                        // is simply carried through to the transfer.
                         let mut inputs = args
                             .iter()
                             .enumerate()
@@ -8170,7 +12778,8 @@ impl<'a> Lowering<'a> {
                                     1 + position,
                                     argument,
                                 )?;
-                                self.lower_expr(builder, argument, env)
+                                let lowered = self.lower_expr(builder, argument, env)?;
+                                self.carry_call_input(builder, argument.static_origin, lowered)
                             })
                             .collect::<Result<Vec<_>, _>>()?;
                         let closure_origin = callee.static_origin;
@@ -8184,7 +12793,8 @@ impl<'a> Lowering<'a> {
                                         1 + position,
                                         capture,
                                     )?;
-                                    self.lower_expr(builder, capture, env)
+                                    let lowered = self.lower_expr(builder, capture, env)?;
+                                    self.carry_call_input(builder, capture.static_origin, lowered)
                                 })
                                 .collect::<Result<Vec<_>, _>>()?,
                         );
@@ -8203,22 +12813,46 @@ impl<'a> Lowering<'a> {
                 let lowered_callee = self.lower_expr(builder, callee, env)?;
                 match lowered_callee {
                     LoweringOperand::Specialized(Lowered::DeclarationClosure {
+                        reference,
                         symbol,
                         captures,
                         params,
                         body,
-                    }) => self.lower_recursive_declaration_call(
-                        builder,
-                        &symbol,
-                        &captures,
-                        &params,
-                        self.retained_body_occurrence(body)?,
-                        args,
-                        static_origin,
-                        env,
-                        None,
-                        join_plan,
-                    ),
+                    }) => {
+                        // `RT-DECL-CLOSURE-PORT` `D4`, consumer 1 of 3 -- the
+                        // ordinary lowering route.
+                        if self.body_emission_authority
+                            == BodyEmissionAuthority::FunctionizedUnits
+                        {
+                            let args = args
+                                .iter()
+                                .enumerate()
+                                .map(|(position, argument)| {
+                                    let argument = self.child_occurrence(
+                                        static_origin,
+                                        1 + position,
+                                        argument,
+                                    )?;
+                                    self.lower_expr(builder, argument, env)
+                                })
+                                .collect::<Result<Vec<_>, _>>()?;
+                            return self.call_declaration_closure_unit(
+                                builder, reference, &symbol, &params, captures, args,
+                            );
+                        }
+                        self.lower_recursive_declaration_call(
+                            builder,
+                            &symbol,
+                            &captures,
+                            &params,
+                            self.retained_body_occurrence(body)?,
+                            args,
+                            static_origin,
+                            env,
+                            None,
+                            join_plan,
+                        )
+                    }
                     LoweringOperand::Specialized(Lowered::Closure {
                         captures,
                         params,
@@ -8266,7 +12900,7 @@ impl<'a> Lowering<'a> {
                         // exactly its arguments and captures, so the
                         // environment role is the bare installation with no
                         // enclosing spine behind it.
-                        call_inputs.extend(captures.into_iter().map(LoweringOperand::Specialized));
+                        call_inputs.extend(captures);
                         match self.body_emission_authority {
                             BodyEmissionAuthority::RecursiveDescent => {
                                 let call_env = bound_values(call_inputs);
@@ -8296,6 +12930,13 @@ impl<'a> Lowering<'a> {
                             "recursor closure carries an invocation segment",
                         );
                         let recursive_unit_body = invocation.recursive_unit_body;
+                        // `D5a` checkpoint 4 step 1 — read the retained source
+                        // coordinates BEFORE the segment is installed, beside the
+                        // existing pre-move field read. Both are facts of the
+                        // invocation, so both are taken while it is still in hand
+                        // rather than reconstructed afterwards.
+                        let carried_coordinates =
+                            CarriedInvocationCoordinates::of(&invocation)?;
                         if !recursor_invocation_is_checked(&invocation) {
                             validate_recursor_invocation_segment(&invocation)?;
                         }
@@ -8333,16 +12974,18 @@ impl<'a> Lowering<'a> {
                                     })
                                     .collect::<Result<Vec<_>, _>>()?;
                                 self.enter_oriented_semantic_region(installed.checked);
+                                let coordinates = carried_coordinates;
                                 let result = self
                                     .call_declared_recursive_position_unit(
                                         builder,
                                         body,
                                         &inputs,
+                                        Some(coordinates),
                                     )
                                     .and_then(|value| {
                                         self.lower_computational_match_value_composed(
                                             builder,
-                                            value,
+                                            RoutedAnswer::direct(value),
                                             &frames,
                                         )
                                     });
@@ -8353,7 +12996,7 @@ impl<'a> Lowering<'a> {
                             self.enter_oriented_semantic_region(installed.checked);
                             let result = self.lower_computational_match_value_composed(
                                 builder,
-                                LoweringOperand::Carried(word),
+                                RoutedAnswer::direct(LoweringOperand::Carried(word)),
                                 &frames,
                             );
                             self.leave_oriented_semantic_region(installed.checked);
@@ -8410,22 +13053,24 @@ impl<'a> Lowering<'a> {
                         }
                         // Two roles, as above: ordered unit-call inputs, or an
                         // environment prefix. Only the second is bound.
-                        call_inputs.extend(captures.into_iter().map(LoweringOperand::Specialized));
+                        call_inputs.extend(captures);
                         if matches!(
                             self.body_emission_authority,
                             BodyEmissionAuthority::FunctionizedUnits
                         ) {
                             self.enter_oriented_semantic_region(installed.checked);
+                            let coordinates = carried_coordinates;
                             let result = self
                                 .call_declared_recursive_position_unit(
                                     builder,
                                     body,
                                     &call_inputs,
+                                    Some(coordinates),
                                 )
                                 .and_then(|value| {
                                     self.lower_computational_match_value_composed(
                                         builder,
-                                        value,
+                                        RoutedAnswer::direct(value),
                                         &frames,
                                     )
                                 });
@@ -8539,14 +13184,89 @@ impl<'a> Lowering<'a> {
                 self.lower_expr(builder, argument, env)
             })
             .collect::<Result<Vec<_>, _>>()?;
-        // BufferFreeze has two ruled phase-bearing resource seats. Every other
-        // host operation remains specialized-only and crosses the typed phase
-        // boundary only after the checked operation is known.
-        let specialized_lowered = if operation == ken_host::HostOpV1::BufferFreeze {
-            None
-        } else {
-            Some(specialized_operands_at(&lowered, "a host-effect operand")?)
+        // ⛔ The capability is lowered HERE rather than inside the FS arm, and
+        // the reason is the claim group's window. An operand's own lowering can
+        // visit a nested effect, so every operand must be in hand before the
+        // group opens — a capability lowered inside the arm would lower while
+        // this occurrence's group was open and its nested claims would land in
+        // the wrong visit.
+        let capability_operand = match capability {
+            Some(capability) => {
+                // Present ⇒ the capability value is child 0 of this occurrence.
+                let value = self.child_occurrence(static_origin, 0, &capability.value)?;
+                Some(self.lower_expr(builder, value, env)?)
+            }
+            None => None,
         };
+        // ⭐ `D7` — ONE claim group per compiler-side visit to this occurrence,
+        // opened before any seat of it is observed and closed before dispatch.
+        // Completeness is asked of this visit alone: a ledger accumulating
+        // claims per occurrence would accept two visits that each read half the
+        // seats, and two half-reads are the defect.
+        let group = self.open_host_effect_seat_group(static_origin, operation)?;
+        #[cfg(test)]
+        let omitted = match effect_seat_visit_mutation() {
+            // Alternate which slot this visit drops, so successive visits'
+            // omissions are complementary and their union is complete.
+            EffectSeatVisitMutation::OmitComplementary => {
+                let slots = self
+                    .static_transition_plan
+                    .host_effect_seat_slots(static_origin)
+                    .into_iter()
+                    .collect::<Vec<_>>();
+                let index = effect_seat_next_visit_index();
+                slots.get(index % slots.len().max(1)).copied()
+            }
+            _ => None,
+        };
+        #[cfg(not(test))]
+        let omitted: Option<EffectSeatSlot> = None;
+        let mut claimed = BTreeMap::new();
+        let mut claim = |lowering: &mut Self,
+                         claimed: &mut BTreeMap<EffectSeatSlot, PlannedEffectSeat>,
+                         slot,
+                         operand: &LoweringOperand| {
+            if omitted == Some(slot) {
+                return Ok(());
+            }
+            let record = lowering.claim_host_effect_seat(group, static_origin, slot, operand)?;
+            claimed.insert(slot, record);
+            Ok(())
+        };
+        if let Some(operand) = &capability_operand {
+            claim(self, &mut claimed, EffectSeatSlot::Capability, operand)?;
+        }
+        for (ordinal, operand) in lowered.iter().enumerate() {
+            let ordinal = u32::try_from(ordinal).map_err(|_| {
+                unsupported("Effect", "host effect argument ordinal exceeds the seat space")
+            })?;
+            claim(self, &mut claimed, EffectSeatSlot::Argument(ordinal), operand)?;
+        }
+        #[cfg(test)]
+        if effect_seat_visit_mutation() == EffectSeatVisitMutation::DuplicateWithinVisit {
+            if let Some(operand) = lowered.first() {
+                claim(self, &mut claimed, EffectSeatSlot::Argument(0), operand)?;
+            }
+        }
+        self.close_host_effect_seat_group(group)?;
+        // ⭐ **The bulk pre-operation conversion is gone.** It crossed every
+        // operand to a specialized template BEFORE the operation was known, so a
+        // seat that could not be read that way failed as "a host-effect operand"
+        // -- naming neither the operation nor the seat, and answering for seats
+        // the arm never reads. Each arm now reads its own claimed seats.
+        let seats = ClaimedEffectSeats {
+            claimed: &claimed,
+            capability: capability_operand.as_ref(),
+            arguments: &lowered,
+        };
+        // The four ordinals any arm below reads, named once. ⛔ These are
+        // SEMANTIC ordinals: the capability offset is already applied, so
+        // `SEAT_0` is the first semantic argument whether or not the operation
+        // carries a capability.
+        const SEAT_0: EffectSeatSlot = EffectSeatSlot::Argument(0);
+        const SEAT_1: EffectSeatSlot = EffectSeatSlot::Argument(1);
+        const SEAT_2: EffectSeatSlot = EffectSeatSlot::Argument(2);
+        const SEAT_3: EffectSeatSlot = EffectSeatSlot::Argument(3);
         let pointer_type = builder.func.dfg.value_type(
             self.function_local
                 .host_dispatch_context
@@ -8590,18 +13310,13 @@ impl<'a> Lowering<'a> {
             ken_host::HostOpV1::ConsoleWrite
             | ken_host::HostOpV1::ConsoleFlush
             | ken_host::HostOpV1::ConsoleIsTerminal => {
-                let lowered = specialized_lowered
-                    .as_deref()
-                    .expect("non-BufferFreeze operands crossed the specialized boundary");
                 if capability.is_some() {
                     return Err(unsupported(
                         "Effect",
                         "ambient Console carried a capability",
                     ));
                 }
-                let stream = lowered
-                    .first()
-                    .and_then(console_stream_tag)
+                let stream = console_stream_tag(seats.specialized(SEAT_0)?)
                     .ok_or_else(|| {
                         unsupported("Effect", "Console operation has a malformed Stream operand")
                     })?;
@@ -8612,9 +13327,7 @@ impl<'a> Lowering<'a> {
                 if operation == ken_host::HostOpV1::ConsoleWrite {
                     let (data, len) = self.wire_bytes(
                         builder,
-                        lowered.get(1).ok_or_else(|| {
-                            unsupported("Effect", "Console.Write is missing Bytes")
-                        })?,
+                        seats.specialized(SEAT_1)?,
                     )?;
                     builder.ins().stack_store(data, request, request_offset(1));
                     builder.ins().stack_store(len, request, request_offset(2));
@@ -8624,44 +13337,49 @@ impl<'a> Lowering<'a> {
             | ken_host::HostOpV1::FsWriteFile
             | ken_host::HostOpV1::FsChangeMode
             | ken_host::HostOpV1::FsOpen => {
-                let lowered = specialized_lowered
-                    .as_deref()
-                    .expect("non-BufferFreeze operands crossed the specialized boundary");
-                let capability = capability
-                    .ok_or_else(|| unsupported("Effect", "FS operation has no live capability"))?;
-                // Present ⇒ the capability value is child 0 of this occurrence.
-                let capability_value =
-                    self.child_occurrence(static_origin, 0, &capability.value)?;
-                let token = match self.lower_expr(builder, capability_value, env)? {
-                    LoweringOperand::Specialized(Lowered::CapabilityToken { value }) => value,
-                    LoweringOperand::Carried(word) => self.emit_carrier_scalar(builder, word)?,
-                    _ => {
+                // Lowered and claimed above, with every other operand, so the
+                // claim group's window contains no operand lowering.
+                let (capability_record, capability_operand) =
+                    seats.operand(EffectSeatSlot::Capability)?;
+                // ⛔ Exhaustive over both phases with no wildcard. The capability
+                // is an either-phase seat: a specialized `CapabilityToken`
+                // template is read directly, a carried word through the emitted
+                // scalar read. A specialized template that is neither is the
+                // third case, and it names the seat rather than falling into a
+                // catch-all.
+                let token = match capability_operand {
+                    LoweringOperand::Specialized(Lowered::CapabilityToken { value }) => *value,
+                    LoweringOperand::Carried(word) => self.emit_carrier_scalar(builder, *word)?,
+                    LoweringOperand::Specialized(other) => {
                         return Err(unsupported(
                             "Effect",
-                            "FS capability operand is not the opaque invocation token",
+                            format!(
+                                "seat {:?} of {:?} needs {:?}, but the specialized template at \
+                                 it is a {} rather than the opaque invocation token",
+                                capability_record.slot,
+                                capability_record.operation,
+                                capability_record.need,
+                                lowered_value_kind(other)
+                            ),
                         ));
                     }
                 };
                 builder.ins().stack_store(token, request, request_offset(0));
                 let (path, path_len) = self.wire_bytes(
                     builder,
-                    lowered
-                        .first()
-                        .ok_or_else(|| unsupported("Effect", "FS operation is missing its path"))?,
+                    seats.specialized(SEAT_0)?,
                 )?;
                 builder.ins().stack_store(path, request, request_offset(1));
                 builder
                     .ins()
                     .stack_store(path_len, request, request_offset(2));
                 if operation == ken_host::HostOpV1::FsWriteFile {
-                    let policy = lowered.get(1).and_then(create_policy_tag).ok_or_else(|| {
+                    let policy = create_policy_tag(seats.specialized(SEAT_1)?).ok_or_else(|| {
                         unsupported("Effect", "FS.WriteFile has a malformed CreatePolicy")
                     })?;
                     let (bytes, bytes_len) = self.wire_bytes(
                         builder,
-                        lowered.get(2).ok_or_else(|| {
-                            unsupported("Effect", "FS.WriteFile is missing contents")
-                        })?,
+                        seats.specialized(SEAT_2)?,
                     )?;
                     let policy = builder.ins().iconst(types::I64, policy);
                     builder
@@ -8672,9 +13390,7 @@ impl<'a> Lowering<'a> {
                         .ins()
                         .stack_store(bytes_len, request, request_offset(5));
                 } else if operation == ken_host::HostOpV1::FsChangeMode {
-                    let mode = lowered.get(1).ok_or_else(|| {
-                        unsupported("Effect", "FS.ChangeMode is missing its mode")
-                    })?;
+                    let mode = seats.specialized(SEAT_1)?;
                     let (mode, valid_int) = self.narrow_native_int_u64(builder, mode)?;
                     let in_range = builder.ins().icmp_imm(
                         cranelift_codegen::ir::condcodes::IntCC::UnsignedLessThanOrEqual,
@@ -8687,31 +13403,22 @@ impl<'a> Lowering<'a> {
                     let mode = builder.ins().select(in_range, narrowed, invalid);
                     builder.ins().stack_store(mode, request, request_offset(3));
                 } else if operation == ken_host::HostOpV1::FsOpen {
-                    let mode =
-                        lowered
-                            .get(1)
-                            .and_then(resource_open_mode_tag)
-                            .ok_or_else(|| {
-                                unsupported("Effect", "FS.Open has a malformed ResourceOpenMode")
-                            })?;
+                    let mode = resource_open_mode_tag(seats.specialized(SEAT_1)?)
+                        .ok_or_else(|| {
+                            unsupported("Effect", "FS.Open has a malformed ResourceOpenMode")
+                        })?;
                     let mode = builder.ins().iconst(types::I64, mode);
                     builder.ins().stack_store(mode, request, request_offset(3));
                 }
             }
             ken_host::HostOpV1::FsHandleMetadata | ken_host::HostOpV1::ResourceRelease => {
-                let lowered = specialized_lowered
-                    .as_deref()
-                    .expect("non-BufferFreeze operands crossed the specialized boundary");
                 if capability.is_some() {
                     return Err(unsupported(
                         "Effect",
                         "resource operation carried a capability",
                     ));
                 }
-                let Lowered::ResourceToken { value: token } = lowered.first().ok_or_else(|| {
-                    unsupported("Effect", "resource operation is missing its token")
-                })?
-                else {
+                let Lowered::ResourceToken { value: token } = seats.specialized(SEAT_0)? else {
                     return Err(unsupported(
                         "Effect",
                         "resource operand is not an opaque resource token",
@@ -8722,19 +13429,52 @@ impl<'a> Lowering<'a> {
                     .stack_store(*token, request, request_offset(0));
             }
             ken_host::HostOpV1::BufferAllocate => {
-                let lowered = specialized_lowered
-                    .as_deref()
-                    .expect("non-BufferFreeze operands crossed the specialized boundary");
                 if capability.is_some() {
                     return Err(unsupported(
                         "Effect",
                         "buffer allocation carried a capability",
                     ));
                 }
-                let capacity = lowered.first().ok_or_else(|| {
-                    unsupported("Effect", "BufferAllocate is missing its capacity")
-                })?;
-                let (capacity, valid) = self.narrow_native_int_u64(builder, capacity)?;
+                // ⭐ **The one seat whose `Avail` admits BOTH phases and now
+                // has a route for each.** The claim is consumed here and the
+                // observed phase selects the decoder, so the dispatch is bound
+                // to the exact operand this arm reads rather than to a
+                // conversion performed on its behalf.
+                //
+                // ⛔ Exhaustive, no wildcard. Both arms return `(u64, valid)`
+                // and feed the SAME `InvalidBounds` lane below, so a capacity
+                // that does not fit is one outcome regardless of how it
+                // arrived — which is the point: the phase is a fact about how
+                // the value reached the seat, never about what the program
+                // means.
+                // ⛔ The mutation deletes the CARRIED arm, leaving the
+                // specialized read the whole route -- the exact state that
+                // produced the `264 -> 262 / position 1` refusal the frame
+                // names.
+                #[cfg(test)]
+                let carried_arm_removed = effect_seat_dispatch_mutation()
+                    == EffectSeatDispatchMutation::RemoveCarriedCapacityArm;
+                #[cfg(not(test))]
+                let carried_arm_removed = false;
+                let (_, capacity_operand) = seats.operand(SEAT_0)?;
+                let (capacity, valid) = if carried_arm_removed {
+                    let capacity = seats.specialized(SEAT_0)?.clone();
+                    Self::record_capacity_phase_dispatch(false);
+                    self.narrow_native_int_u64(builder, &capacity)?
+                } else {
+                    match capacity_operand {
+                        LoweringOperand::Specialized(lowered) => {
+                            let lowered = lowered.clone();
+                            Self::record_capacity_phase_dispatch(false);
+                            self.narrow_native_int_u64(builder, &lowered)?
+                        }
+                        LoweringOperand::Carried(word) => {
+                            let word = *word;
+                            Self::record_capacity_phase_dispatch(true);
+                            self.narrow_carried_int_u64(builder, word)?
+                        }
+                    }
+                };
                 let invalid = builder.ins().icmp_imm(
                     cranelift_codegen::ir::condcodes::IntCC::Equal,
                     valid,
@@ -8751,25 +13491,11 @@ impl<'a> Lowering<'a> {
                 }
                 let token = self.lower_buffer_freeze_resource_seat(
                     builder,
-                    lowered.first().ok_or_else(|| {
-                        unsupported("Effect", "BufferFreeze is missing its buffer")
-                    })?,
+                    seats.operand(SEAT_0)?.1,
                     "buffer",
                 )?;
-                let start = lowered
-                    .get(1)
-                    .ok_or_else(|| unsupported("Effect", "BufferFreeze is missing its start"))?;
-                let length = lowered
-                    .get(2)
-                    .ok_or_else(|| unsupported("Effect", "BufferFreeze is missing its length"))?;
-                let (LoweringOperand::Specialized(start), LoweringOperand::Specialized(length)) =
-                    (start, length)
-                else {
-                    return Err(unsupported(
-                        "Effect",
-                        "BufferFreeze start and length must remain specialized Int operands",
-                    ));
-                };
+                let start = seats.specialized(SEAT_1)?;
+                let length = seats.specialized(SEAT_2)?;
                 let (start, start_valid) = self.narrow_native_int_u64(builder, start)?;
                 let (length, length_valid) = self.narrow_native_int_u64(builder, length)?;
                 let valid = builder.ins().band(start_valid, length_valid);
@@ -8782,9 +13508,7 @@ impl<'a> Lowering<'a> {
                 // PX8-SPAN-PROV: trailing `span_origin` acquisition token.
                 let span_origin = self.lower_buffer_freeze_resource_seat(
                     builder,
-                    lowered.get(3).ok_or_else(|| {
-                        unsupported("Effect", "BufferFreeze is missing its span origin")
-                    })?,
+                    seats.operand(SEAT_3)?.1,
                     "span origin",
                 )?;
                 for (index, value) in [token, start, length, span_origin].into_iter().enumerate() {
@@ -8794,9 +13518,6 @@ impl<'a> Lowering<'a> {
                 }
             }
             ken_host::HostOpV1::FsReadAt | ken_host::HostOpV1::FsWriteAt => {
-                let lowered = specialized_lowered
-                    .as_deref()
-                    .expect("non-BufferFreeze operands crossed the specialized boundary");
                 if capability.is_some() {
                     return Err(unsupported(
                         "Effect",
@@ -8804,7 +13525,9 @@ impl<'a> Lowering<'a> {
                     ));
                 }
                 let resource = |index: usize, name: &str| {
-                    let Some(Lowered::ResourceToken { value }) = lowered.get(index) else {
+                    let Some(Lowered::ResourceToken { value }) =
+                        seats.specialized(EffectSeatSlot::Argument(index as u32)).ok()
+                    else {
                         return Err(unsupported(
                             "Effect",
                             format!("positioned {name} operand is not a resource"),
@@ -8813,7 +13536,9 @@ impl<'a> Lowering<'a> {
                     Ok(*value)
                 };
                 let integer = |index: usize, name: &str| {
-                    let Some(value @ Lowered::Int { .. }) = lowered.get(index) else {
+                    let Some(value @ Lowered::Int { .. }) =
+                        seats.specialized(EffectSeatSlot::Argument(index as u32)).ok()
+                    else {
                         return Err(unsupported(
                             "Effect",
                             format!("positioned {name} operand is not Int"),
@@ -9074,10 +13799,75 @@ impl<'a> Lowering<'a> {
             );
             let payload = builder.ins().sshr_imm(detail, 32);
             let payload_int = self.lower_dynamic_small_int(builder, payload);
-            let io_error = Lowered::DynamicConstructor(DynamicConstructorV1 {
-                discriminator: builder.ins().band_imm(detail, 0xff),
-                alternatives: self.synthesized_io_error_alternatives(payload_int)?,
-            });
+            // `D7` — the two roots of this operation's synthesized aggregate
+            // trees. Every synthesized producer below states its own path from
+            // one of them explicitly; nothing is rebound as the walk descends,
+            // so a path in this file names exactly one node in the planner's
+            // tree and the two can be compared.
+            // ⭐ **The claim-backed view itself is what reply synthesis
+            // carries** -- positional semantics, projected LAZILY.
+            //
+            // ⛔ A dense `Vec<Lowered>` used to be realized here by demanding a
+            // specialized template for every argument the operation has. That
+            // was the removed pre-operation bulk conversion RELOCATED after
+            // dispatch: knowing the operation narrowed the diagnostic but did
+            // not authorize reading a seat no synthesized node uses. Only two
+            // site-bound children exist in the measured trees -- the file-error
+            // path's `SiteOperand(0)` and `FsReadAt`'s private-buffer-span
+            // `SiteOperand(2)` -- so an operation with no `SiteOperand` child
+            // must project no template at all. `BufferAllocate`'s carried
+            // capacity is the case that made this load-bearing: its own arm
+            // consumes the seat, and the dense vector then refused it again on
+            // behalf of a consumer that never wanted it.
+            //
+            // ⚠ The `BufferFreeze` special case is gone rather than moved. It
+            // existed only to keep the dense realization off an operation whose
+            // seats are not templates; with the projection driven by declared
+            // uses, an operation with no site-bound child asks for nothing
+            // without needing to be named.
+            //
+            // ⛔ The mutation puts the dense realization back, exactly as it
+            // stood: every argument demanded as a template, before any declared
+            // use has said which ones it wants.
+            #[cfg(test)]
+            if effect_seat_dispatch_mutation() == EffectSeatDispatchMutation::RestoreBulkConversion
+                && operation != ken_host::HostOpV1::BufferFreeze
+            {
+                for ordinal in 0..lowered.len() as u32 {
+                    let _ = seats.specialized(EffectSeatSlot::Argument(ordinal))?;
+                }
+            }
+            let error_root =
+                SynthesizedAggregatePath::root(SynthesizedAggregateRoot::HostResultError);
+            let ok_root = SynthesizedAggregatePath::root(SynthesizedAggregateRoot::HostResultOk);
+            // ⭐ `D7` — the generic `IOError` value is built **per branch, at
+            // the path that branch puts it at**, not once up front.
+            //
+            // ⛔ It used to be constructed eagerly, before the operation match
+            // knew which arm it was in. The six resource-surface operations
+            // build their own `surface_io_error` and never referenced it, so
+            // that template was ABANDONED — an allocation-shaped value with no
+            // semantic use. Now it is never built for them at all, which is
+            // strictly better than planning it and proving it unreachable: it
+            // contributes neither a record nor an event because it does not
+            // exist.
+            let generic_io_error =
+                |this: &Self,
+                 builder: &mut FunctionBuilder<'_>,
+                 payload: Lowered,
+                 node: &SynthesizedAggregatePath| {
+                    Ok::<_, CraneliftBackendError>(Lowered::DynamicConstructor(
+                        DynamicConstructorV1 {
+                            discriminator: builder.ins().band_imm(detail, 0xff),
+                            alternatives: this.synthesized_io_error_alternatives(
+                                static_origin,
+                                node,
+                                payload,
+                                &seats,
+                            )?,
+                        },
+                    ))
+                };
             let error = if matches!(
                 operation,
                 ken_host::HostOpV1::FsReadFile
@@ -9085,12 +13875,12 @@ impl<'a> Lowering<'a> {
                     | ken_host::HostOpV1::FsChangeMode
                     | ken_host::HostOpV1::FsOpen
             ) {
-                let path = specialized_lowered
-                    .as_ref()
-                    .expect("file-result synthesis follows a specialized-only operation")
-                    .first()
-                    .cloned()
-                    .expect("validated FS operation has a path");
+                // ⛔ No eager read of the path seat here. It used to be
+                // demanded as a template and then dropped -- the same
+                // unauthorized eager demand at a smaller scale. The one thing
+                // that legitimately needs it is the `OptionSome` child below,
+                // which projects it through `site_operand_argument` at its
+                // declared `SiteOperand(0)`.
                 let (operation_role, operation_symbol) = match operation {
                     ken_host::HostOpV1::FsReadFile | ken_host::HostOpV1::FsOpen => (
                         SynthesizedFixedConstructorRole::FileOperationRead,
@@ -9106,17 +13896,36 @@ impl<'a> Lowering<'a> {
                     ),
                     _ => unreachable!("validated FS result operation"),
                 };
-                let operation =
-                    self.synthesized_constructor(operation_role, operation_symbol, Vec::new())?;
+                let operation = self.synthesized_constructor(
+                    static_origin,
+                    &error_root.field(0),
+                    operation_role,
+                    operation_symbol,
+                    Vec::new(),
+                    &seats,
+                )?;
                 let path = self.synthesized_constructor(
+                    static_origin,
+                    &error_root.field(1),
                     SynthesizedFixedConstructorRole::OptionSome,
                     self.process_symbols.option_some.clone(),
-                    vec![path],
+                    // The seat's operand 0 — projected, not passed.
+                    vec![self.site_operand_argument(static_origin, 0, &seats)?],
+                    &seats,
                 )?;
+                let io_error =
+                    generic_io_error(self, builder, payload_int, &error_root.field(2))?;
                 self.synthesized_constructor(
+                    static_origin,
+                    &error_root,
                     SynthesizedFixedConstructorRole::FileError,
                     self.process_symbols.file_error.clone(),
-                    vec![operation, path, io_error],
+                    vec![
+                        SynthesizedArgument::Nested(operation),
+                        SynthesizedArgument::Nested(path),
+                        SynthesizedArgument::Dynamic(io_error),
+                    ],
+                    &seats,
                 )?
             } else if matches!(
                 operation,
@@ -9142,114 +13951,216 @@ impl<'a> Lowering<'a> {
                 let resource_required_int =
                     self.lower_unsigned_u64_int(builder, resource_required)?;
                 let resource_held_int = self.lower_unsigned_u64_int(builder, resource_held)?;
-                let surface_io_error = Lowered::DynamicConstructor(DynamicConstructorV1 {
-                    discriminator: builder.ins().band_imm(surface_io, 0xff),
-                    alternatives: self.synthesized_io_error_alternatives(surface_io_payload_int)?,
-                });
+                // ⭐ Built ONCE PER SEMANTIC USE. `ResourceHostIo` field 0 and
+                // `ResourceReleaseFailed` field 2 are two allocations at two
+                // paths; cloning one template into both would carry one
+                // occurrence to two allocations, which is exactly the aliasing
+                // the path key exists to prevent.
+                let surface_io_error = |this: &Self,
+                                        builder: &mut FunctionBuilder<'_>,
+                                        node: &SynthesizedAggregatePath| {
+                    Ok::<_, CraneliftBackendError>(Lowered::DynamicConstructor(
+                        DynamicConstructorV1 {
+                            discriminator: builder.ins().band_imm(surface_io, 0xff),
+                            alternatives: this.synthesized_io_error_alternatives(
+                                static_origin,
+                                node,
+                                surface_io_payload_int.clone(),
+                                &seats,
+                            )?,
+                        },
+                    ))
+                };
                 let identity_low = builder.ins().band_imm(resource_identity, 0xffff_ffff);
                 let identity_high = builder.ins().ushr_imm(resource_identity, 32);
                 let identity_low_int = self.lower_dynamic_small_int(builder, identity_low);
                 let identity_high_int = self.lower_dynamic_small_int(builder, identity_high);
-                let resource_kind_value = |this: &Self, discriminator| {
+                // ⭐ `ResourceKind` is built THREE times at this one seat, so
+                // the closure takes the path of the node it is building rather
+                // than closing over one. Passing a path in is what makes the
+                // three uses three occurrences; a closure that knew its own
+                // path could only ever describe one of them.
+                let resource_kind_value = |this: &Self,
+                                           discriminator,
+                                           node: &SynthesizedAggregatePath| {
                     Ok::<_, CraneliftBackendError>(Lowered::DynamicConstructor(
                         DynamicConstructorV1 {
                             discriminator,
                             alternatives: vec![
                                 this.synthesized_dynamic_alternative(
+                                    static_origin,
+                                    node,
+                                    0,
                                     wire.resource_kind_fs_handle as i64,
                                     SynthesizedFixedConstructorRole::ResourceKindFsHandle,
                                     this.process_symbols.resource_kind_fs_handle.clone(),
                                     Vec::new(),
+                                    &seats,
                                 )?,
                                 this.synthesized_dynamic_alternative(
+                                    static_origin,
+                                    node,
+                                    1,
                                     wire.resource_kind_buffer as i64,
                                     SynthesizedFixedConstructorRole::ResourceKindBuffer,
                                     this.process_symbols.resource_kind_buffer.clone(),
                                     Vec::new(),
+                                    &seats,
                                 )?,
                             ],
                         },
                     ))
                 };
+                // `ResourceReleaseFailed` field 1, alternative 4 of the
+                // resource surface -- measured, not assumed.
                 let trace_identity = self.synthesized_constructor(
+                    static_origin,
+                    &error_root.alternative(4).field(1),
                     SynthesizedFixedConstructorRole::ResourceTraceIdentity,
                     self.process_symbols.resource_trace_identity.clone(),
-                    vec![identity_low_int, identity_high_int],
+                    vec![
+                        SynthesizedArgument::Scalar(identity_low_int),
+                        SynthesizedArgument::Scalar(identity_high_int),
+                    ],
+                    &seats,
                 )?;
                 Lowered::DynamicConstructor(DynamicConstructorV1 {
                     discriminator: surface_tag,
                     alternatives: vec![
                         self.synthesized_dynamic_alternative(
+                            static_origin,
+                            &error_root,
+                            0,
                             0,
                             SynthesizedFixedConstructorRole::ResourceHostIo,
                             self.process_symbols.resource_host_io.clone(),
-                            vec![surface_io_error.clone()],
+                            vec![SynthesizedArgument::Dynamic(surface_io_error(
+                                self,
+                                builder,
+                                &error_root.alternative(0).field(0),
+                            )?)],
+                            &seats,
                         )?,
                         self.synthesized_dynamic_alternative(
+                            static_origin,
+                            &error_root,
+                            1,
                             1,
                             SynthesizedFixedConstructorRole::ResourceClosed,
                             self.process_symbols.resource_closed.clone(),
                             Vec::new(),
+                            &seats,
                         )?,
                         self.synthesized_dynamic_alternative(
+                            static_origin,
+                            &error_root,
+                            2,
                             2,
                             SynthesizedFixedConstructorRole::ResourceMalformed,
                             self.process_symbols.resource_malformed.clone(),
                             Vec::new(),
+                            &seats,
                         )?,
                         self.synthesized_dynamic_alternative(
+                            static_origin,
+                            &error_root,
+                            3,
                             3,
                             SynthesizedFixedConstructorRole::ResourceRightNotHeld,
                             self.process_symbols.resource_right_not_held.clone(),
-                            vec![resource_required_int, resource_held_int],
+                            vec![
+                                SynthesizedArgument::Scalar(resource_required_int),
+                                SynthesizedArgument::Scalar(resource_held_int),
+                            ],
+                            &seats,
                         )?,
                         self.synthesized_dynamic_alternative(
+                            static_origin,
+                            &error_root,
+                            4,
                             4,
                             SynthesizedFixedConstructorRole::ResourceReleaseFailed,
                             self.process_symbols.resource_release_failed.clone(),
                             vec![
-                                resource_kind_value(self, resource_kind)?,
-                                trace_identity,
-                                surface_io_error,
+                                SynthesizedArgument::Dynamic(resource_kind_value(
+                                    self,
+                                    resource_kind,
+                                    &error_root.alternative(4).field(0),
+                                )?),
+                                SynthesizedArgument::Nested(trace_identity),
+                                SynthesizedArgument::Dynamic(surface_io_error(
+                                    self,
+                                    builder,
+                                    &error_root.alternative(4).field(2),
+                                )?),
                             ],
+                            &seats,
                         )?,
                         self.synthesized_dynamic_alternative(
+                            static_origin,
+                            &error_root,
+                            5,
                             5,
                             SynthesizedFixedConstructorRole::ResourceKindMismatch,
                             self.process_symbols.resource_kind_mismatch.clone(),
                             vec![
-                                resource_kind_value(self, resource_expected_kind)?,
-                                resource_kind_value(self, resource_actual_kind)?,
+                                SynthesizedArgument::Dynamic(resource_kind_value(
+                                    self,
+                                    resource_expected_kind,
+                                    &error_root.alternative(5).field(0),
+                                )?),
+                                SynthesizedArgument::Dynamic(resource_kind_value(
+                                    self,
+                                    resource_actual_kind,
+                                    &error_root.alternative(5).field(1),
+                                )?),
                             ],
+                            &seats,
                         )?,
                         self.synthesized_dynamic_alternative(
+                            static_origin,
+                            &error_root,
+                            6,
                             6,
                             SynthesizedFixedConstructorRole::ResourceBufferLimit,
                             self.process_symbols.resource_buffer_limit.clone(),
                             Vec::new(),
+                            &seats,
                         )?,
                         self.synthesized_dynamic_alternative(
+                            static_origin,
+                            &error_root,
+                            7,
                             7,
                             SynthesizedFixedConstructorRole::ResourceInvalidOffset,
                             self.process_symbols.resource_invalid_offset.clone(),
                             Vec::new(),
+                            &seats,
                         )?,
                         self.synthesized_dynamic_alternative(
+                            static_origin,
+                            &error_root,
+                            8,
                             8,
                             SynthesizedFixedConstructorRole::ResourceInvalidBounds,
                             self.process_symbols.resource_invalid_bounds.clone(),
                             Vec::new(),
+                            &seats,
                         )?,
                         self.synthesized_dynamic_alternative(
+                            static_origin,
+                            &error_root,
+                            9,
                             9,
                             SynthesizedFixedConstructorRole::ResourceNoProgress,
                             self.process_symbols.resource_no_progress.clone(),
                             Vec::new(),
+                            &seats,
                         )?,
                     ],
                 })
             } else {
-                io_error
+                generic_io_error(self, builder, payload_int, &error_root)?
             };
             let success = builder.ins().icmp_imm(
                 cranelift_codegen::ir::condcodes::IntCC::Equal,
@@ -9345,13 +14256,7 @@ impl<'a> Lowering<'a> {
                 let reply_start_int = self.lower_unsigned_u64_int(builder, reply_start)?;
                 // PX8-SPAN-PROV: bind the minted span to this `readAt`'s buffer
                 // operand acquisition (lowered arg 2, the request seat).
-                let Lowered::ResourceToken { value: span_origin } = specialized_lowered
-                    .as_ref()
-                    .expect("FsReadAt result synthesis follows a specialized-only operation")
-                    .get(2)
-                    .ok_or_else(|| {
-                        unsupported("Effect", "FsReadAt is missing its buffer operand")
-                    })?
+                let Lowered::ResourceToken { value: span_origin } = seats.specialized(SEAT_2)?
                 else {
                     return Err(unsupported(
                         "Effect",
@@ -9360,36 +14265,56 @@ impl<'a> Lowering<'a> {
                 };
                 let span_origin = *span_origin;
                 let span = self.synthesized_constructor(
+                    static_origin,
+                    &ok_root.alternative(1).field(0),
                     SynthesizedFixedConstructorRole::PrivateBufferSpan,
                     self.process_symbols.private_buffer_span.clone(),
                     vec![
-                        Lowered::ResourceToken { value: span_origin },
-                        reply_start_int,
-                        Lowered::BoundedNat(count),
+                        // The seat's operand 2 — the buffer this span is bound
+                        // to (`PX8-SPAN-PROV`), projected from the operand list
+                        // rather than rebuilt from its destructured payload.
+                        self.site_operand_argument(static_origin, 2, &seats)?,
+                        SynthesizedArgument::Scalar(reply_start_int),
+                        SynthesizedArgument::Scalar(Lowered::BoundedNat(count)),
                     ],
+                    &seats,
                 )?;
                 let transferred = self.synthesized_constructor(
+                    static_origin,
+                    &ok_root.alternative(1).field(1),
                     SynthesizedFixedConstructorRole::PrivateTransferCount,
                     self.process_symbols.private_transfer_count.clone(),
                     vec![
-                        Lowered::BoundedNat(predecessor),
-                        Lowered::BoundedNat(remaining),
+                        SynthesizedArgument::Scalar(Lowered::BoundedNat(predecessor)),
+                        SynthesizedArgument::Scalar(Lowered::BoundedNat(remaining)),
                     ],
+                    &seats,
                 )?;
                 Lowered::DynamicConstructor(DynamicConstructorV1 {
                     discriminator: builder.ins().uextend(types::I64, nonzero),
                     alternatives: vec![
                         self.synthesized_dynamic_alternative(
+                            static_origin,
+                            &ok_root,
+                            0,
                             0,
                             SynthesizedFixedConstructorRole::ReadEof,
                             self.process_symbols.read_eof.clone(),
                             Vec::new(),
+                            &seats,
                         )?,
                         self.synthesized_dynamic_alternative(
+                            static_origin,
+                            &ok_root,
+                            1,
                             1,
                             SynthesizedFixedConstructorRole::ReadSome,
                             self.process_symbols.read_some.clone(),
-                            vec![span, transferred],
+                            vec![
+                                SynthesizedArgument::Nested(span),
+                                SynthesizedArgument::Nested(transferred),
+                            ],
+                            &seats,
                         )?,
                     ],
                 })
@@ -9412,27 +14337,43 @@ impl<'a> Lowering<'a> {
                     None,
                 );
                 let transferred = self.synthesized_constructor(
+                    static_origin,
+                    &ok_root.field(0),
                     SynthesizedFixedConstructorRole::PrivateTransferCount,
                     self.process_symbols.private_transfer_count.clone(),
                     vec![
-                        Lowered::BoundedNat(predecessor),
-                        Lowered::BoundedNat(remaining),
+                        SynthesizedArgument::Scalar(Lowered::BoundedNat(predecessor)),
+                        SynthesizedArgument::Scalar(Lowered::BoundedNat(remaining)),
                     ],
+                    &seats,
                 )?;
                 self.synthesized_constructor(
+                    static_origin,
+                    &ok_root,
                     SynthesizedFixedConstructorRole::Wrote,
                     self.process_symbols.wrote.clone(),
-                    vec![transferred],
+                    vec![SynthesizedArgument::Nested(transferred)],
+                    &seats,
                 )?
             } else if operation == ken_host::HostOpV1::FsHandleMetadata {
                 self.lower_unsigned_u64_int(builder, detail)?
             } else {
                 self.synthesized_constructor(
+                    static_origin,
+                    &ok_root,
                     SynthesizedFixedConstructorRole::Unit,
                     self.process_symbols.unit.clone(),
                     Vec::new(),
+                    &seats,
                 )?
             };
+            // `D7` — the two ROOTS, which no node declares. Every other
+            // synthesized allocation is reached through a parent's ordered
+            // child model and reconciled on the way down; these two are
+            // returned straight into the host result with nothing above them,
+            // so the population equality is asked for here explicitly.
+            self.reconcile_host_result_root(static_origin, &error_root, &error)?;
+            self.reconcile_host_result_root(static_origin, &ok_root, &ok)?;
             Ok(LoweringOperand::Specialized(Lowered::HostResult {
                 success,
                 error: Box::new(error),
@@ -9450,7 +14391,7 @@ impl<'a> Lowering<'a> {
         builder: &mut FunctionBuilder<'_>,
         join_origin: StaticOriginId,
         symbol: &RuntimeSymbol,
-        captures: &[Lowered],
+        captures: &[LoweringOperand],
         argument: Lowered,
         zero_body: SourceOccurrence<'_>,
         suc_body: SourceOccurrence<'_>,
@@ -9474,7 +14415,7 @@ impl<'a> Lowering<'a> {
             Lowered::BoundedNat(BoundedNatV1::derived_from_validated(zero))
         };
         let mut zero_env = env_with([zero_nat], &[]);
-        extend_specialized(&mut zero_env, captures.iter().cloned());
+        extend_captures(&mut zero_env, captures.iter().cloned());
         zero_env.extend_from_slice(producer_env);
         let zero_lowered = self.lower_expr(builder, zero_body, &zero_env)?;
         let (initial, result_kind) =
@@ -9544,7 +14485,7 @@ impl<'a> Lowering<'a> {
         // A Suc case sees its predecessor first, followed by the retained
         // scrutinee and the declaration's outer environment.
         let mut suc_env = env_with([predecessor, successor], &[]);
-        extend_specialized(&mut suc_env, captures.iter().cloned());
+        extend_captures(&mut suc_env, captures.iter().cloned());
         suc_env.extend_from_slice(producer_env);
         let next = self.lower_expr(builder, suc_body, &suc_env);
         self.active_recursive_declarations.pop();
@@ -9578,7 +14519,7 @@ impl<'a> Lowering<'a> {
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         symbol: &RuntimeSymbol,
-        captures: &[Lowered],
+        captures: &[LoweringOperand],
         params: &[String],
         body: SourceOccurrence<'_>,
         args: &[RuntimeExpr],
@@ -9671,7 +14612,7 @@ impl<'a> Lowering<'a> {
                 .rev()
                 .map(LoweringOperand::Specialized)
                 .collect::<Vec<_>>();
-            call_inputs.extend(captures.iter().cloned().map(LoweringOperand::Specialized));
+            call_inputs.extend(captures.iter().cloned());
             let call_env = env_with_operands(call_inputs, producer_env);
             return if let Some(eliminators) = eliminators {
                 self.lower_computational_producer_expr(builder, body, &call_env, eliminators)
@@ -9777,7 +14718,7 @@ impl<'a> Lowering<'a> {
             .rev()
             .map(LoweringOperand::Specialized)
             .collect::<Vec<_>>();
-        call_inputs.extend(captures.iter().cloned().map(LoweringOperand::Specialized));
+        call_inputs.extend(captures.iter().cloned());
         let call_env = env_with_operands(call_inputs, producer_env);
         let lowered = if let Some(eliminators) = eliminators {
             self.lower_computational_producer_expr(builder, body, &call_env, eliminators)
@@ -9843,26 +14784,112 @@ impl<'a> Lowering<'a> {
             expr: body,
             static_origin: declaration_origin,
         };
-        if let RuntimeExpr::Closure {
-            captures,
-            params,
-            body,
-        } = body
-        {
-            let body = self.child_occurrence(declaration_origin, 0, body)?;
-            let captures = captures
-                .iter()
-                .map(|capture| self.lower_seed_capture(builder, capture))
-                .collect::<Result<Vec<_>, _>>()?;
+        // ⭐⭐ **`RT-DECL-CLOSURE-PORT` `D4` — BOTH closure seed forms retain a
+        // compiler-only callable binding, and evaluating the naked
+        // `DeclarationRef` never calls the unit.**
+        //
+        // ⚠ Before `D4` only the `Closure` arm produced a binding here. A
+        // `LexicalClosure`-bodied declaration fell through to the
+        // `FunctionizedUnits` arm below and was called with `&[]` — an empty
+        // input slice against a unit that declares this declaration's
+        // parameters and captures. That call was unreachable in production
+        // (the `TransparentDeclarationClosure` residual still forces
+        // `RecursiveDescent`) but it was wrong-arity by construction, and
+        // "unreachable today" is not the property this needs.
+        //
+        // ⚠ The two arms differ in their capture MATERIAL and only there.
+        // `Closure` captures are seed symbols resolved out of seed material;
+        // `LexicalClosure` captures are expressions of the declaration's own
+        // body. That is the `Seed` / `Lexical` split `D3` established at the
+        // ABI boundary, reaching the same distinction one layer up.
+        let seed_binding = match body {
+            RuntimeExpr::Closure {
+                captures,
+                params,
+                body,
+            } => {
+                let body = self.child_occurrence(declaration_origin, 0, body)?;
+                let captures = captures
+                    .iter()
+                    .map(|capture| {
+                        // Seed captures resolve to JIT-time ground values, so
+                        // this arm ASSERTS the phase rather than preserving
+                        // one: there is no carried seed capture to lose.
+                        self.lower_seed_capture(builder, capture)
+                            .map(LoweringOperand::Specialized)
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                Some((captures, params.clone(), body.static_origin))
+            }
+            RuntimeExpr::LexicalClosure {
+                captures,
+                params,
+                body,
+            } => {
+                // ⚠ HAZARD (`D3`): the planner plans the body FIRST and the
+                // capture sequence after it, so body is child `0` and capture
+                // *i* is child `1 + i` — the declaration order
+                // (`captures, params, body`) is NOT the child order.
+                let body = self.child_occurrence(declaration_origin, 0, body)?;
+                let captures = captures
+                    .iter()
+                    .enumerate()
+                    .map(|(position, capture)| {
+                        let capture =
+                            self.child_occurrence(declaration_origin, 1 + position, capture)?;
+                        // ⛔ The EMPTY environment, not the reference site's.
+                        // A declaration body is closed — that is why the
+                        // recursive-descent arm below lowers it with `&[]` too
+                        // — so a capture expression of this closure cannot see,
+                        // and must not be able to see, whatever bindings happen
+                        // to be live where the declaration was referenced.
+                        self.lower_expr(builder, capture, &[])
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                // `D7` — a declaration closure's LEXICAL captures reach it at
+                // their own phases, exactly as a lexical closure's do, so they
+                // are stored unchanged. The former `specialized_operands_at`
+                // fold here is the same narrowing removed at the lexical sites.
+                Some((captures, params.clone(), body.static_origin))
+            }
+            _ => None,
+        };
+        if let Some((captures, params, body)) = seed_binding {
             return Ok(LoweringOperand::Specialized(Lowered::DeclarationClosure {
+                reference: reference_origin,
                 symbol: symbol.clone(),
                 captures,
-                params: params.clone(),
-                body: body.static_origin,
+                params,
+                body,
             }));
         }
         if self.body_emission_authority == BodyEmissionAuthority::FunctionizedUnits {
-            return self.call_declared_declaration_unit(builder, reference_origin);
+            // ⛔⛔ **The empty-input call, and the guard that keeps it lawful.**
+            //
+            // Reaching here means this declaration's body is not a closure
+            // seed, so its scheduling entry IS its unit and the call genuinely
+            // takes no inputs. The planner decided the same thing
+            // independently — from the declaration's *planned occurrence*, not
+            // from the `RuntimeExpr` arm matched above — and recorded it. ⇒ The
+            // two derivations are cross-checked here, so a callable target can
+            // only reach this `&[]` call if the planner and the lowering
+            // disagree about what the declaration is, which fails closed rather
+            // than emitting a wrong-arity call.
+            let class = self
+                .static_transition_plan
+                .declaration_call_target_class(reference_origin)
+                .ok_or_else(|| {
+                    backend(BackendFailure::PlannerInvariant(format!(
+                        "declaration reference to {symbol} has no planned call target class"
+                    )))
+                })?;
+            if class != DeclarationCallTargetClass::SchedulingEntry {
+                return Err(backend(BackendFailure::PlannerInvariant(format!(
+                    "declaration {symbol} lowers as a zero-input thunk but its planned call \
+                     targets a declaration-owned callable unit"
+                ))));
+            }
+            return self.call_declared_declaration_unit(builder, reference_origin, &[], None);
         }
         if self.declaration_stack.contains(symbol) {
             return Err(unsupported(
@@ -9874,6 +14901,356 @@ impl<'a> Lowering<'a> {
         let result = self.lower_expr(builder, declaration_body, &[]);
         self.declaration_stack.pop();
         result
+    }
+
+    /// **`RT-DECL-CLOSURE-PORT` `D4` — the complete call to a declaration-owned
+    /// callable unit, and the SOLE place its input order is decided.**
+    ///
+    /// Every `Call` consumer that can reach a [`Lowered::DeclarationClosure`]
+    /// routes through here, because the input slice is the one thing they must
+    /// not each remember for themselves: the callee descriptor declares its
+    /// `Parameter` slots and then its `Capture` slots, so
+    ///
+    /// ```text
+    /// inputs = actual arguments in PARAMETER order ++ retained captures in D3 order
+    /// ```
+    ///
+    /// is a property of the ABI, not of any one call site. ⛔ A consumer that
+    /// assembled its own slice would be a second ordering authority, and a
+    /// swapped one still type-checks — every input is a word.
+    ///
+    /// ⚠ `args` arrive already lowered because the three consumers lower them
+    /// differently (ordinary child occurrences, producer-env child occurrences,
+    /// source-machine operands). What they must NOT differ on is what happens
+    /// afterwards.
+    fn call_declaration_closure_unit(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        reference: StaticOriginId,
+        symbol: &RuntimeSymbol,
+        params: &[String],
+        captures: Vec<LoweringOperand>,
+        args: Vec<LoweringOperand>,
+    ) -> Result<LoweringOperand, CraneliftBackendError> {
+        // ⛔⛔ **The pending checked-recursion marker is CONSUMED here.**
+        //
+        // ⚠ Every consumer this route diverts from reached
+        // `lower_recursive_declaration_call`, which consumes the marker on
+        // entry. A branch that returns before it would leave the marker set —
+        // to be picked up by whatever call came next, which
+        // `consume_checked_recursive_invocation_call` would then report as a
+        // marker "transplanted to another callee". That is a silent
+        // mis-attribution, not a missing feature. ⇒ Taking it here is not
+        // optional bookkeeping; it is what keeps the diversion from corrupting
+        // an unrelated call site.
+        //
+        // `D5` replaces `D4`'s conservative refusal of a present marker with
+        // the split-domain validation below. The marker remains **validation
+        // authority only**: nothing it carries becomes a runtime operand, an
+        // identity word, a selector, a capsule, a capture, an alternate ABI, a
+        // copied body, or a fallback.
+        let checked = self.consume_checked_recursive_invocation_call(symbol)?;
+        // The declared arity, checked against the call before anything is
+        // emitted. The descriptor rejects a mismatched slice too, but it can
+        // only say "the frame is missing an input"; this says which call.
+        if params.len() != args.len() {
+            return Err(unsupported(
+                "Call",
+                format!(
+                    "closure expects {} args but call provides {}",
+                    params.len(),
+                    args.len()
+                ),
+            ));
+        }
+        self.validate_declaration_unit_call(reference, symbol, checked, params.len(), captures.len())?;
+        // ⭐ The consumed template id is carried from the validation that
+        // accepted it to the emission that realizes it — one value, one path.
+        // ⛔ Re-deriving it at the emission site would be a second authority on
+        // "which template is this call", and the two could disagree silently.
+        let checked_template = match checked.map(|instance| instance.source) {
+            Some(InvocationTemplateRef::SameSccCall(id)) => Some(id),
+            // `validate_declaration_unit_call` already refused every other
+            // source, so this arm is unreachable-by-validation rather than a
+            // fallback. Spelled, not wildcarded.
+            Some(InvocationTemplateRef::ComputationalIHCall(_)) => None,
+            None => None,
+        };
+        let mut inputs = args;
+        // `D7` — the captures are already phase-bearing: a carried capture
+        // passes as its existing word and a specialized one is unchanged. The
+        // former `map(Specialized)` here asserted a phase the edge now owns.
+        inputs.extend(captures);
+        self.call_declared_declaration_unit(builder, reference, &inputs, checked_template)
+    }
+
+    /// **`RT-DECL-CLOSURE-PORT` `D5` — the split-domain validation that stands
+    /// between a call occurrence and the declaration-owned unit it reaches.**
+    ///
+    /// Two authorities are joined on **one exact occurrence and one exact
+    /// target**, and neither is derived from the other:
+    ///
+    /// 1. **the checked-plan domain** validates the facts it actually owns —
+    ///    same-SCC identity, admission, application arity, and the canonical
+    ///    local telescope;
+    /// 2. **the identity join** binds the consumed checked occurrence to the
+    ///    planner-issued `DeclarationCall` reference: exact callee symbol,
+    ///    exact application arity, exact resolved `CallableDeclaration` target.
+    ///    These three equalities are the *only* lawful shared facts between the
+    ///    two domains;
+    /// 3. **the ABI domain** validates that same target's `D3`-established
+    ///    `Parameter ++ Capture` descriptor run and `D4` input order.
+    ///
+    /// ⛔⛔ **There is no checked-interface → ABI projection, and D5 must not
+    /// invent one** (Architect ruling, 2026-08-04). `CheckedAnswerInterfaceV1`
+    /// is canonical *semantic* bytes plus a fingerprint of those bytes: it
+    /// encodes no [`AbiCarrier`], no [`AbiOwnership`], no [`AbiStorageOwner`],
+    /// no slot ordinal and no capture provenance. So owner and phase are read
+    /// where they actually live — on the resolved descriptor — and never parsed
+    /// out of canonical bytes, surrogated by a fingerprint comparison, or
+    /// assigned by telescope position.
+    ///
+    /// ⛔ **The ABI half compares two independently produced copies**, which is
+    /// the whole reason it is not tautological. `resolve_call_edges` copies the
+    /// already-validated unit header/slots/offsets into the function-local
+    /// [`units::DeclaredUnitCall`] record; the plan's own descriptor is
+    /// immutable and was independently checked by `D3` against the caller-side
+    /// `StaticBody` signature. Reading `slot.carrier` from the declared record
+    /// and then deriving that same record's expected owner from it would be a
+    /// check with one operand. ⇒ The chain preserved here is
+    /// `caller-side D3 signature ↔ validated target descriptor ↔ exact declared
+    /// call record`.
+    ///
+    /// ⚠ **Axes deliberately NOT re-checked here, because an earlier authority
+    /// already fails closed on them.** `OrientedSubcontinuationPlanV1::validate`
+    /// runs on the compile path (`planning.rs`, inside
+    /// `oriented_subcontinuation_plan_for_program`) and there establishes, for
+    /// every recursive-call template: the callee segment site and the exact
+    /// callee frame-template set against the plan's own frames; the composition
+    /// of the last callee frame's output interface with `result_interface` and
+    /// `caller_interface`; and `occurrence_binding_fingerprint` over **every**
+    /// field of the template. `planning.rs` additionally reconciles the exact
+    /// per-declaration marker locations, which is what binds `declaration` to
+    /// the body the marker actually sits in. Restating those here would put a
+    /// second copy of each law in a file where the two can disagree, and would
+    /// let a control mis-attribute an upstream refusal to `D5`.
+    fn validate_declaration_unit_call(
+        &self,
+        reference: StaticOriginId,
+        symbol: &RuntimeSymbol,
+        checked: Option<CheckedRecursiveInvocationInstance>,
+        params: usize,
+        captures: usize,
+    ) -> Result<(), CraneliftBackendError> {
+        // ── The identity join, half one: the planner's resolved target class.
+        //
+        // ⛔ Every call through this route is a call to a declaration-OWNED
+        // unit, so a planner that resolved this same reference to the
+        // declaration's zero-arity scheduling entry disagrees with the lowering
+        // about what the declaration is. That fails closed rather than emitting
+        // a call whose arity the descriptor would then have to reject.
+        let class = self
+            .static_transition_plan
+            .declaration_call_target_class(reference)
+            .ok_or_else(|| {
+                backend(BackendFailure::PlannerInvariant(format!(
+                    "declaration reference to {symbol} has no planned call target class"
+                )))
+            })?;
+        if class != DeclarationCallTargetClass::CallableDeclaration {
+            return Err(backend(BackendFailure::PlannerInvariant(format!(
+                "declaration {symbol} lowers as a declaration-owned unit call but its planned \
+                 call targets the declaration's scheduling entry"
+            ))));
+        }
+        let declared = self
+            .function_local
+            .declaration_calls
+            .get(&reference)
+            .ok_or_else(|| {
+                backend_module(
+                    "DeclarationRef has no planner-derived declaration call target".to_string(),
+                )
+            })?;
+        // ── The ABI domain, on that exact target.
+        let mut found = None;
+        for unit in self.static_transition_plan.emittable_units()? {
+            if unit.origin() != declared.origin {
+                continue;
+            }
+            if found.is_some() {
+                return Err(backend(BackendFailure::PlannerInvariant(
+                    "two abi descriptors claim one declaration call target origin".to_string(),
+                )));
+            }
+            found = Some(unit);
+        }
+        let unit = found.ok_or_else(|| {
+            backend(BackendFailure::PlannerInvariant(
+                "declaration call target has no abi descriptor".to_string(),
+            ))
+        })?;
+        if !matches!(
+            unit.definition(),
+            AbiUnitDefinition::CallableDeclaration { .. }
+        ) {
+            return Err(backend(BackendFailure::PlannerInvariant(format!(
+                "declaration call to {symbol} resolves a target that is not a declaration-owned \
+                 callable unit"
+            ))));
+        }
+        // The declared call record against the plan's immutable descriptor:
+        // header, the whole slot run (carrier, ownership, storage owner,
+        // width/alignment, kind and ordinal), and the offsets.
+        if unit.header() != declared.header {
+            return Err(backend(BackendFailure::PlannerInvariant(
+                "declaration call record header disagrees with its validated descriptor"
+                    .to_string(),
+            )));
+        }
+        if unit.slots() != declared.slots.as_slice() {
+            return Err(backend(BackendFailure::PlannerInvariant(
+                "declaration call record slot run disagrees with its validated descriptor"
+                    .to_string(),
+            )));
+        }
+        let (offsets, frame_bytes) = unit.slot_offsets()?;
+        if offsets != declared.offsets || frame_bytes != declared.header.frame_bytes {
+            return Err(backend(BackendFailure::PlannerInvariant(
+                "declaration call record offsets disagree with its validated descriptor"
+                    .to_string(),
+            )));
+        }
+        // ── The `D4` input order, stated against the descriptor that receives
+        // it. `inputs = args in PARAMETER order ++ captures in D3 order` is only
+        // meaningful if the descriptor's leading run is exactly that many
+        // `Parameter` slots followed by exactly that many `Capture` slots, each
+        // densely ordinalled within its own kind-run.
+        let mut expected = (0..params)
+            .map(|ordinal| (AbiSlotKind::Parameter, ordinal as u32))
+            .chain((0..captures).map(|ordinal| (AbiSlotKind::Capture, ordinal as u32)));
+        for slot in unit.slots() {
+            match slot.kind {
+                AbiSlotKind::Parameter | AbiSlotKind::Capture => {
+                    if expected.next() != Some((slot.kind, slot.ordinal)) {
+                        return Err(backend(BackendFailure::PlannerInvariant(format!(
+                            "declaration call to {symbol} does not match its callable unit's \
+                             parameter-then-capture input run"
+                        ))));
+                    }
+                }
+                AbiSlotKind::Result
+                | AbiSlotKind::Control
+                | AbiSlotKind::Trap
+                | AbiSlotKind::Store => {}
+            }
+        }
+        if expected.next().is_some() {
+            return Err(backend(BackendFailure::PlannerInvariant(format!(
+                "declaration call to {symbol} supplies more inputs than its callable unit declares"
+            ))));
+        }
+        // ── The checked-plan domain. An unchecked call has nothing further to
+        // reconcile: it carries no same-SCC obligation, and the ABI half above
+        // is unconditional.
+        let Some(instance) = checked else {
+            return Ok(());
+        };
+        let InvocationTemplateRef::SameSccCall(call_template_id) = instance.source else {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "declaration-owned unit call received a computational IH invocation",
+            ));
+        };
+        let plan = self.oriented_subcontinuation_plan.as_ref().ok_or_else(|| {
+            unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "checked declaration-owned unit call has no checked plan",
+            )
+        })?;
+        let call = plan.recursive_call(call_template_id).ok_or_else(|| {
+            unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "checked declaration-owned unit call has no checked template",
+            )
+        })?;
+        // ── The identity join, half two: callee symbol and application arity.
+        // These are the lawful shared equalities — the callee the checked plan
+        // names is the callee the emitter is about to call, applied to exactly
+        // the arity the plan admitted.
+        if &call.callee != symbol {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "checked declaration-owned unit call names another callee",
+            ));
+        }
+        if call.arity != params as u64 {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                format!(
+                    "checked recursive invocation of {symbol} is admitted at arity {} but the \
+                     declaration-owned unit call applies {params}",
+                    call.arity
+                ),
+            ));
+        }
+        if call.local_telescope.len() as u64 != call.arity {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "checked recursive invocation's local telescope does not cover its arity",
+            ));
+        }
+        // ── Same-SCC identity and admission.
+        //
+        // ⭐ **What makes this call *same-SCC* is that its callee is itself a
+        // recursive member of the caller's group** — not that the template says
+        // so. The independent side is the rest of the plan: some template in
+        // this recursion group must be the callee's OWN call template, and the
+        // group must be internally consistent in `scc_index` and `admission`.
+        //
+        // ⚠ For a self-call the witness is this very template, so `recursion_
+        // group` alone is not discriminated by a single-declaration fixture;
+        // the mutual same-SCC fixture is what closes that. Stated rather than
+        // left to be discovered — the rule is identical either way, and there
+        // is deliberately no `caller == callee` shortcut.
+        let group = plan
+            .recursive_calls
+            .iter()
+            .filter(|other| other.recursion_group == call.recursion_group)
+            .collect::<Vec<_>>();
+        if !group.iter().any(|other| other.declaration == call.callee) {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "checked recursive invocation's callee is not a recursive member of its own \
+                 recursion group",
+            ));
+        }
+        // ⚠ Split, so each axis gets its OWN first refusal. One composite
+        // predicate is discharged by either disagreement holding, so it could
+        // not tell the `scc_index` mutation from the `admission` one.
+        if group.iter().any(|other| other.scc_index != call.scc_index) {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "checked recursion group disagrees about its scc index",
+            ));
+        }
+        if group.iter().any(|other| other.admission != call.admission) {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "checked recursion group disagrees about its admission",
+            ));
+        }
+        if plan
+            .recursive_calls
+            .iter()
+            .any(|other| other.scc_index == call.scc_index && other.recursion_group != call.recursion_group)
+        {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "two checked recursion groups claim one scc index",
+            ));
+        }
+        Ok(())
     }
 
     /// `static_origin` is the origin of the **match occurrence** whose cases
@@ -10674,5 +16051,88 @@ impl<'a> Lowering<'a> {
         // ⭐ Back onto the spine: a primitive's result is a fresh specialized
         // value re-entering the phase sum.
         lowered.map(LoweringOperand::Specialized)
+    }
+}
+
+
+/// Which environment a `D3b` resolution's index is an index INTO, and what root
+/// provenance it carries. ⛔ Two fields, not one: the index alone cannot say
+/// which environment it belongs to, and that is the conflation the closed
+/// availability sum exists to prevent.
+#[derive(Clone, Copy, Debug)]
+struct ContinuationImmediateResolution {
+    immediate_slot: u32,
+    root: ContinuationImmediateRoot,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum ContinuationImmediateRoot {
+    EntryAbi {
+        source_owner: PredeclaredFunctionId,
+        source_abi_position: u32,
+    },
+    /// ⛔ Carries no position, deliberately. A producer-local value has no ABI
+    /// position in any environment, and a field here would be a place for one to
+    /// be invented.
+    ProducerLocal,
+}
+
+/// **`D3b` re-cut — the exact occurrence the direct-emission consumer stands at.**
+///
+/// ⛔ A `CurrentLexical` claim counts binders at ONE seat. Presenting it at a
+/// different occurrence would read an index derived at one depth as if it held
+/// at another, so the consumer carries its own seat and refuses a claim keyed
+/// elsewhere.
+#[derive(Clone, Copy, Debug)]
+struct ContinuationDirectEmissionSeat {
+    producer_result_origin: StaticOriginId,
+    emission_origin: StaticOriginId,
+}
+
+/// The index a claim carries, whichever environment it names. **Mutation
+/// support only.**
+///
+/// ⛔ Deliberately NOT available to production. Reading "the index" without
+/// first answering "which environment" is the conflation the claim sum exists
+/// to prevent; a mutation is allowed to ask it precisely because its job is to
+/// corrupt the index while leaving the environment intact, so that what the
+/// consumer catches is the index and not a shape mismatch.
+#[cfg(test)]
+fn d3b_claim_index(claim: ContinuationEnvironmentClaim) -> u32 {
+    match claim {
+        ContinuationEnvironmentClaim::CurrentLexical {
+            nearest_alias_index, ..
+        } => nearest_alias_index,
+        ContinuationEnvironmentClaim::EntryFrame { declared_slot, .. } => declared_slot,
+    }
+}
+
+/// Replace a claim's index, preserving its environment and every identity field.
+/// **Mutation support only** — see [`d3b_claim_index`].
+#[cfg(test)]
+fn d3b_replace_claim_index(
+    claim: ContinuationEnvironmentClaim,
+    index: u32,
+) -> ContinuationEnvironmentClaim {
+    match claim {
+        ContinuationEnvironmentClaim::CurrentLexical {
+            emission_owner,
+            producer_result_origin,
+            emission_origin,
+            lexical_environment_origin,
+            nearest_alias_index: _,
+        } => ContinuationEnvironmentClaim::CurrentLexical {
+            emission_owner,
+            producer_result_origin,
+            emission_origin,
+            lexical_environment_origin,
+            nearest_alias_index: index,
+        },
+        ContinuationEnvironmentClaim::EntryFrame { frame, .. } => {
+            ContinuationEnvironmentClaim::EntryFrame {
+                frame,
+                declared_slot: index,
+            }
+        }
     }
 }

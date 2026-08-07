@@ -20,15 +20,74 @@ pub(super) use static_transition::{
     ScaleBPlanCensus,
 };
 pub(super) use static_transition::{
-    planned_partiality_trap, ConstructorIdentity, JoinPlanToken, JoinResultRepresentation,
-    StaticOriginId, StaticTransitionPlan, SynthesizedConstructorRole,
+    planned_partiality_trap, CaseEmissionStatus, ConstructorIdentity, DeclarationCallTargetClass,
+    JoinPlanToken,
+    JoinResultRepresentation, StaticOriginId, StaticTransitionPlan, SynthesizedConstructorRole,
     SynthesizedFixedConstructorRole,
 };
 // `RT-CONTSPEC-ACTIVATE` `D1` — the activation projection's facade route.
 // Namespace re-exports only: no wrapper, no derivation, no second authority.
+// `RT-DECL-CLOSURE-PORT` `D7` — the aggregate ownership lane, read by the
+// carrier producers. Namespace re-export only.
 pub(super) use static_transition::{
-    ContinuationCallIdentity, ContinuationCallView, ContinuationInputView,
-    ContinuationOrdinaryEnvelopeRole, ContinuationSpecializationId, ContinuationUnitView,
+    AggregateOccurrenceId, FieldIdentity, PlannedAggregateAllocation, PlannedAggregateShape,
+    PlannedAggregateChild, PlannedAggregateOwnership, PlannedAggregateView,
+    PlannedReferentLifetime,
+    SynthesizedAggregateNode, SynthesizedAggregatePath, SynthesizedAggregateRoot,
+    SynthesizedAggregateStep, SynthesizedDynamicSet,
+};
+// `RT-DECL-CLOSURE-PORT` `D7` — the host-effect semantic-seat authority, read
+// by the effect emitter. Namespace re-export only.
+pub(super) use static_transition::{
+    host_effect_seat_contract_of, EffectSeatAvail, EffectSeatNeed, EffectSeatOperation,
+    EffectSeatPhase, EffectSeatSlot, PlannedEffectSeat, CRANELIFT_HOST_EFFECT_CONSUMERS_V1,
+};
+#[cfg(test)]
+pub(super) use static_transition::{set_effect_seat_plan_mutation, EffectSeatPlanMutation};
+pub(super) use static_transition::{
+    ContinuationCallIdentity, ContinuationCallView, ContinuationContextId,
+    ContinuationContextView, ContinuationEmissionOwner,
+    ContinuationInputView,
+    ContinuationOrdinaryEnvelopeRole, ContinuationResultEdge,
+    // `RT-CONTSRC-PRODUCER-LOCAL` `D1` — the closed coordinate sum reaches
+    // lowering because the emission resolver must MATCH on it; there is no
+    // accessor that answers "which ABI position" without the domain.
+    ContinuationAvailabilityViews, ContinuationEnvironmentClaim, ContinuationFrameIdentity,
+    ContinuationSourceCoordinate,
+    ContinuationSourceSlotAuthority,
+    ContinuationFrameRequirement,
+    ContinuationSpecializationId,
+    // `RT-CONTSRC-PRODUCER-LOCAL` `D3b` — the emission consumer's fail-closed
+    // check that it is indexing where the coordinate actually sits.
+    verify_current_lexical_availability,
+    verify_predeclared_entry_frame_membership,
+    ContinuationUnitView,
+    // `RT-CONTSRC-PRODUCER-LOCAL` `D7a` — the planner-issued composed worker
+    // view, reached from a computational frame's own coordinates. Namespace
+    // re-export only: no wrapper, no derivation, no second authority.
+    ComposedWorkerRouteEligibility, ComposedWorkerView, ContinuationWorkerCaptureProvenance,
+    ContinuationWorkerCaptureSource,
+    // `D7a2` — the raw-target requirement and its reconciliation gate.
+    ComposedCallTarget,
+};
+// `RT-CONTSRC-PRODUCER-LOCAL` `D7a2` reconciliation controls. ⛔ `#[cfg(test)]`
+// on the RE-EXPORT as well as on the items: an ungated re-export of a
+// `cfg(test)` item is an unresolved import in the PRODUCTION build, which the
+// test profile cannot see.
+#[cfg(test)]
+pub(super) use static_transition::{
+    set_composed_call_target_defect, set_continuation_descent_owner_duplication, set_envelope_defect, EnvelopeDefect,
+    ComposedCallTargetDefect,
+};
+
+// `D3b` stage-2 controls. ⛔ `#[cfg(test)]` on the RE-EXPORT as well as on the
+// items themselves: an ungated re-export of a `cfg(test)` item is an unresolved
+// import in the PRODUCTION build, which the test profile cannot see. Caught by
+// checking `-p ken-runtime` separately from `--profile test`.
+#[cfg(test)]
+pub(in crate::cranelift_backend) use static_transition::{
+    d3b_publish_without_finalization, d3b_refinalize, d4b_arm_admission, d4b_take_admission,
+    D3bFinalizationPerturbation, D4bVerdict,
 };
 #[cfg(test)]
 pub(super) use static_transition::with_last_io_error_role_omitted;
@@ -49,6 +108,7 @@ pub(super) use static_transition::{
 pub(super) use static_transition::{
     AbiCaptureProvenance, AbiCarrier, AbiFrameHeader, AbiOwnership, AbiProcessParameter,
     AbiRootIngress, AbiSlot, AbiSlotKind, AbiStorageOwner, AbiUnitDefinition, EmittableUnit,
+    expected_capture_slot,
     EmittableCallKind, PredeclaredFunctionId,
 };
 

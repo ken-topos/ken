@@ -915,12 +915,131 @@ struct OwnershipPartition {
 /// closure-body unit; `DeclarationCall` targets an already-seeded scheduling
 /// entry. The two shared exits are never owned and never traversed through —
 /// they have no outgoing edges by construction (`static_transition.rs:1258`).
+/// **`RT-DECL-CLOSURE-PORT` `D2a` — the declaration-owned pairs.**
+///
+/// A transparent declaration whose body is a closure seed is planned as an
+/// `Evaluate` node for the closure (which is what `plan.entries` holds) plus one
+/// forward `EdgeKind::StaticBody` edge to the closure body's entry. `D2`
+/// classifies that *target* as the declaration-owned `AbiUnitDefinition::
+/// CallableDeclaration`, and `D4` resolves every `DeclarationRef` to it.
+///
+/// ⛔⛔ **The pair is ONE function, not two.** Before `D2a` both ends were
+/// seeds, so one source declaration contributed two emitted functions: the new
+/// parameter/capture-bearing callable unit, and the old zero-input scheduling
+/// entry at the closure occurrence. That second function has **no lawful
+/// runtime meaning** — it cannot call the callable unit without the missing
+/// parameters and captures, cannot return the closure (there is deliberately no
+/// carrier for one), and cannot become a no-op without changing program
+/// meaning. It is refused at `boundary_transfer_admissibility` the moment the
+/// functionized lane is actually entered.
+///
+/// ⭐ **Derived solely from the declaration occurrence and its one forward
+/// `StaticBody` relation** (Architect `evt_3twrm71vck49d`). ⛔ No source
+/// whitelist, no reverse body search, no call-site reachability or
+/// "referenced declaration" filter — each of those would make the population
+/// depend on something other than the declaration's own shape.
+///
+/// ⚠ **The root is excluded explicitly, not by position.** The ruled partition
+/// keeps the process/root entry as one `SchedulingEntry`, and a root whose
+/// expression is itself a closure would otherwise match this rule exactly.
+/// Relying on `entries[0]` would encode the push order at
+/// `static_transition.rs`, which is not a law anyone states.
+///
+/// ⚠ Returned POSITIONALLY (`declaration_owned_body[node] = Some(body)`), never
+/// as a map keyed by the entry node. A `ComputationalMatch` shares its entry
+/// node with its scrutinee chain, so a node-keyed collection can silently merge
+/// two occurrences — the standing tripwire in `control.rs` exists for exactly
+/// that, and indexing is both cheaper and immune to it.
+/// **`RT-DECL-CLOSURE-PORT` `D2a` — the causal control on the substitution.**
+///
+/// `Retained` restores the pre-`D2a` population: the closure-seed declaration's
+/// scheduling entry seeds a function again, so one source declaration
+/// contributes two emitted functions. ⛔ Without this, the population assertions
+/// are consistent with `D2a` never having been installed on a fixture that
+/// happened to agree.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) enum D2aPopulationMutation {
+    Exact,
+    RetainObsoleteSchedulingUnit,
+}
+
+#[cfg(test)]
+thread_local! {
+    static D2A_POPULATION_MUTATION: std::cell::Cell<D2aPopulationMutation> =
+        const { std::cell::Cell::new(D2aPopulationMutation::Exact) };
+}
+
+/// Run `body` with the pre-`D2a` population restored, restoring `Exact` on the
+/// way out **including on panic**.
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn with_d2a_population_mutation<T>(
+    mutation: D2aPopulationMutation,
+    body: impl FnOnce() -> T,
+) -> T {
+    struct Restore;
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            D2A_POPULATION_MUTATION.with(|cell| cell.set(D2aPopulationMutation::Exact));
+        }
+    }
+    D2A_POPULATION_MUTATION.with(|cell| cell.set(mutation));
+    let _restore = Restore;
+    body()
+}
+
+fn declaration_owned_pairs(
+    node_count: usize,
+    edges: &[StaticEdge],
+    entries: &[StaticNodeId],
+    root_entry: Option<StaticNodeId>,
+) -> Result<(Vec<Option<StaticNodeId>>, usize), CraneliftBackendError> {
+    let mut declaration_owned_body = vec![None; node_count];
+    let mut pairs = 0usize;
+    #[cfg(test)]
+    if D2A_POPULATION_MUTATION.with(std::cell::Cell::get)
+        == D2aPopulationMutation::RetainObsoleteSchedulingUnit
+    {
+        return Ok((declaration_owned_body, pairs));
+    }
+    for entry in entries {
+        if Some(*entry) == root_entry {
+            continue;
+        }
+        let mut body = None;
+        for edge in edges {
+            if edge.kind != EdgeKind::StaticBody || edge.from != *entry {
+                continue;
+            }
+            if body.is_some() {
+                return Err(planner_error(
+                    "a declaration scheduling entry has two forward static body edges",
+                ));
+            }
+            body = Some(edge.to);
+        }
+        if let Some(body) = body {
+            let slot = declaration_owned_body
+                .get_mut(entry.0 as usize)
+                .ok_or_else(|| planner_error("scheduling entry is outside the planned nodes"))?;
+            *slot = Some(body);
+            pairs += 1;
+        }
+    }
+    Ok((declaration_owned_body, pairs))
+}
+
 fn partition_function_units(
     nodes: &[StaticNode],
     edges: &[StaticEdge],
     entries: &[StaticNodeId],
+    root_entry: Option<StaticNodeId>,
 ) -> Result<OwnershipPartition, CraneliftBackendError> {
     let (terminal, trap_terminal) = shared_exits(nodes)?;
+    let (declaration_owned_body, _pairs) =
+        declaration_owned_pairs(nodes.len(), edges, entries, root_entry)?;
+    let is_declaration_owned =
+        |node: StaticNodeId| declaration_owned_body[node.0 as usize].is_some();
 
     // Seed class 1 is `entries`; seed class 2 is the `StaticBody` targets. The
     // three ways this can be malformed get three distinct failures on purpose —
@@ -930,6 +1049,9 @@ fn partition_function_units(
     enum SeedClass {
         SchedulingEntry,
         StaticBodyTarget,
+        /// `D2a`: a closure-seed declaration's occurrence. Marked, owned, and
+        /// deliberately NOT a seed.
+        DeclarationOwnedEntry,
     }
     let mut seed_class = vec![None; nodes.len()];
     let mut seeds = Vec::with_capacity(entries.len());
@@ -943,8 +1065,17 @@ fn partition_function_units(
                 "closed graph contains a duplicate scheduling entry",
             ));
         }
-        *slot = Some(SeedClass::SchedulingEntry);
-        seeds.push(*entry);
+        // `D2a`: a declaration-owned entry is still marked, so a duplicate or a
+        // collision with a static-body target is still caught — but it seeds no
+        // function of its own. Its subgraph joins the callable unit below.
+        *slot = Some(if is_declaration_owned(*entry) {
+            SeedClass::DeclarationOwnedEntry
+        } else {
+            SeedClass::SchedulingEntry
+        });
+        if !is_declaration_owned(*entry) {
+            seeds.push(*entry);
+        }
     }
     for edge in edges {
         if edge.kind != EdgeKind::StaticBody {
@@ -955,7 +1086,7 @@ fn partition_function_units(
             .get_mut(index)
             .ok_or_else(|| planner_error("static body target is outside the planned nodes"))?;
         match *slot {
-            Some(SeedClass::SchedulingEntry) => {
+            Some(SeedClass::SchedulingEntry) | Some(SeedClass::DeclarationOwnedEntry) => {
                 return Err(planner_error(
                     "scheduling entry is also a static body target",
                 ));
@@ -968,6 +1099,16 @@ fn partition_function_units(
             None => *slot = Some(SeedClass::StaticBodyTarget),
         }
         seeds.push(edge.to);
+    }
+    // `D2a`: the declaration occurrence traverses WITH its callable unit. ⭐ It
+    // remains that unit's ownership, provenance and `D3` signature authority —
+    // the ruling forbids it becoming an unowned semantic node just as firmly as
+    // it forbids a second emitted definition.
+    let mut extra_roots = vec![Vec::new(); nodes.len()];
+    for (index, body) in declaration_owned_body.iter().enumerate() {
+        if let Some(body) = body {
+            extra_roots[body.0 as usize].push(StaticNodeId(index as u32));
+        }
     }
 
     let mut outgoing = vec![Vec::new(); nodes.len()];
@@ -998,6 +1139,7 @@ fn partition_function_units(
                 .map_err(|_| planner_capacity_error("function unit identity exhausted"))?,
         ));
         let mut frontier = vec![*seed];
+        frontier.extend_from_slice(&extra_roots[seed.0 as usize]);
         while let Some(node) = frontier.pop() {
             if is_shared_exit(node) {
                 // A shared exit is this unit's local return or trap, never a
@@ -1042,6 +1184,7 @@ pub(super) fn build_semantic_plane(
     nodes: &[StaticNode],
     edges: &[StaticEdge],
     entries: &[StaticNodeId],
+    root_entry: Option<StaticNodeId>,
     sources: &[SemanticSourceSeed],
     arena: &SemanticMaterialArena,
 ) -> Result<SemanticPlane, CraneliftBackendError> {
@@ -1073,7 +1216,7 @@ pub(super) fn build_semantic_plane(
         });
     }
 
-    let partition = partition_function_units(nodes, edges, entries)?;
+    let partition = partition_function_units(nodes, edges, entries, root_entry)?;
 
     let mut plane = SemanticPlane::default();
     // Atom content is referenced by absolute span, so the interned bytes move
@@ -1165,7 +1308,7 @@ pub(super) fn build_semantic_plane(
         });
     }
 
-    plane.validate(nodes, edges, entries, sources, arena)?;
+    plane.validate(nodes, edges, entries, root_entry, sources, arena)?;
     Ok(plane)
 }
 
@@ -1605,6 +1748,29 @@ impl SemanticPlane {
     /// through the validator — it is here so that a future caller which reaches
     /// this method on an unvalidated plane is refused rather than silently given
     /// a short edge list.
+    /// **`RT-DECL-CLOSURE-PORT` `D2a`** — is this `StaticBody` edge the
+    /// declaration-owned pair's definition relation rather than an emitted call?
+    ///
+    /// ⭐ Exposed from here, and only from here, because the answer is a
+    /// statement about the **owner classification** — and that classification
+    /// has exactly one home. `static_transition.rs` must not spell
+    /// `SemanticOwner`; the standing source tripwire reds if it starts.
+    pub(super) fn is_declaration_owned_static_body(
+        &self,
+        edge: &StaticEdge,
+    ) -> Result<bool, CraneliftBackendError> {
+        if edge.kind != EdgeKind::StaticBody {
+            return Ok(false);
+        }
+        let owner_of = |node: StaticNodeId| -> Result<SemanticOwner, CraneliftBackendError> {
+            self.descriptors
+                .get(node.0 as usize)
+                .map(|descriptor| descriptor.owner)
+                .ok_or_else(|| planner_error("call edge endpoint has no semantic descriptor"))
+        };
+        Ok(owner_of(edge.from)? == owner_of(edge.to)?)
+    }
+
     pub(super) fn static_body_call_edges(
         &self,
         edges: &[StaticEdge],
@@ -1634,6 +1800,26 @@ impl SemanticPlane {
                     "static body call edge does not join two function units",
                 ));
             };
+            // ⭐⭐ `RT-DECL-CLOSURE-PORT` `D2a` — the declaration-owned pair is a
+            // DEFINITION relation, not an emitted call.
+            //
+            // Both ends are one unit: the declaration occurrence is the callable
+            // unit's ownership, provenance and `D3` signature authority, and the
+            // body is what that unit emits. Emitting a call here would
+            // reintroduce, from the call side, exactly the phantom `D2a` removes
+            // from the unit side — the semantic partition would say one function
+            // while the emitted call population said two.
+            //
+            // ⛔ **`caller == callee` is a sound discriminator only because the
+            // edge law upstream already refused every OTHER intra-unit
+            // `StaticBody` edge.** An anonymous closure body's edge crosses
+            // units and is unaffected; a same-unit edge that is not a
+            // declaration-owned pair never reaches this walk. ⇒ This is not a
+            // second classification authority, and `D3`'s boundary-layout
+            // validation over the relation is untouched.
+            if caller == callee {
+                continue;
+            }
             let callee_origin = self
                 .functions
                 .get(callee.0 as usize)
@@ -1716,13 +1902,22 @@ impl SemanticPlane {
         nodes: &[StaticNode],
         edges: &[StaticEdge],
         entries: &[StaticNodeId],
+        root_entry: Option<StaticNodeId>,
         node_indexed_sources: &[SemanticSourceSeed],
     ) -> Result<(), CraneliftBackendError> {
-        let partition = partition_function_units(nodes, edges, entries)?;
+        let partition = partition_function_units(nodes, edges, entries, root_entry)?;
+        let (declaration_owned_body, pairs) =
+            declaration_owned_pairs(nodes.len(), edges, entries, root_entry)?;
 
-        // D5 prediction 1: the unit population is exactly the two seed classes.
-        // Predicted from the design on 2026-07-25, before measuring:
-        // `functions.len() == entries.len() + count(StaticBody edges)`.
+        // **The unit population, corrected by `D2a`.**
+        //
+        // ⛔ It was `functions.len() == entries.len() + count(StaticBody edges)`,
+        // predicted from the design on 2026-07-25. `D2a` FALSIFIES that equality
+        // for the declaration-owned class: a closure-seed transparent
+        // declaration contributes its `StaticBody` target and **not** its own
+        // scheduling entry, so the two ends of that pair are one function, not
+        // two. The subtraction is the whole correction, stated here rather than
+        // annotated onto the old claim.
         let static_body_edges = edges
             .iter()
             .filter(|edge| edge.kind == EdgeKind::StaticBody)
@@ -1730,7 +1925,9 @@ impl SemanticPlane {
         let expected_units = entries
             .len()
             .checked_add(static_body_edges)
-            .ok_or_else(|| planner_capacity_error("function unit count exhausted"))?;
+            .ok_or_else(|| planner_capacity_error("function unit count exhausted"))?
+            .checked_sub(pairs)
+            .ok_or_else(|| planner_error("more declaration-owned pairs than seeded units"))?;
         if self.functions.len() != expected_units || partition.seeds.len() != expected_units {
             return Err(planner_error(
                 "function unit population is not the scheduling entries and static body targets",
@@ -1813,7 +2010,25 @@ impl SemanticPlane {
                 let SemanticOwner::Function(to_unit) = to else {
                     return Err(planner_error("static body edge targets a shared exit"));
                 };
-                if to_unit == from_unit {
+                // ⭐⭐ `RT-DECL-CLOSURE-PORT` `D2a` — the ONE intra-unit
+                // `StaticBody` edge, and why it is not a hole in this law.
+                //
+                // For a closure-seed transparent declaration the pair
+                // `(declaration occurrence, body entry)` is **one** function.
+                // Its `StaticBody` edge is therefore a **definition/signature
+                // relation**, not a cross-unit call: it is what binds the
+                // declaration occurrence — the callable unit's ownership,
+                // provenance and `D3` signature authority — to the body that
+                // unit emits.
+                //
+                // ⛔ The exemption is NOT "the two ends happen to share a unit".
+                // It is granted only where `declaration_owned_pairs` derived the
+                // pair, from the declaration occurrence plus its one forward
+                // relation. An anonymous closure body's edge, or any other
+                // same-unit `StaticBody` edge, still fails closed here.
+                let declaration_owned =
+                    declaration_owned_body[edge.from.0 as usize] == Some(edge.to);
+                if to_unit == from_unit && !declaration_owned {
                     return Err(planner_error(
                         "static body edge does not cross a function unit boundary",
                     ));
@@ -1829,14 +2044,79 @@ impl SemanticPlane {
                         "declaration call edge targets a shared exit",
                     ));
                 };
-                if to_unit == from_unit {
+                // ⭐ `RT-DECL-CLOSURE-PORT` `D4` — the target is a **function
+                // unit head**, and there are exactly two classes of those.
+                //
+                // The ruled seed set is `entries` ∪ every `StaticBody` target,
+                // minus every `D2a` declaration-owned pair.
+                // Before `D4` a declaration call could only reach the first
+                // class, because every declaration reference targeted its own
+                // scheduling entry. The selective retarget makes a closure-seed
+                // declaration's reference reach the second — its
+                // declaration-owned callable unit — so the law is widened to
+                // the full head set and no further.
+                //
+                // ⛔ It is NOT relaxed to "any node in a distinct unit": the
+                // seed check below is what keeps a call from landing in the
+                // middle of a unit, and it runs on both classes.
+                let scheduling_entry = entries.contains(&edge.to);
+                // ⚠⚠ **NAMED FOR WHAT IT MEASURES.** This is "the endpoint is a
+                // static-body unit head" — the WHOLE such population, anonymous
+                // `ClosureBody` units included. It is **not** the
+                // callable-declaration discriminator, and must never be
+                // described as one: reading it that way would make this file a
+                // second, weaker classification authority for a class the ABI
+                // plane already decides exactly.
+                //
+                // ⭐ The layering, stated so it is not collapsed by a later
+                // edit: the **semantic plane** establishes that the endpoint is
+                // a unit head and therefore that a self-loop is structurally
+                // possible; the **ABI plane** —
+                // `AbiPlane::validate_declaration_call_targets` — reads the
+                // exact `AbiUnitDefinition` and is the sole authority on the
+                // callable class. ⛔ Do not reverse-search the semantic graph to
+                // duplicate that.
+                let static_body_head = edges
+                    .iter()
+                    .any(|body| body.kind == EdgeKind::StaticBody && body.to == edge.to);
+                if !scheduling_entry && !static_body_head {
                     return Err(planner_error(
-                        "declaration call edge does not cross a function unit boundary",
+                        "declaration call edge target is neither a scheduling entry nor a \
+                         static body unit head",
                     ));
                 }
-                if !entries.contains(&edge.to) {
+                if self.functions[to_unit.0 as usize].planned_node != edge.to {
                     return Err(planner_error(
-                        "declaration call edge target is not a scheduling entry",
+                        "declaration call edge target is not its function unit's seed",
+                    ));
+                }
+                // ⭐⭐ **`D4`: a call to the caller's OWN unit is lawful for the
+                // callable-declaration class and for that class only.**
+                //
+                // A closure-seed declaration that refers to itself does so from
+                // inside its own body — which, after the retarget, IS the unit
+                // being called. That edge is direct recursion, and it is the
+                // one case where a declaration call legitimately does not cross
+                // a unit boundary.
+                //
+                // ⛔ The ban is kept intact for the scheduling-entry class,
+                // where it still means what it always meant: a declaration
+                // whose reference resolves back into the unit it already sits
+                // in has no second unit to call, so the edge would be an
+                // intra-unit transfer misfiled as a call.
+                //
+                // ⚠ **What this test does and does not decide.** Admitting the
+                // self-loop here is a *structural* permission keyed on the
+                // broad head predicate above; it does not certify that the
+                // target is the exact declaration-owned `CallableDeclaration`
+                // of the referenced symbol. That certification is
+                // `validate_declaration_call_targets`'s, and it is what keeps
+                // an anonymous `ClosureBody` self-loop out. ⇒ The plan is
+                // fail-closed across the two layers together, never by this
+                // line alone.
+                if to_unit == from_unit && !static_body_head {
+                    return Err(planner_error(
+                        "declaration call edge does not cross a function unit boundary",
                     ));
                 }
                 let source = node_indexed_sources
@@ -1884,6 +2164,7 @@ impl SemanticPlane {
         nodes: &[StaticNode],
         edges: &[StaticEdge],
         entries: &[StaticNodeId],
+        root_entry: Option<StaticNodeId>,
         semantic_sources: &[SemanticSourceSeed],
         arena: &SemanticMaterialArena,
     ) -> Result<(), CraneliftBackendError> {
@@ -1945,7 +2226,7 @@ impl SemanticPlane {
                 "semantic program arena contains a post-origin clone",
             ));
         }
-        self.validate_function_units(nodes, edges, entries, &node_indexed_sources)?;
+        self.validate_function_units(nodes, edges, entries, root_entry, &node_indexed_sources)?;
 
         let expected_operands =
             node_indexed_sources

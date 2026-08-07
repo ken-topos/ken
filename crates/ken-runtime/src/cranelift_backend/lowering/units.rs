@@ -6,6 +6,8 @@
 //!
 //! ⛔ **This module does not derive the population and must never be made to.**
 //! The unit set is `plan.entries` ∪ every `EdgeKind::StaticBody` **target**,
+//! MINUS every declaration-owned pair (`RT-DECL-CLOSURE-PORT` `D2a`: a
+//! closure-seed transparent declaration's entry seeds no function of its own),
 //! seeded and validated by `B2O` and given one `AbiDescriptor` apiece by `B2R`.
 //! `StaticTransitionPlan::emittable_units` projects that; this module consumes
 //! the projection. In particular it never consults
@@ -20,6 +22,7 @@
 //! filter here to get wrong.
 
 use super::*;
+use super::core::{AmbientBodyAuthority, CheckedFrameFunctionScope};
 
 use cranelift_module::FuncId;
 
@@ -146,6 +149,14 @@ pub(in crate::cranelift_backend) struct UnitBundle {
     /// admitting one there would alias two identities that the planner keeps
     /// apart. Nothing resolves a continuation by ordinal or by symbol name.
     continuations: BTreeMap<ContinuationSpecializationId, FuncId>,
+    /// **`RT-DECL-CLOSURE-PORT` `D5a`** -- one declared target per planned
+    /// generated producer execution context.
+    ///
+    /// A third map for the same reason there is a second: a
+    /// `ContinuationContextId` is neither of the other two identities, and the
+    /// ruling's "do not cast or alias one ID domain into the other" is enforced
+    /// here by there being no map a caller could reach with the wrong key type.
+    contexts: BTreeMap<ContinuationContextId, FuncId>,
 }
 
 impl UnitBundle {
@@ -173,6 +184,16 @@ impl UnitBundle {
         specialization: ContinuationSpecializationId,
     ) -> Option<FuncId> {
         self.continuations.get(&specialization).copied()
+    }
+
+    /// The declared target for one generated producer execution context.
+    ///
+    /// `None` is a real answer, exactly as for the two maps above.
+    pub(in crate::cranelift_backend) fn context(
+        &self,
+        context: ContinuationContextId,
+    ) -> Option<FuncId> {
+        self.contexts.get(&context).copied()
     }
 
     /// How many continuation targets this bundle declares.
@@ -351,7 +372,34 @@ impl CallEdgeTargets {
 /// last-writer, because a duplicate means two units claim one body and the
 /// binding could not name either unambiguously.
 pub(in crate::cranelift_backend) struct WorkerTargets {
+    /// The EXECUTABLE targets: bodies with a declared `Function` to call.
     by_origin: BTreeMap<StaticOriginId, ResolvedUnitTarget>,
+    /// **`D5a` checkpoint 1 -- the TEMPLATE population, over every emittable
+    /// unit including the template-only ones.**
+    ///
+    /// Architect ruling `evt_5a0q3m9tnkh8e`: *"the constructor's raw
+    /// identity/arity validation must be separate from the generated context
+    /// `FuncRef` used by the call."* This map is that separation made
+    /// structural -- it carries the descriptor facts and **no `FuncRef` at
+    /// all**, so a template-only body can be validated against its own raw
+    /// contract by code that has no way to call it.
+    templates: BTreeMap<StaticOriginId, WorkerTemplate>,
+}
+
+/// **`D5a` checkpoint 1 -- one raw worker body's descriptor contract.**
+///
+/// ⛔ Deliberately has no `function: FuncRef` field. `construct_static_worker_
+/// binding` reads only `call_site_origin`, `header`, `slots` and `offsets`, so
+/// removing the callee from the record it validates against makes "validated
+/// the raw contract, called the generated context" a fact about the types
+/// rather than a discipline someone has to remember.
+#[derive(Clone)]
+pub(in crate::cranelift_backend) struct WorkerTemplate {
+    pub(in crate::cranelift_backend) origin: StaticOriginId,
+    pub(in crate::cranelift_backend) call_site_origin: StaticOriginId,
+    pub(in crate::cranelift_backend) header: AbiFrameHeader,
+    pub(in crate::cranelift_backend) slots: Vec<AbiSlot>,
+    pub(in crate::cranelift_backend) offsets: Vec<u32>,
 }
 
 impl WorkerTargets {
@@ -387,6 +435,13 @@ impl WorkerTargets {
             })
             .collect()
     }
+
+    /// The raw template contract for every emittable body, executable or not.
+    pub(in crate::cranelift_backend) fn templates(
+        &self,
+    ) -> &BTreeMap<StaticOriginId, WorkerTemplate> {
+        &self.templates
+    }
 }
 
 /// Project the already-validated emittable units by exact body origin.
@@ -394,8 +449,58 @@ pub(in crate::cranelift_backend) fn resolve_worker_targets(
     plan: &StaticTransitionPlan<'_>,
     bundle: &UnitBundle,
 ) -> Result<WorkerTargets, CraneliftBackendError> {
+    let mut templates: BTreeMap<StaticOriginId, WorkerTemplate> = BTreeMap::new();
+    // The TEMPLATE population is every emittable unit -- `D5a` checkpoint 1
+    // keeps the raw worker's descriptor and source binding whether or not it
+    // still receives a `Function`.
+    // `D5a` checkpoint 4 step 3 -- the reaching mutation for "unchanged raw
+    // worker ABI". Reading the EXECUTABLE population here instead of the
+    // emittable one is the "template-only means deleted" mistake: it drops the
+    // superseded body's descriptor while every consumer of that descriptor
+    // remains. ⛔ The two populations are otherwise identical on a program with
+    // no retarget, which is why this only became measurable at checkpoint 4.
+    #[cfg(test)]
+    let template_population =
+        if crate::cranelift_backend::lowering::d5a_route_mutation()
+            == crate::cranelift_backend::lowering::D5aRouteMutation::DropSupersededWorkerTemplates
+        {
+            crate::cranelift_backend::lowering::record_d5a_route_application();
+            plan.executable_units()?
+        } else {
+            plan.emittable_units()?
+        };
+    #[cfg(not(test))]
+    let template_population = plan.emittable_units()?;
+    for unit in template_population {
+        let (offsets, frame_bytes) = unit.slot_offsets()?;
+        if frame_bytes != unit.header().frame_bytes {
+            return Err(backend_module(
+                "worker template frame size disagrees with its slot run".to_string(),
+            ));
+        }
+        let origin = unit.origin();
+        if templates
+            .insert(
+                origin,
+                WorkerTemplate {
+                    origin,
+                    call_site_origin: origin,
+                    header: unit.header(),
+                    slots: unit.slots().to_vec(),
+                    offsets,
+                },
+            )
+            .is_some()
+        {
+            return Err(backend_module(
+                "two emittable units claim the same body origin, so no worker template could \
+                 name either unambiguously"
+                    .to_string(),
+            ));
+        }
+    }
     let mut by_origin: BTreeMap<StaticOriginId, ResolvedUnitTarget> = BTreeMap::new();
-    for unit in plan.emittable_units()? {
+    for unit in plan.executable_units()? {
         let function = bundle.function(unit.function()).ok_or_else(|| {
             backend_module(
                 "a planned unit has no forward-declared function to project as a worker target"
@@ -425,14 +530,142 @@ pub(in crate::cranelift_backend) fn resolve_worker_targets(
             ));
         }
     }
-    Ok(WorkerTargets { by_origin })
+    Ok(WorkerTargets {
+        by_origin,
+        templates,
+    })
+}
+
+/// **`RT-DECL-CLOSURE-PORT` `D5` — the checked-call closeout ledger.**
+///
+/// One entry per checked same-SCC recursive call that reached a real direct
+/// call to a declaration-owned unit, keyed by the `call_template_id` the
+/// oriented plan issued.
+///
+/// ⭐ **The three populations are read independently.** `planned` is the
+/// oriented plan's own `recursive_calls` identities; `consumed` is what the
+/// affine marker machinery actually took; `emitted` is recorded only after the
+/// `Inst` exists, from the emitted call itself. Set equality across the three
+/// is what "every planned checked call became exactly one correct direct call,
+/// and no other checked call was emitted" means.
+///
+/// ⛔ **Sets, not counts.** Two populations of the same size can differ, and a
+/// length comparison would pass for one that swapped a template for another.
+///
+/// ⛔ **This closeout restates none of D5's other laws.** Interface, segment,
+/// frame-template, occurrence-fingerprint, ABI descriptor, SCC, admission and
+/// input-order checks all have their own authorities and keep them; duplicating
+/// one here would put a second copy in a file where the two can disagree.
+///
+/// ⚠ **Scope, stated rather than left to be discovered.** The ledger is opened
+/// and closed by `define_unit_bodies`, which runs **only** under
+/// `BodyEmissionAuthority::FunctionizedUnits`. Production selects
+/// `RecursiveDescent` until `D6` retires the `TransparentDeclarationClosure`
+/// residual, so today this gate is reachable only under the `cfg(test)` selector
+/// witness — the same reachability every other `D5` law has, and the thing `D6`
+/// changes. It is live production code on the lane it guards, not a test hook.
+#[derive(Debug, Default)]
+pub(in crate::cranelift_backend) struct CheckedCallLedger {
+    planned: BTreeSet<u64>,
+    emitted: BTreeMap<u64, CheckedCallRecord>,
+}
+
+/// One emitted checked call, bound to the exact occurrence and target the
+/// planner resolved for it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) struct CheckedCallRecord {
+    pub(in crate::cranelift_backend) reference: StaticOriginId,
+    pub(in crate::cranelift_backend) target: StaticOriginId,
+    /// The callee **decoded out of the emitted instruction**.
+    pub(in crate::cranelift_backend) callee: cranelift_codegen::ir::FuncRef,
+    /// The callee the planner-resolved target record carries. ⚠ Both are
+    /// `FuncRef`s minted into the same defining function, so comparing them is
+    /// lawful and is a comparison of two independently produced facts — one
+    /// read from the CLIF, one from the resolved `DeclaredUnitCall`.
+    pub(in crate::cranelift_backend) resolved: cranelift_codegen::ir::FuncRef,
+}
+
+impl CheckedCallLedger {
+    /// ⚠ `planned` is taken **directly** from `plan.recursive_calls` — that IS
+    /// the exact domain of same-SCC checked calls, so no classifier and no
+    /// whitelist stands between the plan and this set.
+    pub(in crate::cranelift_backend) fn open(
+        plan: Option<&crate::OrientedSubcontinuationPlanV1>,
+    ) -> Self {
+        Self {
+            planned: plan
+                .map(|plan| {
+                    plan.recursive_calls
+                        .iter()
+                        .map(|call| call.call_template_id)
+                        .collect()
+                })
+                .unwrap_or_default(),
+            emitted: BTreeMap::new(),
+        }
+    }
+
+    /// Record one emitted checked call. ⛔ Called only **after** the `Inst`
+    /// exists, so a template reaches this set only once its call is real.
+    pub(in crate::cranelift_backend) fn record_emitted(
+        &mut self,
+        call_template_id: u64,
+        record: CheckedCallRecord,
+    ) -> Result<(), CraneliftBackendError> {
+        if self.emitted.insert(call_template_id, record).is_some() {
+            return Err(backend_module(
+                "one checked recursive call template emitted more than one declaration-unit call"
+                    .to_string(),
+            ));
+        }
+        Ok(())
+    }
+
+    /// **Planned = consumed = emitted, before the artifact is published.**
+    ///
+    /// `consumed` is the affine marker machinery's own set, passed in rather
+    /// than mirrored here, so the two cannot drift.
+    pub(in crate::cranelift_backend) fn close(
+        self,
+        consumed: &BTreeSet<u64>,
+    ) -> Result<(), CraneliftBackendError> {
+        let emitted = self.emitted.keys().copied().collect::<BTreeSet<_>>();
+        for (name, set) in [("consumed", consumed), ("emitted", &emitted)] {
+            if *set != self.planned {
+                let missing = self.planned.difference(set).count();
+                let extra = set.difference(&self.planned).count();
+                return Err(backend_module(format!(
+                    "the {name} checked recursive call population does not equal the planned one:                      {missing} planned templates absent, {extra} unplanned templates present"
+                )));
+            }
+        }
+        // Each emitted call's ACTUAL callee against its exact resolved target.
+        // ⛔ The callee is the one decoded from the emitted instruction; a
+        // tuple that disagrees here is a call that went somewhere the planner
+        // did not resolve.
+        for (call_template_id, record) in &self.emitted {
+            if record.callee != record.resolved {
+                return Err(backend_module(format!(
+                    "checked recursive call template {call_template_id} emitted a call to \
+                     {:?} but the target resolved for occurrence {:?} is {:?} ({:?})",
+                    record.callee, record.reference, record.resolved, record.target
+                )));
+            }
+        }
+        Ok(())
+    }
 }
 
 pub(in crate::cranelift_backend) fn resolve_call_edges(
     plan: &StaticTransitionPlan<'_>,
     bundle: &UnitBundle,
 ) -> Result<CallEdgeTargets, CraneliftBackendError> {
-    let derived = plan.emittable_call_edges()?;
+    // `D5a` checkpoint 1: the edges that SURVIVE the retarget. An edge into a
+    // template-only body is the seeding edge whose realization moved to a
+    // generated context; resolving it would demand a `FuncId` for a unit with
+    // no emitted `Function`, and `bundle.function`'s `None` is a real answer
+    // rather than a prompt to fabricate one.
+    let derived = plan.executable_call_edges()?;
     // `RT-CONTSPEC-ACTIVATE` `D1b`: the exact-set source-body binding, joined
     // on validated caller + callee scheduling entry. A `StaticBody` edge's
     // resolved `call_site_origin` becomes the callable SOURCE BODY; the
@@ -491,6 +724,125 @@ pub(in crate::cranelift_backend) fn resolve_call_edges(
     Ok(CallEdgeTargets { edges })
 }
 
+/// **`RT-DECL-CLOSURE-PORT` `D5`** — one mutation of the function-local
+/// declared-call copy, per axis the ABI reconciliation claims to hold.
+///
+/// ⚠ Every variant leaves the plan's descriptor untouched. `Exact` is the
+/// identity, and a control that ran only `Exact` would be asserting its own
+/// setup ([[a-mutation-control-with-unwrap-or-exact-is-the-identity]]).
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) enum D5DeclaredCallMutation {
+    Exact,
+    /// Phase: the word class a slot is carried in.
+    Carrier,
+    /// Owner: whether the callee owns or borrows the slot.
+    Ownership,
+    /// Owner: whose storage the slot addresses.
+    StorageOwner,
+    /// The slot's position within its own kind-run.
+    Ordinal,
+    /// The declared frame size.
+    Header,
+    /// Where a slot sits in the frame.
+    Offsets,
+    /// The call resolves some other unit's record — the wrong-target class.
+    Retarget,
+}
+
+#[cfg(test)]
+thread_local! {
+    static D5_DECLARED_CALL_MUTATION: std::cell::Cell<D5DeclaredCallMutation> =
+        const { std::cell::Cell::new(D5DeclaredCallMutation::Exact) };
+}
+
+/// Run `body` with one declared-call mutation installed, restoring `Exact` on
+/// the way out **including on panic** — a control asserts inside, and a leak
+/// would silently mutate every later compile on this thread.
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn with_d5_declared_call_mutation<T>(
+    mutation: D5DeclaredCallMutation,
+    body: impl FnOnce() -> T,
+) -> T {
+    struct Restore;
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            D5_DECLARED_CALL_MUTATION.with(|cell| cell.set(D5DeclaredCallMutation::Exact));
+        }
+    }
+    D5_DECLARED_CALL_MUTATION.with(|cell| cell.set(mutation));
+    let _restore = Restore;
+    body()
+}
+
+#[cfg(test)]
+fn d5_mutate_declared_calls(calls: &mut BTreeMap<StaticOriginId, DeclaredUnitCall>) {
+    let mutation = D5_DECLARED_CALL_MUTATION.with(std::cell::Cell::get);
+    if mutation == D5DeclaredCallMutation::Exact {
+        return;
+    }
+    // ⚠ The retarget needs a DIFFERENT record to point at, so it is taken
+    // before the loop below borrows the map mutably.
+    let other = calls.values().next().cloned();
+    for call in calls.values_mut() {
+        match mutation {
+            D5DeclaredCallMutation::Exact => {}
+            D5DeclaredCallMutation::Carrier => {
+                if let Some(slot) = call.slots.iter_mut().find(|slot| {
+                    matches!(slot.kind, AbiSlotKind::Parameter | AbiSlotKind::Capture)
+                }) {
+                    slot.carrier = match slot.carrier {
+                        AbiCarrier::ValueWord => AbiCarrier::GroundValueCarrier,
+                        _ => AbiCarrier::ValueWord,
+                    };
+                }
+            }
+            D5DeclaredCallMutation::Ownership => {
+                if let Some(slot) = call.slots.iter_mut().find(|slot| {
+                    matches!(slot.kind, AbiSlotKind::Parameter | AbiSlotKind::Capture)
+                }) {
+                    slot.ownership = match slot.ownership {
+                        AbiOwnership::OwnedByFrame => AbiOwnership::BorrowedForActivation,
+                        _ => AbiOwnership::OwnedByFrame,
+                    };
+                }
+            }
+            D5DeclaredCallMutation::StorageOwner => {
+                if let Some(slot) = call.slots.iter_mut().find(|slot| {
+                    matches!(slot.kind, AbiSlotKind::Parameter | AbiSlotKind::Capture)
+                }) {
+                    slot.storage_owner = match slot.storage_owner {
+                        AbiStorageOwner::ActivationFrame => AbiStorageOwner::PersistentStore,
+                        _ => AbiStorageOwner::ActivationFrame,
+                    };
+                }
+            }
+            D5DeclaredCallMutation::Ordinal => {
+                if let Some(slot) = call.slots.iter_mut().find(|slot| {
+                    matches!(slot.kind, AbiSlotKind::Parameter | AbiSlotKind::Capture)
+                }) {
+                    slot.ordinal = slot.ordinal.wrapping_add(1);
+                }
+            }
+            D5DeclaredCallMutation::Header => {
+                call.header.frame_bytes = call.header.frame_bytes.wrapping_add(8);
+            }
+            D5DeclaredCallMutation::Offsets => {
+                if let Some(offset) = call.offsets.first_mut() {
+                    *offset = offset.wrapping_add(8);
+                }
+            }
+            D5DeclaredCallMutation::Retarget => {
+                if let Some(other) = other.clone() {
+                    if other.origin != call.origin {
+                        *call = other;
+                    }
+                }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 thread_local! {
     /// How many call edges the most recent compile resolved.
@@ -545,7 +897,11 @@ pub(in crate::cranelift_backend) fn declare_unit_bundle<M: Module>(
 ) -> Result<UnitBundle, CraneliftBackendError> {
     let sig = unit_signature(module);
     let mut functions = BTreeMap::new();
-    for (ordinal, unit) in plan.emittable_units()?.into_iter().enumerate() {
+    // `D5a` checkpoint 1: the EXECUTABLE population, not the template one. ⛔ A
+    // template-only raw worker must not be declared here -- declaring it and
+    // then not defining it is the undefined phantom the ruling names, and it
+    // would falsify the declared/defined census below.
+    for (ordinal, unit) in plan.executable_units()?.into_iter().enumerate() {
         // The symbol carries the dense ordinal purely so the linker sees
         // distinct names. ⛔ It is NOT an identity: nothing resolves a unit by
         // parsing this string, and `functions` is keyed by the planner's id.
@@ -580,11 +936,28 @@ pub(in crate::cranelift_backend) fn declare_unit_bundle<M: Module>(
             ));
         }
     }
+    // `RT-DECL-CLOSURE-PORT` `D5a` -- forward-declare one target per planned
+    // generated producer execution context, in the same pre-definition pass and
+    // for the same reason: a context is called from the enclosing
+    // specialization's body, which is defined below.
+    let mut contexts = BTreeMap::new();
+    for (ordinal, context) in plan.continuation_contexts()?.into_iter().enumerate() {
+        let name = format!("ken_continuation_context_{ordinal}");
+        let id = module
+            .declare_function(&name, Linkage::Local, &sig)
+            .map_err(|err| backend_module(err.to_string()))?;
+        if contexts.insert(context.id(), id).is_some() {
+            return Err(backend_module(
+                "two generated context descriptors claim one planned context".to_string(),
+            ));
+        }
+    }
     #[cfg(test)]
     B2F_UNIT_EMISSION.with(|cell| cell.set((functions.len(), 0)));
     Ok(UnitBundle {
         functions,
         continuations,
+        contexts,
     })
 }
 
@@ -637,6 +1010,477 @@ pub(in crate::cranelift_backend) fn resolve_continuation_targets(
     Ok(resolved)
 }
 
+/// **`RT-DECL-CLOSURE-PORT` `D5a`** — one entry of a continuation
+/// specialization body's case environment, named by **where its operand comes
+/// from** rather than by the operand.
+///
+/// ⭐ The whole property under repair here is an **order**, so the order is
+/// what this type makes observable. Cranelift `Value`s cannot be synthesized
+/// without a live `FunctionBuilder`, so a control written against the assembled
+/// operands could only ever re-run the pipeline and read a refusal; a control
+/// written against this plan states the binding law directly.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) enum ContinuationCaseBinderSource {
+    /// The projected `StaticWorker`, standing for one recursive field's
+    /// **induction hypothesis**.
+    ///
+    /// `D6a`: this binding takes the
+    /// [`StaticWorkerCallRoute::GeneratedContext`] route -- the planner-issued
+    /// execution context, which appends this frame's continuation-input suffix
+    /// -- **iff** the planner issued such a context for this
+    /// `(specialization, worker body)` pair and this unit resolved it.
+    /// Otherwise it lawfully takes [`StaticWorkerCallRoute::RawWorker`], like
+    /// every pre-`D5a` specialization, and appends nothing.
+    InductionHypothesis,
+    /// The ordinary-envelope operand at this index. ⛔ An index into the
+    /// envelope, never a constructor source position -- the two coincide only
+    /// when no `WorkerCapture` role precedes the field.
+    Ordinary(usize),
+    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D6a`** -- the selected **recursive
+    /// constructor argument**, at its own constructor source position.
+    ///
+    /// ⭐ This is a compiler-only member. It is not a new source occurrence,
+    /// continuation input, ABI slot, carrier, tag or runtime descriptor: it is
+    /// the *same closure* the induction hypothesis names. The unit already
+    /// carries every fact needed to build it -- the closure occurrence, body,
+    /// declared arity, ordered capture provenance and the worker-capture
+    /// operands -- so nothing crosses the ABI to represent it.
+    ///
+    /// It carries [`StaticWorkerCallRoute::RawWorker`] **unconditionally**: the
+    /// source scope binds the closure itself, so there is nothing to condition
+    /// on. ⛔ That is *not* a claim that it differs in route from the induction
+    /// hypothesis beside it. In a unit that resolved no generated context the
+    /// hypothesis lawfully carries `RawWorker` too, and the two members are
+    /// then separated by their positions in the run rather than by their
+    /// routes. See [`StaticWorkerCallRoute`] for the asymmetric law.
+    ///
+    /// ⛔ Before `D6a` this position was **skipped**, and the induction
+    /// hypothesis silently stood in for the argument as well. That is a wrong
+    /// program, not a missing one: every later binder shifted down by one, so
+    /// the case body's outer-frame references landed one slot early.
+    SelectedRecursiveArgument { source_position: u32 },
+    /// The continuation input at this ordinal.
+    ContinuationInput(usize),
+}
+
+/// **`RT-DECL-CLOSURE-PORT` `D5a` — the ruled computational-case binding law,
+/// as a plan.**
+///
+/// The established law, identical in the specialized and carried paths
+/// (`lower_computational_match_value_composed` builds the same three segments
+/// from `induction_hypotheses`, `extend_specialized(args)`, then the frame
+/// environment):
+///
+/// ```text
+/// [IH bindings, recursive-position order REVERSED]
+///   ++ [ALL constructor arguments, source order]
+///   ++ [frame/tail environment]
+/// ```
+///
+/// ⭐ **`RT-CONTSRC-PRODUCER-LOCAL` `D6a` -- "ALL" is load-bearing and was the
+/// defect.** The middle segment covers **every** constructor argument in source
+/// order, the selected recursive one included. The pre-`D6a` construction
+/// *replaced* the selected recursive argument with its own induction
+/// hypothesis: it emitted the IH in segment 1 and then skipped that position in
+/// segment 2, so a case body with one recursive field and one outer reference
+/// got a two-member run where the source scope has three. Every binder after
+/// the skipped position was off by one, which is why the measured symptom was
+/// an out-of-range `Var` at the *tail* (`Var: no runtime binding for index 2`)
+/// rather than anything at the position actually omitted.
+///
+/// ⭐ **`recursive_position` is a constructor SOURCE-FIELD coordinate, not a
+/// lexical environment index.** Reading it as the latter is the exact defect
+/// this function exists to prevent: it placed the worker at environment slot
+/// `recursive_position`, which for a nonzero position moves the induction
+/// hypothesis out of its established lexical prefix and rebinds `Var(0)` to an
+/// ordinary field. The measured consequence on `px8tr_nested_post_effect` was
+/// `Unsupported(Call, "callee is not a closure")` -- `Var(0)` reading a `Unit`.
+///
+/// The specialization eliminates **one** selected recursive callable, so its
+/// projected `StaticWorker` is that position's IH-prefix binding.
+///
+/// The selected recursive field is **absent from the ordinary envelope** --
+/// [`ContinuationOrdinaryEnvelopeRole::NonrecursiveConstructorField`] is by
+/// construction the population that excludes it. ⛔ `D6a`: that is a fact about
+/// the *envelope*, and reading it as a fact about the *binder run* is the
+/// defect. The field has no envelope operand because it needs none: it is a
+/// compiler-only [`ContinuationCaseBinderSource::SelectedRecursiveArgument`],
+/// built from the unit's own worker provenance. So the run's length is
+/// `argument_binders + recursive_positions.len()` -- one IH per recursive
+/// position, then one member per constructor argument -- which is exactly the
+/// binder count the planner's own demand walk uses for this case.
+///
+/// ⛔ Worker-capture `Parameter` slots are **not** case binders. They construct
+/// the `StaticWorker`; they never enter this run.
+///
+/// Every gap is a hard stop rather than a hole: a gap-filled run would silently
+/// shift every later binder, which is a wrong program rather than a refused one.
+pub(super) fn continuation_case_binder_run(
+    argument_binders: usize,
+    recursive_positions: &[usize],
+    worker_recursive_position: u32,
+    envelope: &[ContinuationOrdinaryEnvelopeRole],
+    continuation_inputs: usize,
+) -> Result<Vec<ContinuationCaseBinderSource>, CraneliftBackendError> {
+    for position in recursive_positions.iter().copied() {
+        if position >= argument_binders {
+            return Err(backend_module(format!(
+                "the selected case names a recursive position {position} outside its own \
+                 {argument_binders}-binder run"
+            )));
+        }
+    }
+    let worker_position = usize::try_from(worker_recursive_position).map_err(|_| {
+        backend_module(
+            "the ruled recursive position exceeds this platform's index width".to_string(),
+        )
+    })?;
+    if !recursive_positions.contains(&worker_position) {
+        return Err(backend_module(format!(
+            "the ruled recursive position {worker_position} is not among the selected case's \
+             recursive positions, so the projected worker stands for no induction hypothesis"
+        )));
+    }
+
+    // **`D6c` — THE CHECKED TOTAL, computed ONCE and reused.**
+    //
+    // ⛔ Chained `checked_add` with a typed refusal on overflow: no panic and no
+    // wrapping. A wrapped total would understate the run's length and let the
+    // sealed-run cardinality check below pass on a run it should refuse, which
+    // is the one failure mode this postcondition exists to prevent.
+    //
+    // ⭐ The SAME value serves the allocation's capacity and the final
+    // cardinality. Computing it twice would let the two drift, and the check
+    // would then be comparing the run against a total the builder never used.
+    let sealed_total = recursive_positions
+        .len()
+        .checked_add(argument_binders)
+        .and_then(|partial| partial.checked_add(continuation_inputs))
+        .ok_or_else(|| {
+            backend_module(format!(
+                "this case's binder run would hold {} induction hypotheses + {argument_binders} \
+                 constructor arguments + {continuation_inputs} continuation inputs, which \
+                 overflows this platform's index width",
+                recursive_positions.len()
+            ))
+        })?;
+    let mut run = Vec::with_capacity(sealed_total);
+
+    // Segment 1 -- the IH prefix, recursive positions reversed.
+    //
+    // ⚠ **The reversal is not observable on any case this mechanism accepts.**
+    // A specialization projects exactly one worker, so a second recursive
+    // position has no IH to bind and hard-stops below; with one position,
+    // reversed and forward order coincide. It is written as the law states it
+    // rather than collapsed to the single-position case, so that admitting a
+    // second worker later is a change to the projection and not to this order.
+    // `D6c` — FABRICATED AVAILABILITY, under test only. A second recursive
+    // position is claimed for this case, which the specialization projects no
+    // worker for. ⛔ The claim is added to the segment's own input rather than
+    // to its output: the loop below is untouched, so what refuses is the
+    // production guard that owns availability, not a rewritten loop.
+    #[cfg(test)]
+    let fabricated: Vec<usize>;
+    #[cfg(test)]
+    let recursive_positions = if crate::cranelift_backend::lowering::d6c_selection_mutation()
+        == crate::cranelift_backend::lowering::D6cSelectionMutation::FabricatedAvailability
+    {
+        crate::cranelift_backend::lowering::record_d6c_selection_application();
+        fabricated = recursive_positions
+            .iter()
+            .copied()
+            .chain(std::iter::once(worker_position.wrapping_add(1)))
+            .collect();
+        fabricated.as_slice()
+    } else {
+        recursive_positions
+    };
+
+    for position in recursive_positions.iter().rev().copied() {
+        if position != worker_position {
+            return Err(backend_module(format!(
+                "the selected case has a recursive position {position} that the continuation \
+                 specialization projects no worker for, so its induction-hypothesis prefix cannot \
+                 be built"
+            )));
+        }
+        run.push(ContinuationCaseBinderSource::InductionHypothesis);
+    }
+
+    // Segment 2 -- ALL the constructor arguments in SOURCE order.
+    //
+    // A nonrecursive field takes its operand from its own envelope role. A
+    // recursive field takes the compiler-only `SelectedRecursiveArgument`
+    // member: it is the same closure the IH prefix names, bound at a second
+    // environment position and reached by its own call route, so it needs no
+    // envelope operand and no ABI slot.
+    //
+    // ⛔ "Differing only in call route" would overstate it. The routes differ
+    // only where the planner issued a generated context; where it issued none,
+    // both members carry `RawWorker` and the difference is *which position of
+    // the run they occupy* -- which is precisely the difference this segment
+    // exists to restore.
+    //
+    // ⛔ `D6a`: this loop used to `continue` on a recursive position. The IH
+    // then stood in for the argument as well as for the hypothesis, and every
+    // later binder shifted down one slot.
+    for position in 0..argument_binders {
+        let source_position = u32::try_from(position).map_err(|_| {
+            backend_module(
+                "a continuation case binder position exceeds the planner's field width".to_string(),
+            )
+        })?;
+        if recursive_positions.contains(&position) {
+            // ⛔ The hard stop for an unprojected recursive position is
+            // segment 1's, and it has already fired: a position that is not the
+            // ruled `worker_position` never reaches here. So this member is
+            // always the *selected* recursive argument, and `D6a` deliberately
+            // does not generalize to a multi-worker population.
+            //
+            // `D6c` — the four run-shape mutations, under test only. Each moves
+            // ONE producer input of this run and leaves the rest of the segment
+            // exactly as it was, so a refusal downstream is attributable to that
+            // input rather than to a rewritten builder.
+            #[cfg(test)]
+            match crate::cranelift_backend::lowering::d6c_selection_mutation() {
+                // The pre-`D6a` defect exactly: the position is skipped and the
+                // IH stands in for the argument as well.
+                crate::cranelift_backend::lowering::D6cSelectionMutation::OmitSelectedArgument => {
+                    crate::cranelift_backend::lowering::record_d6c_selection_application();
+                    continue;
+                }
+                // One run naming two selected arguments.
+                crate::cranelift_backend::lowering::D6cSelectionMutation::DuplicateSelectedArgument => {
+                    crate::cranelift_backend::lowering::record_d6c_selection_application();
+                    run.push(ContinuationCaseBinderSource::SelectedRecursiveArgument {
+                        source_position,
+                    });
+                }
+                // A source position the unit projects no worker for. ⛔ Chosen
+                // by arithmetic on the ruled position rather than from the
+                // envelope, so the value is not one the plan named anywhere.
+                crate::cranelift_backend::lowering::D6cSelectionMutation::WrongSourcePosition => {
+                    crate::cranelift_backend::lowering::record_d6c_selection_application();
+                    run.push(ContinuationCaseBinderSource::SelectedRecursiveArgument {
+                        source_position: source_position.wrapping_add(1),
+                    });
+                    continue;
+                }
+                _ => {}
+            }
+            run.push(ContinuationCaseBinderSource::SelectedRecursiveArgument { source_position });
+            continue;
+        }
+        let index = envelope
+            .iter()
+            .position(|role| {
+                matches!(
+                    role,
+                    ContinuationOrdinaryEnvelopeRole::NonrecursiveConstructorField {
+                        source_position: candidate,
+                    } if *candidate == source_position
+                )
+            })
+            .ok_or_else(|| {
+                backend_module(format!(
+                    "the ordinary envelope has no nonrecursive field at source position \
+                     {source_position}, so the selected case's binder run cannot be built"
+                ))
+            })?;
+        run.push(ContinuationCaseBinderSource::Ordinary(index));
+    }
+
+    // `D6c` — WRONG ORDER, under test only. The IH prefix and the argument
+    // segment are exchanged and nothing else moves: the same members, the same
+    // count, the same continuation-input tail. ⛔ Applied before segment 3 so
+    // the tail stays in its ruled place and the perturbation is confined to the
+    // two segments whose order is the law under test.
+    #[cfg(test)]
+    if crate::cranelift_backend::lowering::d6c_selection_mutation()
+        == crate::cranelift_backend::lowering::D6cSelectionMutation::WrongOrder
+    {
+        let hypotheses = run
+            .iter()
+            .filter(|source| {
+                matches!(source, ContinuationCaseBinderSource::InductionHypothesis)
+            })
+            .count();
+        if hypotheses > 0 && hypotheses < run.len() {
+            crate::cranelift_backend::lowering::record_d6c_selection_application();
+            run.rotate_left(hypotheses);
+        }
+    }
+
+    // Segment 3 -- the tail environment: this frame's continuation inputs, in
+    // their ruled ordinal order.
+    for ordinal in 0..continuation_inputs {
+        run.push(ContinuationCaseBinderSource::ContinuationInput(ordinal));
+    }
+
+    // ⭐⭐ **`RT-CONTSRC-PRODUCER-LOCAL` `D6c` — THE CANONICAL-RUN
+    // POSTCONDITION. The run is SEALED here, and nothing leaves this function
+    // unvalidated.**
+    //
+    // This function's doc has always claimed *"every gap is a hard stop rather
+    // than a hole"*, and for the gaps it names that was true. It was NOT true of
+    // the run's own SHAPE: `D6c` measured a member omitted, a member duplicated,
+    // and the two segments permuted, and in each case the malformed run was
+    // returned and lowered. Omission is the pre-`D6a` defect exactly, and on the
+    // mixed witness it compiled clean -- the case body reads only `Var(0)`, so
+    // every later binder shifted with nothing positioned to notice.
+    //
+    // ⛔ **Validated IN PLACE against this function's own inputs. There is no
+    // second builder and no second population.** Constructing an expected run
+    // and comparing would be a parallel authority able to reproduce the very
+    // defect it checks, and the equality would prove only that two
+    // constructions agree with each other.
+    //
+    // ⚠ **What this deliberately does NOT require:** that `Ordinary(index)`
+    // values be numerically source-ordered, or any reconstruction of the
+    // ordinary envelope's order. A self-consistent envelope permutation is
+    // lawful -- each member is checked against the ROLE its own index names, so
+    // the envelope may be laid out however the planner chose.
+    let hypotheses = recursive_positions.len();
+    if run.len() != sealed_total {
+        return Err(backend_module(format!(
+            "the sealed binder run holds {} members, but this case seals {hypotheses} induction \
+             hypotheses + {argument_binders} constructor arguments + {continuation_inputs} \
+             continuation inputs = {sealed_total}. A run of the wrong length shifts every later \
+             binder, which is a wrong program rather than a refused one",
+            run.len()
+        )));
+    }
+
+    // Segment 1's exact extent. ⛔ Both directions: a non-hypothesis inside the
+    // prefix and a hypothesis outside it are different defects and both are
+    // caught, the second by the segment walks below.
+    for (position, source) in run.iter().enumerate().take(hypotheses) {
+        // ⛔ EVERY variant enumerated, no `matches!` and no `other` arm. This is
+        // a load-bearing position: a future member kind must be a compile error
+        // here, forcing a decision about whether it may lead the run, rather
+        // than falling into a catch-all that happens to reject it today for a
+        // reason nobody chose.
+        match source {
+            ContinuationCaseBinderSource::InductionHypothesis => {}
+            ContinuationCaseBinderSource::SelectedRecursiveArgument { .. }
+            | ContinuationCaseBinderSource::Ordinary(_)
+            | ContinuationCaseBinderSource::ContinuationInput(_) => {
+                return Err(backend_module(format!(
+                    "the sealed binder run holds {source:?} at position {position}, inside the \
+                     {hypotheses}-member induction-hypothesis prefix. The IH prefix leads the run \
+                     and the constructor arguments follow it; a member of another kind here is \
+                     the two segments permuted"
+                )));
+            }
+        }
+    }
+
+    // Segment 2 -- every constructor argument at its own source position.
+    //
+    // ⛔ The match is EXHAUSTIVE over the closed source sum with no wildcard, so
+    // a future variant is a compile error here rather than a silent acceptance.
+    for position in 0..argument_binders {
+        let index = hypotheses + position;
+        let source_position = u32::try_from(position).map_err(|_| {
+            backend_module(
+                "a continuation case binder position exceeds the planner's field width".to_string(),
+            )
+        })?;
+        let recursive = recursive_positions.contains(&position);
+        match &run[index] {
+            ContinuationCaseBinderSource::SelectedRecursiveArgument {
+                source_position: named,
+            } => {
+                if !recursive {
+                    return Err(backend_module(format!(
+                        "the sealed binder run names a selected recursive argument at run \
+                         position {index} for source position {source_position}, which this case \
+                         does not list as recursive"
+                    )));
+                }
+                if *named != source_position {
+                    return Err(backend_module(format!(
+                        "the sealed binder run's argument segment holds a selected recursive \
+                         argument for source position {named} at the slot belonging to source \
+                         position {source_position}"
+                    )));
+                }
+                if position != worker_position {
+                    return Err(backend_module(format!(
+                        "the sealed binder run names a selected recursive argument at source \
+                         position {source_position}, but this specialization projects a worker \
+                         for position {worker_position}"
+                    )));
+                }
+            }
+            ContinuationCaseBinderSource::Ordinary(role_index) => {
+                if recursive {
+                    return Err(backend_module(format!(
+                        "the sealed binder run takes source position {source_position} from the \
+                         ordinary envelope, but this case lists it as recursive -- the recursive \
+                         field is a compiler-only member and has no envelope operand"
+                    )));
+                }
+                // ⚠ The ROLE the index names, never the index's own value. This
+                // is what keeps a lawful envelope permutation lawful.
+                let role = envelope.get(*role_index).ok_or_else(|| {
+                    backend_module(format!(
+                        "the sealed binder run points at ordinary-envelope index {role_index}, \
+                         which this frame's {}-role envelope does not hold",
+                        envelope.len()
+                    ))
+                })?;
+                match role {
+                    ContinuationOrdinaryEnvelopeRole::NonrecursiveConstructorField {
+                        source_position: candidate,
+                    } if *candidate == source_position => {}
+                    other => {
+                        return Err(backend_module(format!(
+                            "the sealed binder run takes source position {source_position} from \
+                             ordinary-envelope index {role_index}, which names {other:?} instead"
+                        )));
+                    }
+                }
+            }
+            other @ (ContinuationCaseBinderSource::InductionHypothesis
+            | ContinuationCaseBinderSource::ContinuationInput(_)) => {
+                return Err(backend_module(format!(
+                    "the sealed binder run holds {other:?} at run position {index}, inside the \
+                     constructor-argument segment for source position {source_position}"
+                )));
+            }
+        }
+    }
+
+    // Segment 3 -- the continuation-input tail, by exact ordinal.
+    for ordinal in 0..continuation_inputs {
+        let index = hypotheses + argument_binders + ordinal;
+        // ⛔ EVERY variant enumerated, for the same reason as the IH prefix. The
+        // ordinal mismatch is split out from the wrong-kind case so the two are
+        // distinguishable in the diagnostic rather than merged into one arm.
+        match &run[index] {
+            ContinuationCaseBinderSource::ContinuationInput(named) => {
+                if *named != ordinal {
+                    return Err(backend_module(format!(
+                        "the sealed binder run holds continuation input {named} at run position \
+                         {index}, where this frame's continuation input {ordinal} belongs"
+                    )));
+                }
+            }
+            source @ (ContinuationCaseBinderSource::InductionHypothesis
+            | ContinuationCaseBinderSource::SelectedRecursiveArgument { .. }
+            | ContinuationCaseBinderSource::Ordinary(_)) => {
+                return Err(backend_module(format!(
+                    "the sealed binder run holds {source:?} at run position {index}, where this \
+                     frame's continuation input {ordinal} belongs"
+                )));
+            }
+        }
+    }
+
+    Ok(run)
+}
+
 /// **`RT-CONTSPEC-ACTIVATE` `D2` — define each declared continuation target
 /// from its own projected contract.**
 ///
@@ -668,12 +1512,18 @@ pub(super) fn define_continuation_bodies<M: Module>(
         inputs: Vec<ContinuationInputView>,
         continuation_origin: StaticOriginId,
         producer_alternative: u32,
+        recursive_position: u32,
         worker_closure_origin: StaticOriginId,
         worker_body_origin: StaticOriginId,
         worker_declared_arity: u32,
         worker_capture_count: usize,
         header_parameters: u32,
         header_captures: u32,
+        /// `D8o` — the owner of the source body this specialization lowers: the
+        /// continuation's own consumer. ⛔ Carried from the planner view rather
+        /// than derived here; it is an existing planner fact reaching the site
+        /// that needs it, not a new authority.
+        consumer_owner: PredeclaredFunctionId,
     }
     // `RT-WORKER-BIND` `D4` exposes its local declaration operation for a
     // separately emitted caller; a continuation function is exactly that, so
@@ -693,12 +1543,14 @@ pub(super) fn define_continuation_bodies<M: Module>(
                 inputs: unit.continuation_inputs()?,
                 continuation_origin: unit.continuation_origin(),
                 producer_alternative: unit.producer_alternative(),
+                recursive_position: unit.recursive_position(),
                 worker_closure_origin: unit.worker_closure_origin(),
                 worker_body_origin: unit.worker_body_origin(),
                 worker_declared_arity: unit.worker_declared_arity(),
                 worker_capture_count: unit.worker_capture_count(),
                 header_parameters: unit.header().parameters,
                 header_captures: unit.header().captures,
+                consumer_owner: unit.consumer_owner(),
             })
         })
         .collect::<Result<Vec<_>, CraneliftBackendError>>()?;
@@ -770,9 +1622,13 @@ pub(super) fn define_continuation_bodies<M: Module>(
             }
         }
 
+        compiler.open_aggregate_events(id)?;
         let sig = unit_signature(module);
         let mut func =
             Function::with_name_signature(UserFuncName::user(0, id.as_u32()), sig);
+        // Set by the retarget below; `None` means this specialization calls the
+        // raw worker unit directly, which is every pre-`D5a` case.
+        let mut retargeted_worker_body: Option<StaticOriginId> = None;
         let result_offset = slots
             .iter()
             .zip(offsets)
@@ -799,14 +1655,169 @@ pub(super) fn define_continuation_bodies<M: Module>(
         //
         // Declared here, into THIS function: no `FuncRef` crosses a function.
         let declared_workers = worker_targets.declare_in_func(module, &mut func);
-        if !declared_workers.contains_key(&unit.worker_body_origin) {
+        function_local.unit_calls = declared_workers.clone();
+        // `D6b` -- the RAW route's table, captured before the retarget below
+        // rewrites `worker_calls`. This is the only point at which the raw
+        // callee for a retargeted body is still in hand.
+        function_local.raw_worker_calls = declared_workers.clone();
+        function_local.worker_templates = worker_targets.templates().clone();
+        function_local.context_calls = declare_context_calls_in_func(
+            module,
+            &mut func,
+            &compiler.static_transition_plan,
+            bundle,
+        )?;
+        // `RT-DECL-CLOSURE-PORT` `D5a` -- THE RETARGET.
+        //
+        // If this specialization's worker body has a generated execution
+        // context, the worker call resolves to that context instead of to the
+        // raw unit. ⛔ Only `worker_calls` moves: `unit_calls` above keeps the
+        // raw target, because the static-worker CONSTRUCTOR validates against
+        // the raw body's own contract and this retarget does not change what
+        // that body is.
+        //
+        // ⭐ Why this is what makes the whole thing work: the continuation
+        // inputs live in THIS frame's Capture slots. The raw unit's ABI has
+        // nowhere to put them, so calling the raw unit drops them before the
+        // nested producer is reached -- which is exactly the measured defect.
+        // The context's ABI has a capture run for them, so the call carries
+        // them across the checked-IH worker execution.
+        let mut worker_calls = declared_workers;
+        // `D5a` checkpoint 4 step 3 -- the binding's three reaching mutations.
+        //
+        // ⛔ `Suppress` and `Transplant` perturb WHICH context the retarget is
+        // handed; the exact lookup itself is untouched, so a refusal downstream
+        // is attributable to the binding and not to a rewritten resolver.
+        // `Transplant` declines when this unit has no foreign context to be
+        // given -- it bumps the application counter when it does fire, so a
+        // control can require the perturbation actually reached the seat rather
+        // than reading a green as a defence.
+        #[cfg(test)]
+        let resolved_context = match crate::cranelift_backend::lowering::d5a_route_mutation() {
+            crate::cranelift_backend::lowering::D5aRouteMutation::SuppressContextBinding => {
+                crate::cranelift_backend::lowering::record_d5a_route_application();
+                None
+            }
+            crate::cranelift_backend::lowering::D5aRouteMutation::TransplantContextBinding => {
+                let foreign = compiler
+                    .static_transition_plan
+                    .continuation_contexts()?
+                    .into_iter()
+                    .find(|context| context.enclosing_specialization() != unit.id);
+                match foreign {
+                    Some(context) => {
+                        crate::cranelift_backend::lowering::record_d5a_route_application();
+                        Some(context)
+                    }
+                    None => compiler
+                        .static_transition_plan
+                        .continuation_context_for(unit.id, unit.worker_body_origin)?,
+                }
+            }
+            _ => compiler
+                .static_transition_plan
+                .continuation_context_for(unit.id, unit.worker_body_origin)?,
+        };
+        #[cfg(not(test))]
+        let resolved_context = compiler
+            .static_transition_plan
+            .continuation_context_for(unit.id, unit.worker_body_origin)?;
+        if let Some(context) = resolved_context {
+            // `D5a` checkpoint 4 step 3 -- THE TRANSPLANT STOP.
+            //
+            // ⭐⭐ Added because a transplant was **measured to compile**. The
+            // resolved context used to be trusted wholesale and the record
+            // below took its `origin` from `unit.worker_body_origin` -- the
+            // asking unit's own value. `call_static_worker`'s
+            // `target.origin != worker.body_origin` check therefore compared
+            // that value with itself on this path and could not see a foreign
+            // context at all. Handed one context in place of another, lowering
+            // emitted a call that type-checked (the capture suffix made the
+            // operand run agree) and transferred to a function executing a
+            // DIFFERENT body.
+            //
+            // ⛔ Production never reaches that state: `continuation_context_for`
+            // is keyed by `(enclosing, worker_body)` and is the only producer.
+            // ⇒ But "unreachable by construction" was carrying the whole
+            // guarantee here, with no check able to observe a violation, so the
+            // ruling's transplanted-binding stop had nothing to name. These two
+            // comparisons cost nothing and turn it into a fact the code checks.
+            if context.enclosing_specialization() != unit.id {
+                return Err(backend_module(format!(
+                    "the retarget resolved generated context {:?}, whose enclosing specialization \
+                     is {:?} and not the {:?} now being defined; a context executes on behalf of \
+                     the one identity that owns it, so this call would transfer another \
+                     specialization's captures across this one's worker execution",
+                    context.id(),
+                    context.enclosing_specialization(),
+                    unit.id,
+                )));
+            }
+            if context.worker_body_origin() != unit.worker_body_origin {
+                return Err(backend_module(format!(
+                    "the retarget resolved a generated context executing body {:?}, but this \
+                     specialization selected worker body {:?}",
+                    context.worker_body_origin(),
+                    unit.worker_body_origin,
+                )));
+            }
+            let target = bundle.context(context.id()).ok_or_else(|| {
+                backend_module(
+                    "a planned generated context was never forward-declared".to_string(),
+                )
+            })?;
+            let (context_offsets, _frame_bytes) = context.slot_offsets()?;
+            worker_calls.insert(
+                unit.worker_body_origin,
+                DeclaredUnitCall {
+                    function: module.declare_func_in_func(target, &mut func),
+                    // The context EXECUTES that body, so the origin it answers
+                    // for is unchanged. ⛔ Read from the CONTEXT, not from the
+                    // asking unit: taking it from `unit` is what made
+                    // `call_static_worker`'s origin check self-referential
+                    // here. The equality above is what lets both readings agree.
+                    origin: context.worker_body_origin(),
+                    call_site_origin: context.worker_body_origin(),
+                    header: context.header(),
+                    slots: context.slots().to_vec(),
+                    offsets: context_offsets,
+                },
+            );
+            retargeted_worker_body = Some(unit.worker_body_origin);
+        }
+        // ⛔ Checked AFTER the retarget, not before it. `D5a` checkpoint 4
+        // step 2 removes a fully retargeted raw worker from the emitted
+        // `Function` population, so demanding an *emittable-unit* target here
+        // would reject exactly the case the retarget exists to serve. What this
+        // specialization actually needs is a declared callee for its worker
+        // body -- raw or generated -- and that is what is required.
+        if !worker_calls.contains_key(&unit.worker_body_origin) {
             return Err(backend_module(
-                "the selected continuation worker body has no projected emittable-unit target"
+                "the selected continuation worker body has no declared callee in this function,                  neither an emittable raw unit nor a generated execution context"
                     .to_string(),
             ));
         }
-        function_local.unit_calls = declared_workers.clone();
-        function_local.worker_calls = declared_workers;
+        function_local.worker_calls = worker_calls;
+        // `D8n` — this generated Function's own checked-frame consumption
+        // transaction, spanning the specialization body exactly. ⛔ Opened before the builder and
+        // closed after it, so every branch scope inside nests within it.
+        let frame_scope = CheckedFrameFunctionScope::open(compiler)?;
+        // ⭐⭐ `D8o` — THE BINDING THIS PASS NEVER HAD. A specialization body
+        // used to run with whatever the previously defined body left in both
+        // ambient fields. The owner is exactly the planner's identity for this
+        // specialization; the unit is the owner of the source body it lowers,
+        // which is the continuation's own consumer.
+        let ambient = AmbientBodyAuthority::bind(
+            compiler,
+            ContinuationEmissionOwner::Specialization(unit.id),
+            unit.consumer_owner,
+        );
+        // `D8o` — the exact body key, supplied by the pass that knows it.
+        #[cfg(test)]
+        crate::cranelift_backend::lowering::record_d8o_body_key(
+            compiler.defining_function_id,
+            crate::cranelift_backend::lowering::D8oBodyKey::ContinuationSpecialization(unit.id),
+        );
         let mut func_ctx = FunctionBuilderContext::new();
         {
             let mut builder = FunctionBuilder::new(&mut func, &mut func_ctx);
@@ -880,6 +1891,22 @@ pub(super) fn define_continuation_bodies<M: Module>(
                 carried_inputs.push(load_at(&mut builder, **offset)?);
             }
 
+            // `D5a` -- the operand suffix the retargeted worker call appends.
+            //
+            // These are THIS frame's own continuation inputs, in ordinal order,
+            // which is exactly the capture run the generated context declares.
+            // ⛔ Stashed rather than threaded through `construct_static_worker_
+            // binding`: the worker binding is the raw body's contract and adding
+            // a context's captures to it would make the raw contract vary with
+            // its caller.
+            if let Some(worker_body_origin) = retargeted_worker_body {
+                compiler.function_local.generated_context_captures =
+                    Some(GeneratedContextCaptures {
+                        worker_body_origin,
+                        operands: carried_inputs.clone(),
+                    });
+            }
+
             // The ordered capture segment for the selected worker: the
             // envelope's `WorkerCapture` roles, in capture-ordinal order,
             // taking each one's operand from its own Parameter position.
@@ -897,23 +1924,173 @@ pub(super) fn define_continuation_bodies<M: Module>(
                 ));
             }
 
+            // `D6a` -- THE INDUCTION HYPOTHESIS'S ROUTE, and only its.
+            //
+            // `retargeted_worker_body` is `Some` exactly when
+            // `continuation_context_for` issued a generated execution context
+            // for this `(specialization, worker body)` pair AND the retarget
+            // below resolved it into this function. Both halves are required,
+            // which is why this reads the retarget's own outcome rather than
+            // re-asking the planner: an issued context this unit did not
+            // resolve is not a context this binding can name.
+            //
+            // ⭐ `None` is the ordinary, lawful answer -- every pre-`D5a`
+            // specialization, and every unit in the governed-bracket witness.
+            // The hypothesis then takes the raw route, appending nothing, and
+            // the two bindings below are route-identical. That is a degenerate
+            // route pair, not a collapsed one.
+            //
+            // ⛔ Not re-derived at the call site. Both bindings below name the
+            // same body origin, so no comparison available there can tell them
+            // apart -- see `StaticWorkerCallRoute`.
+            let induction_route = match retargeted_worker_body {
+                Some(_) => StaticWorkerCallRoute::GeneratedContext,
+                None => StaticWorkerCallRoute::RawWorker,
+            };
+            // `D6c` — CROSS-ROUTING, the hypothesis half. It takes the raw route
+            // while this unit DID resolve a context; the argument below takes
+            // the context route. ⛔ Only where a context was actually resolved:
+            // on a route-degenerate unit both members lawfully carry
+            // `RawWorker`, so there is no crossing to make and the arm declines
+            // rather than counting an application it did not perform.
+            #[cfg(test)]
+            let induction_route = if crate::cranelift_backend::lowering::d6c_selection_mutation()
+                == crate::cranelift_backend::lowering::D6cSelectionMutation::CrossRouteTargets
+                && retargeted_worker_body.is_some()
+            {
+                crate::cranelift_backend::lowering::record_d6c_selection_application();
+                StaticWorkerCallRoute::RawWorker
+            } else {
+                induction_route
+            };
+
             // The EXISTING constructor, with the projected identity and arity.
             let worker = compiler.construct_static_worker_binding(
                 unit.worker_closure_origin,
                 unit.worker_body_origin,
                 unit.worker_declared_arity,
                 unit.worker_capture_count,
-                worker_captures,
+                worker_captures.clone(),
+                induction_route,
+                // `D8i` — an induction hypothesis answers for no composed
+                // source continuation. Stated explicitly: this is a positive
+                // claim about the hypothesis's role, not the absence of one.
+                ContinuationDischarge::DirectSpecializationCall,
             )?;
 
-            // The semantic case environment, through the sole binding
-            // authority: the continuation inputs in ordinal order, then the
-            // worker installed in the selected case's binder order.
-            let mut env: Vec<LoweringEnvironmentBinding> = carried_inputs
-                .into_iter()
-                .map(LoweringEnvironmentBinding::Value)
-                .collect();
-            env.insert(0, LoweringEnvironmentBinding::StaticWorker(worker));
+            // `D6a` -- the selected recursive constructor argument.
+            //
+            // ⭐ The SAME closure occurrence, body origin, declared arity and
+            // ordered capture operands as the induction hypothesis above, built
+            // through the same constructor and validated against the same raw
+            // template contract. What the two represent still differs: the
+            // argument is the closure the source scope binds, while the
+            // hypothesis is that closure as this specialization eliminates it.
+            //
+            // ⛔ The ROUTE is `RawWorker` unconditionally here, and that is not
+            // the same as saying it differs from the hypothesis's. When
+            // `induction_route` above resolved to `RawWorker` -- no context
+            // issued -- the two bindings are route-identical, and they are
+            // still two bindings for two positions of the run. The route is
+            // what will separate them at the call edge in `D6b` *where a
+            // context exists*; it is not what makes them two.
+            //
+            // ⛔ Nothing new crosses the ABI. This adds no slot, carrier, tag,
+            // descriptor or source occurrence -- it is a second compiler-only
+            // binding over operands this frame has already loaded.
+            // `D6c` — the three binding-construction mutations, under test only.
+            // Each moves ONE argument handed to the existing constructor; the
+            // constructor itself, the hypothesis above and the run below are all
+            // untouched, so the guard that refuses is the one that owns the
+            // moved input.
+            #[cfg(test)]
+            let (argument_body_origin, argument_captures, argument_route) = {
+                use crate::cranelift_backend::lowering::D6cSelectionMutation as Mutation;
+                match crate::cranelift_backend::lowering::d6c_selection_mutation() {
+                    // A body this unit did not select. ⛔ The substituted value
+                    // is a REAL planner-issued origin -- this continuation's own
+                    // frame occurrence -- rather than an arithmetic neighbour.
+                    // A fabricated id could be refused merely for being unknown;
+                    // a real origin naming the wrong role is the case the guard
+                    // actually has to catch. The control asserts it differs from
+                    // the selected body.
+                    Mutation::WrongClosureBody => {
+                        crate::cranelift_backend::lowering::record_d6c_selection_application();
+                        (
+                            unit.continuation_origin,
+                            worker_captures.clone(),
+                            StaticWorkerCallRoute::RawWorker,
+                        )
+                    }
+                    // A capture run that is not the envelope's worker-capture
+                    // segment: drop an operand where there is one, otherwise add
+                    // one the envelope holds.
+                    //
+                    // ⛔ The counter fires ONLY if the vector actually changed.
+                    // A unit with no captures and no ordinary operand to borrow
+                    // leaves this arm the IDENTITY, and counting an application
+                    // there would report a perturbation that never happened --
+                    // which is precisely how a control comes to prove the
+                    // opposite of what it claims.
+                    Mutation::WrongCaptureRun => {
+                        let mut perturbed = worker_captures.clone();
+                        if perturbed.pop().is_none() {
+                            perturbed.extend(ordinary.first().cloned());
+                        }
+                        if perturbed.len() != worker_captures.len() {
+                            crate::cranelift_backend::lowering::record_d6c_selection_application();
+                        }
+                        (
+                            unit.worker_body_origin,
+                            perturbed,
+                            StaticWorkerCallRoute::RawWorker,
+                        )
+                    }
+                    // The argument takes the context route. Paired with the
+                    // hypothesis taking the raw route above, this is the
+                    // cross-routing the two members must never permit.
+                    //
+                    // ⛔ Only where a context was actually resolved. On a
+                    // route-degenerate unit both members lawfully carry
+                    // `RawWorker`, so there is no crossing to perform; applying
+                    // it there would move a route no law distinguishes and count
+                    // an application for a perturbation with no content.
+                    Mutation::CrossRouteTargets if retargeted_worker_body.is_some() => {
+                        crate::cranelift_backend::lowering::record_d6c_selection_application();
+                        (
+                            unit.worker_body_origin,
+                            worker_captures.clone(),
+                            StaticWorkerCallRoute::GeneratedContext,
+                        )
+                    }
+                    _ => (
+                        unit.worker_body_origin,
+                        worker_captures.clone(),
+                        StaticWorkerCallRoute::RawWorker,
+                    ),
+                }
+            };
+            #[cfg(not(test))]
+            let (argument_body_origin, argument_captures, argument_route) = (
+                unit.worker_body_origin,
+                worker_captures,
+                StaticWorkerCallRoute::RawWorker,
+            );
+            let recursive_argument = compiler.construct_static_worker_binding(
+                unit.worker_closure_origin,
+                argument_body_origin,
+                unit.worker_declared_arity,
+                unit.worker_capture_count,
+                argument_captures,
+                argument_route,
+                // `D8i` — the SPECIALIZATION's selected recursive argument.
+                // ⛔ Direct, and the contrast with `D8d`'s composed argument is
+                // the point: the same source closure at the same position
+                // carries an authority on the composed path and none here,
+                // because only the composed consumption stands in for a causal
+                // call the producer never made.
+                ContinuationDischarge::DirectSpecializationCall,
+            )?;
 
             // Exact body recovery: the selected case of the computational
             // frame this continuation belongs to, by its own alternative.
@@ -936,6 +2113,139 @@ pub(super) fn define_continuation_bodies<M: Module>(
                 alternative,
                 &case.body,
             )?;
+            // The semantic case environment, through the sole binding
+            // authority, in the order `continuation_case_binder_run` states:
+            // the IH prefix, then ALL the constructor arguments in source
+            // order -- the selected recursive one included, as `D6a`'s
+            // compiler-only member -- then this frame's continuation inputs.
+            //
+            // ⛔ This site chooses nothing. It maps a plan onto operands; the
+            // order is the plan's, and the plan is a pure function of the
+            // planner's own coordinates.
+            let plan = continuation_case_binder_run(
+                case.argument_binders,
+                &case.recursive_positions,
+                unit.recursive_position,
+                envelope,
+                carried_inputs.len(),
+            )?;
+            let mut env: Vec<LoweringEnvironmentBinding> = Vec::with_capacity(plan.len());
+            for source in &plan {
+                let binding = match *source {
+                    ContinuationCaseBinderSource::InductionHypothesis => {
+                        LoweringEnvironmentBinding::StaticWorker(worker.clone())
+                    }
+                    ContinuationCaseBinderSource::SelectedRecursiveArgument {
+                        source_position,
+                    } => {
+                        // The plan only ever names the ruled position here;
+                        // segment 1 hard-stops on any other. Re-checking it is
+                        // what keeps that a fact this site verifies rather than
+                        // one it inherits.
+                        if source_position != unit.recursive_position {
+                            return Err(backend_module(format!(
+                                "the binder run names a selected recursive argument at source \
+                                 position {source_position}, but this specialization projects a \
+                                 worker for position {}",
+                                unit.recursive_position
+                            )));
+                        }
+                        LoweringEnvironmentBinding::StaticWorker(recursive_argument.clone())
+                    }
+                    ContinuationCaseBinderSource::Ordinary(index) => {
+                        let operand = ordinary.get(index).ok_or_else(|| {
+                            backend_module(
+                                "the binder run names an ordinary-envelope index this frame loaded \
+                                 no operand for"
+                                    .to_string(),
+                            )
+                        })?;
+                        LoweringEnvironmentBinding::Value(operand.clone())
+                    }
+                    ContinuationCaseBinderSource::ContinuationInput(ordinal) => {
+                        let operand = carried_inputs.get(ordinal).ok_or_else(|| {
+                            backend_module(
+                                "the binder run names a continuation input ordinal this frame \
+                                 loaded no operand for"
+                                    .to_string(),
+                            )
+                        })?;
+                        LoweringEnvironmentBinding::Value(operand.clone())
+                    }
+                };
+                env.push(binding);
+            }
+
+            // `D6b` — the same instant, structured. The trace below renders the
+            // ROUTE of each static-worker member; this record carries the body
+            // origin beside it, which is what lets a control ask whether the
+            // mixed pair is over ONE body rather than merely mixed.
+            #[cfg(test)]
+            crate::cranelift_backend::lowering::record_d6b_specialization_body(
+                crate::cranelift_backend::lowering::D6bSpecializationBody {
+                    unit: unit.id,
+                    worker_body_origin: unit.worker_body_origin,
+                    retargeted: retargeted_worker_body,
+                    worker_call_targets: compiler
+                        .function_local
+                        .worker_calls
+                        .keys()
+                        .copied()
+                        .collect(),
+                    raw_worker_call_targets: compiler
+                        .function_local
+                        .raw_worker_calls
+                        .keys()
+                        .copied()
+                        .collect(),
+                    members: env
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(position, binding)| match binding {
+                            LoweringEnvironmentBinding::StaticWorker(worker) => {
+                                Some((position, worker.route, worker.body_origin))
+                            }
+                            LoweringEnvironmentBinding::Value(_) => None,
+                        })
+                        .collect(),
+                },
+            );
+            #[cfg(test)]
+            d5a_trace(format!(
+                "  SPEC-BODY {:?} alt={} binders={} ordinary={} envelope={:?} env=[{}]",
+                unit.id,
+                unit.producer_alternative,
+                case.argument_binders,
+                ordinary.len(),
+                envelope,
+                env.iter()
+                    // `D6a` -- the ROUTE is printed, not just the arm. Both
+                    // static-worker members name the same closure, body and
+                    // arity, so an arm-only rendering shows two identical
+                    // entries and a change collapsing the two routes would be
+                    // invisible in this log.
+                    //
+                    // ⛔ The converse does not hold, and a reader of this log
+                    // must not assume it: two entries rendering the SAME route
+                    // is the lawful route-degenerate case (no context issued),
+                    // not evidence that one binding was reused for both
+                    // members. Only a witness whose planner issues a context
+                    // renders a mixed pair, and only there does this log
+                    // discriminate the routes at all.
+                    .map(|binding| match binding {
+                        LoweringEnvironmentBinding::StaticWorker(worker) => match worker.route {
+                            StaticWorkerCallRoute::RawWorker => "StaticWorker(RawWorker)",
+                            StaticWorkerCallRoute::GeneratedContext =>
+                                "StaticWorker(GeneratedContext)",
+                        },
+                        LoweringEnvironmentBinding::Value(LoweringOperand::Carried(_)) =>
+                            "Carried",
+                        LoweringEnvironmentBinding::Value(LoweringOperand::Specialized(_)) =>
+                            "Specialized",
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
             let lowered = compiler.lower_expr(&mut builder, body, &env)?;
 
             // The Result slot is WRITTEN here and never read.
@@ -956,9 +2266,475 @@ pub(super) fn define_continuation_bodies<M: Module>(
             builder.seal_all_blocks();
             builder.finalize();
         }
+        ambient.release(compiler);
+        frame_scope.close(compiler)?;
         // Verify, then define THIS function -- a fresh context here would
         // define an empty body and silently discard everything emitted above.
         verify_cranelift_function(&func, module.isa())?;
+        compiler.commit_aggregate_events()?;
+        let mut ctx = module.make_context();
+        std::mem::swap(&mut ctx.func, &mut func);
+        module
+            .define_function(id, &mut ctx)
+            .map_err(|error| backend_module(error.to_string()))?;
+        defined += 1;
+    }
+    Ok(defined)
+}
+
+/// **`RT-DECL-CLOSURE-PORT` `D5a` — define each generated producer execution
+/// context.**
+///
+/// The body lowered here is the **raw worker body**, unchanged. What differs
+/// from that body's own ordinary unit is only the environment it runs in: the
+/// context's frame carries the raw parameter run *and* the enclosing
+/// specialization's continuation inputs, so a nested producer inside that body
+/// can reach operands raw `fn2` provably never receives.
+///
+/// ⛔ **Two different questions about the raw unit, and they are decided by
+/// different authorities. Do not answer one with the other.**
+///
+/// 1. **Descriptor, provenance and source-binding authority are RETAINED.**
+///    The raw `ClosureBody` keeps its own descriptor, its own ABI, and its
+///    status as the source binding for this body — the template lowered here
+///    *is* that body, unchanged. ⛔ Nothing about this retarget mutates,
+///    unions, or suffixes the raw descriptor.
+/// 2. **Executable `Function` declaration/definition membership is NOT
+///    retained by default.** It is decided from the **post-retarget final
+///    graph**, by `StaticTransitionPlan::template_only_worker_bodies`: a raw
+///    worker every selecting specialization has retargeted — and whose carried
+///    invocation also binds a generated context — is **template-only**, and is
+///    absent from the emitted-`Function` population. A raw worker with any
+///    remaining final raw call stays executable.
+///
+/// ⚠ **This paragraph previously said the raw unit "is still emitted and is
+/// not retired", keeping its body and "simply losing one caller".** That was
+/// the pre-`D5a` reading and it is superseded: it answers question 2 with
+/// question 1's answer, so it is true of the descriptor and false of the
+/// emitted population whenever the retarget is total. The surviving half of
+/// the old claim is the useful one — *"a new owner for a body does not retire
+/// the old owner's unit"* remains correct about **authority**, and says
+/// nothing about **membership**.
+///
+/// ⛔ The emission owner bound here is `Specialization(enclosing)`, and
+/// `defining_unit` stays the **raw** owner. Deriving one from the other is the
+/// conflation `evt_609am4v7cdt5b` ruled against, and it is precisely because
+/// this function lowers someone else's body that the two must be supplied
+/// independently.
+pub(super) fn define_continuation_context_bodies<M: Module>(
+    module: &mut M,
+    compiler: &mut Lowering<'_>,
+    helpers: ArtifactHelpers<'_>,
+    bundle: &UnitBundle,
+    call_edges: &CallEdgeTargets,
+) -> Result<usize, CraneliftBackendError> {
+    struct OwnedContext {
+        id: ContinuationContextId,
+        enclosing: ContinuationSpecializationId,
+        worker_body_origin: StaticOriginId,
+        raw_owner: PredeclaredFunctionId,
+        /// `RT-SRCBODY-BIND-ORDER` `D2` — the RAW owner's definition arm, read
+        /// from the raw owner's own descriptor rather than judged here.
+        ///
+        /// This context lowers someone else's body, so the binding order that
+        /// body needs is decided by the unit that owns it. Taking the answer
+        /// from that descriptor is what makes the claimed equivalence hold by
+        /// construction; deciding it independently here would make it two
+        /// judgments that happen to agree.
+        raw_owner_definition: AbiUnitDefinition,
+        slots: Vec<AbiSlot>,
+        offsets: Vec<u32>,
+        header_parameters: u32,
+        header_captures: u32,
+    }
+    // Own every projected fact before the loop: the projection borrows the plan
+    // and definition below needs the compiler mutably.
+    let unit_definitions = compiler
+        .static_transition_plan
+        .emittable_units()?
+        .into_iter()
+        .map(|unit| (unit.function(), unit.definition()))
+        .collect::<Vec<_>>();
+    let contexts = compiler
+        .static_transition_plan
+        .continuation_contexts()?
+        .into_iter()
+        .map(|context| {
+            let (offsets, _frame_bytes) = context.slot_offsets()?;
+            let raw_owner = context.raw_owner();
+            // `D2` — a context whose raw owner has no descriptor is a context
+            // whose body has no declared ABI, which is not a binding-order
+            // question to answer conservatively.
+            let raw_owner_definition = unit_definitions
+                .iter()
+                .find(|(function, _)| *function == raw_owner)
+                .map(|(_, definition)| *definition)
+                .ok_or_else(|| {
+                    backend_module(
+                        "a generated context's raw owner has no ABI descriptor".to_string(),
+                    )
+                })?;
+            Ok(OwnedContext {
+                id: context.id(),
+                enclosing: context.enclosing_specialization(),
+                worker_body_origin: context.worker_body_origin(),
+                raw_owner,
+                raw_owner_definition,
+                slots: context.slots().to_vec(),
+                offsets,
+                header_parameters: context.header().parameters,
+                header_captures: context.header().captures,
+            })
+        })
+        .collect::<Result<Vec<_>, CraneliftBackendError>>()?;
+
+    let worker_targets = resolve_worker_targets(&compiler.static_transition_plan, bundle)?;
+    let mut defined = 0usize;
+    for context in contexts {
+        let id = bundle.context(context.id).ok_or_else(|| {
+            backend_module(
+                "a planned generated context was never forward-declared".to_string(),
+            )
+        })?;
+        let slots = context.slots.as_slice();
+        let offsets = context.offsets.as_slice();
+        if slots.len() != offsets.len() {
+            return Err(backend_module(
+                "a generated context slot run disagrees with its own offset walk".to_string(),
+            ));
+        }
+        let parameter_count = slots
+            .iter()
+            .filter(|slot| slot.kind == AbiSlotKind::Parameter)
+            .count();
+        let capture_count = slots
+            .iter()
+            .filter(|slot| slot.kind == AbiSlotKind::Capture)
+            .count();
+        // The header is the declared contract and the slot run is what the body
+        // will actually walk; a disagreement here means the environment this
+        // body binds is not the one its caller passes operands for.
+        if u32::try_from(parameter_count).ok() != Some(context.header_parameters)
+            || u32::try_from(capture_count).ok() != Some(context.header_captures)
+        {
+            return Err(backend_module(
+                "a generated context's slot run disagrees with its declared frame header"
+                    .to_string(),
+            ));
+        }
+        let result_offset = slots
+            .iter()
+            .zip(offsets)
+            .find(|(slot, _)| slot.kind == AbiSlotKind::Result)
+            .map(|(_, offset)| *offset)
+            .ok_or_else(|| {
+                backend_module("generated context frame declares no result slot".to_string())
+            })?;
+        let trap_offset = slots
+            .iter()
+            .zip(offsets)
+            .find(|(slot, _)| slot.kind == AbiSlotKind::Trap)
+            .map(|(_, offset)| *offset)
+            .ok_or_else(|| {
+                backend_module("generated context frame declares no trap slot".to_string())
+            })?;
+
+        let sig = unit_signature(module);
+        let mut func = Function::with_name_signature(UserFuncName::user(3, id.as_u32()), sig);
+        let mut function_local = helpers.declare_in_func(module, &mut func, None);
+        // The raw body's OWN call edges, declared into this function. They are
+        // the raw owner's edges because the body is the raw owner's body; what
+        // this context changes is the environment, never which callees the
+        // source names.
+        let declared_calls = call_edges.declare_in_func(context.raw_owner, module, &mut func)?;
+        function_local.unit_calls = declared_calls.static_bodies;
+        function_local.declaration_calls = declared_calls.declarations;
+        function_local.worker_calls = worker_targets.declare_in_func(module, &mut func);
+        // `D6b` -- no retarget happens in a generated context body, so the two
+        // tables agree here. Populated anyway rather than left empty: the raw
+        // route must resolve from ITS OWN table in every function, or the
+        // resolution silently depends on which function it runs in.
+        function_local.raw_worker_calls = function_local.worker_calls.clone();
+        function_local.worker_templates = worker_targets.templates().clone();
+        function_local.context_calls = declare_context_calls_in_func(
+            module,
+            &mut func,
+            &compiler.static_transition_plan,
+            bundle,
+        )?;
+        // `D5a`: this context's own causal call refs, selected by the EMISSION
+        // owner. ⛔ Not by `raw_owner` -- that is the filter that would hand this
+        // function the raw unit's tokens and leave its own undeclared.
+        let emission_owner = ContinuationEmissionOwner::Specialization(context.enclosing);
+        function_local.continuation_calls = match compiler.continuation_claims.as_ref() {
+            Some(ledger) => ledger.declare_owned_in_func(
+                emission_owner,
+                module,
+                &mut func,
+                &compiler.static_transition_plan,
+            )?,
+            None => BTreeMap::new(),
+        };
+        if let Some(ledger) = compiler.continuation_claims.as_mut() {
+            ledger.record_declared(function_local.continuation_calls.keys().cloned())?;
+        }
+        // Contract 3, on this context: the projection is taken before the
+        // function is defined and keyed on the emission owner this pass is about
+        // to bind.
+        let result_edges = compiler
+            .static_transition_plan
+            .continuation_result_edges_owned_by(emission_owner)?;
+
+        // `D8n` — this generated Function's own checked-frame consumption
+        // transaction, spanning the generated-context body exactly. ⛔ Opened before the builder and
+        // closed after it, so every branch scope inside nests within it.
+        let frame_scope = CheckedFrameFunctionScope::open(compiler)?;
+        let mut func_ctx = FunctionBuilderContext::new();
+        {
+            let mut builder = FunctionBuilder::new(&mut func, &mut func_ctx);
+            let entry = builder.create_block();
+            builder.append_block_params_for_function_params(entry);
+            builder.switch_to_block(entry);
+            let envelope_pointer = builder.block_params(entry)[0];
+            let frame = builder.ins().load(
+                module.target_config().pointer_type(),
+                MemFlags::trusted(),
+                envelope_pointer,
+                crate::activation_services::UNIT_CALL_FRAME_SLOTS,
+            );
+            let host_dispatch_context = builder.ins().load(
+                module.target_config().pointer_type(),
+                MemFlags::trusted(),
+                envelope_pointer,
+                crate::activation_services::UNIT_CALL_FRAME_HOST_DISPATCH_CONTEXT,
+            );
+            let services = builder.block_params(entry)[1];
+            let native_int_arena = builder.ins().load(
+                module.target_config().pointer_type(),
+                MemFlags::trusted(),
+                services,
+                crate::activation_services::SERVICES_NATIVE_INT_ARENA,
+            );
+            Lowering::require_nonzero(&mut builder, native_int_arena);
+            let boundary_arena = builder.ins().load(
+                module.target_config().pointer_type(),
+                MemFlags::trusted(),
+                services,
+                crate::activation_services::SERVICES_BOUNDARY_ARENA,
+            );
+            Lowering::require_nonzero(&mut builder, boundary_arena);
+            function_local.host_dispatch_context = Some(host_dispatch_context);
+            function_local.native_int_arena = Some(native_int_arena);
+            function_local.boundary_arena = Some(boundary_arena);
+            function_local.services_pointer = Some(services);
+            function_local.bind_unit_trap_frame(
+                frame,
+                i32::try_from(trap_offset).map_err(|_| {
+                    backend_module("generated context trap slot offset exceeds range".to_string())
+                })?,
+            )?;
+            compiler.function_local = function_local;
+            compiler.open_aggregate_events(id)?;
+            // `D8o` — same binding, same unchanged domain: the emission owner is
+            // the enclosing specialization and `defining_unit` stays the RAW
+            // owner, which is the distinction the two fields exist to keep.
+            // ⛔ After `open_aggregate_events`, so the observation this binding
+            // writes is labelled with the Function it belongs to.
+            let ambient = AmbientBodyAuthority::bind(compiler, emission_owner, context.raw_owner);
+            // `D8o` — a generated CONTEXT body, whose owner is a Specialization
+            // and whose kind is not.
+            #[cfg(test)]
+            crate::cranelift_backend::lowering::record_d8o_body_key(
+                compiler.defining_function_id,
+                crate::cranelift_backend::lowering::D8oBodyKey::GeneratedContext(context.id),
+            );
+
+            // The environment: the Parameter run then the Capture run. This is
+            // the SAME conversion `define_unit_body` applies, which is why the
+            // raw body's binder positions resolve identically here -- the
+            // parameter prefix is byte-for-byte the run its own unit binds, and
+            // the continuation inputs sit strictly after it.
+            //
+            // `RT-SRCBODY-BIND-ORDER` `D2`: "the same walk" is no longer enough
+            // to say that, because the walk and the environment are now two
+            // orders. The equivalence is preserved by taking the conversion
+            // from the RAW OWNER's definition arm -- so if that body's own unit
+            // reverses its parameter run, this context reverses the identical
+            // prefix, and if it does not, neither does this. The capture run is
+            // the enclosing specialization's ordered input projection and is
+            // positional by construction, so it is never reversed.
+            let mut context_parameters = Vec::new();
+            let mut context_captures = Vec::new();
+            #[cfg(test)]
+            let mut context_parameter_ordinals = Vec::new();
+            #[cfg(test)]
+            let mut context_capture_ordinals = Vec::new();
+            for (slot, offset) in slots.iter().zip(offsets) {
+                if !matches!(slot.kind, AbiSlotKind::Parameter | AbiSlotKind::Capture) {
+                    continue;
+                }
+                let offset = i32::try_from(*offset).map_err(|_| {
+                    backend_module(
+                        "generated context slot offset exceeds addressable range".to_string(),
+                    )
+                })?;
+                let word = builder
+                    .ins()
+                    .load(types::I64, MemFlags::trusted(), frame, offset);
+                let binding = LoweringEnvironmentBinding::Value(LoweringOperand::Carried(
+                    CarriedBoundaryWord { word },
+                ));
+                match slot.kind {
+                    AbiSlotKind::Parameter => {
+                        #[cfg(test)]
+                        context_parameter_ordinals.push(slot.ordinal);
+                        context_parameters.push(binding)
+                    }
+                    _ => {
+                        #[cfg(test)]
+                        context_capture_ordinals.push(slot.ordinal);
+                        context_captures.push(binding)
+                    }
+                }
+            }
+            let context_converts = source_body_binding_order(context.raw_owner_definition);
+            if context_converts {
+                context_parameters.reverse();
+                #[cfg(test)]
+                context_parameter_ordinals.reverse();
+            }
+            // `RT-SRCBODY-BIND-ORDER` `D3` control 4, amended (Architect,
+            // producer-wide) -- the TRANSITION SENTINEL, sited at the producer
+            // edge rather than inside one witness's test.
+            //
+            // **This gate is designed to go RED, and that red is its purpose.**
+            // `D2` says a generated context binds its raw owner's parameter run
+            // in the same order that owner's own unit would. `D1`'s conversion
+            // reverses that run, and reversal is the IDENTITY on a run of
+            // length one -- so at unary arity `D2` is inert and its cross-host
+            // equivalence is not observable at all. The first generated-context
+            // worker of arity two or more makes it observable, and at that
+            // moment the equivalence obligation this node deferred becomes live
+            // and UNMEASURED.
+            //
+            // **Sited here because a test can only watch the compiles it runs.**
+            // The first cut asserted this bound inside the `px8tr` control, over
+            // the observations of that one compile. A multi-parameter worker
+            // introduced by any other program would never have entered that
+            // observation vector, so the sentinel would have stayed green while
+            // the obligation activated -- watching a witness while claiming a
+            // population. Every generated context this crate builds passes
+            // through this loop, so the gate is closed over the PRODUCER.
+            //
+            // **The residual, stated rather than implied.** `cfg(test)` here
+            // means the `ken-runtime` lib-test build: a generated context built
+            // while compiling an integration-test binary or a downstream crate
+            // does not arm this gate. The fixture population that could
+            // introduce a multi-parameter worker is itself `cfg(test)`
+            // (`mod test_objects`), so it lies inside the reach; a worker
+            // arising only from a real Ken program exercised solely by an
+            // integration test lies outside it.
+            //
+            // Do NOT satisfy this by relaxing the bound -- a `<= 2` restates the
+            // current population as the contract and destroys the gate. The
+            // retiring event is the introduction of the arity-two worker, and
+            // the deliverable then is the equivalence control, not a wider
+            // bound. `d3_generated_context_arity_sentinel_edge_is_reached` is
+            // the reaching positive control that keeps this non-vacuous.
+            #[cfg(test)]
+            assert!(
+                context_parameter_ordinals.len() <= 1,
+                "a generated-context worker declares {} parameters. D2's binding order is no \
+                 longer inert, so its cross-host equivalence is now OBSERVABLE and UNMEASURED. \
+                 The deliverable is the cross-host equivalence control -- that this body binds \
+                 the same order in its own unit and in the context that lowers it -- not a \
+                 wider bound at this gate. Recorded ordinals: {context_parameter_ordinals:?}",
+                context_parameter_ordinals.len()
+            );
+            #[cfg(test)]
+            srcbody_bind_order_record(SrcbodyBindOrderObservation {
+                host: SrcbodyBindHost::GeneratedContext,
+                definition: context.raw_owner_definition,
+                converted: context_converts,
+                body_origin: context.worker_body_origin,
+                parameter_ordinals: context_parameter_ordinals,
+                capture_ordinals: context_capture_ordinals,
+            });
+            let mut env = context_parameters;
+            env.extend(context_captures);
+
+            let body = compiler.retained_body_occurrence(context.worker_body_origin)?;
+            let lowered = compiler.lower_expr(&mut builder, body, &env)?;
+            // The detached-result seat, live in this context. Every operand its
+            // capture projection names is reachable from `env` above.
+            let lowered = compiler.eliminate_detached_producer_continuation(
+                &mut builder,
+                &result_edges,
+                lowered,
+                &env,
+            )?;
+            let word = match lowered {
+                LoweringOperand::Carried(word) => Some(word.word),
+                LoweringOperand::Specialized(Lowered::Trap(trap)) => {
+                    compiler.emit_current_trap(&mut builder, &trap)?;
+                    None
+                }
+                LoweringOperand::Specialized(value) => Some(
+                    compiler
+                        .transfer_unit_result_into_carrier(
+                            &mut builder,
+                            context.worker_body_origin,
+                            &value,
+                        )?
+                        .word,
+                ),
+            };
+            if let Some(word) = word {
+                builder.ins().store(
+                    MemFlags::trusted(),
+                    word,
+                    frame,
+                    i32::try_from(result_offset).map_err(|_| {
+                        backend_module(
+                            "generated context result slot offset exceeds range".to_string(),
+                        )
+                    })?,
+                );
+            }
+            let status = builder.ins().iconst(types::I64, 0);
+            builder.ins().return_(&[status]);
+            builder.seal_all_blocks();
+            builder.finalize();
+            ambient.release(compiler);
+        }
+        frame_scope.close(compiler)?;
+        // The same emission-seam gate every other generated function passes: the
+        // callee of each recorded causal emission is decoded back out of THIS
+        // finished CLIF and compared with the planner-issued target.
+        compiler.verify_emitted_continuation_calls(&func, bundle)?;
+        // `D8j` — the composed relation's own gate, beside the direct one and
+        // never inside it: the two answer different questions about different
+        // callees.
+        compiler.verify_recorded_composed_discharges(&func, bundle)?;
+        #[cfg(test)]
+        crate::cranelift_backend::lowering::record_d8j_discharged(
+            compiler.function_local.composed_discharges.keys().cloned(),
+        );
+        // `D8k` -- the composed half of the partition, accumulated from the
+        // VERIFIED relation and never from the direct instruction map.
+        if let Some(ledger) = compiler.continuation_claims.as_mut() {
+            ledger.record_composed(
+                compiler.function_local.composed_discharges.keys().cloned(),
+                emission_owner,
+            )?;
+        }
+        if let Some(ledger) = compiler.continuation_claims.as_mut() {
+            ledger.record_emitted(
+                compiler.function_local.continuation_emissions.keys().cloned(),
+            )?;
+        }
+        verify_cranelift_function(&func, module.isa())?;
+        compiler.commit_aggregate_events()?;
         let mut ctx = module.make_context();
         std::mem::swap(&mut ctx.func, &mut func);
         module
@@ -978,6 +2754,7 @@ pub(super) fn define_root_adapter<M: Module>(
     process_mode: bool,
     project_public_scalar_root: bool,
 ) -> Result<(), CraneliftBackendError> {
+    compiler.open_aggregate_events(adapter_id)?;
     let root = compiler.static_transition_plan.root_emittable_unit()?;
     let root_id = bundle.function(root.function()).ok_or_else(|| {
         backend_module("the recorded root unit was never forward-declared".to_string())
@@ -1126,6 +2903,7 @@ pub(super) fn define_root_adapter<M: Module>(
         builder.finalize();
     }
     verify_cranelift_function(&func, module.isa())?;
+    compiler.commit_aggregate_events()?;
     #[cfg(test)]
     scale_b_record_functionized_root_adapter(&func);
     let mut ctx = module.make_context();
@@ -1183,7 +2961,7 @@ pub(super) struct ContinuationClaimLedger {
     resolved: BTreeMap<ContinuationCallIdentity, FuncId>,
     /// `None` until claimed; then the exact unit that claimed it, so owner
     /// agreement is a recorded fact rather than an inference.
-    claims: BTreeMap<ContinuationCallIdentity, Option<PredeclaredFunctionId>>,
+    claims: BTreeMap<ContinuationCallIdentity, Option<ContinuationEmissionOwner>>,
     /// **`4b`** -- the PLANNED set, read straight off the plan's own causal call
     /// projection at open time and never derived from [`Self::resolved`].
     planned: BTreeSet<ContinuationCallIdentity>,
@@ -1194,6 +2972,16 @@ pub(super) struct ContinuationClaimLedger {
     /// accumulated across all generated functions after each one's CLIF has been
     /// checked.
     emitted: BTreeSet<ContinuationCallIdentity>,
+    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D8k`** -- every identity discharged by a
+    /// VERIFIED composed source-continuation consumption, accumulated across
+    /// every generated function after each one's CLIF has been checked.
+    ///
+    /// ⛔ Fed from `function_local.composed_discharges` and from nothing else.
+    /// The direct instruction map is not a source of composed claims: its gate
+    /// requires the recorded instruction to decode to `identity.target()`, and
+    /// a composed instruction targets the raw worker, so an identity appearing
+    /// in both would mean one of the two gates had been loosened.
+    composed: BTreeSet<ContinuationCallIdentity>,
 }
 
 impl ContinuationClaimLedger {
@@ -1234,6 +3022,7 @@ impl ContinuationClaimLedger {
             planned,
             declared: BTreeSet::new(),
             emitted: BTreeSet::new(),
+            composed: BTreeSet::new(),
         })
     }
 
@@ -1274,6 +3063,61 @@ impl ContinuationClaimLedger {
         Ok(())
     }
 
+    /// **`D8k`** -- record the causal tokens one generated function discharged
+    /// through a VERIFIED composed source-continuation consumption, and claim
+    /// them.
+    ///
+    /// ⛔ Called only after `verify_recorded_composed_discharges` has promoted
+    /// them, so an identity reaches this set only once its recorded raw-worker
+    /// call was found in the finished CLIF, its decoded callee matched the
+    /// `D8b`/`D8d` target, its operand run matched that target's declared run,
+    /// and its result was shown to return downstream into the unchanged
+    /// continuation.
+    ///
+    /// ⭐⭐ **The claim is made HERE and not at the seat, and that is what makes
+    /// the partition disjoint.** A composed consumption claims the same
+    /// `claims` slot a direct emission would, so an identity claimed both ways
+    /// is rejected as a double claim rather than silently satisfying both
+    /// halves of the union.
+    pub(super) fn record_composed(
+        &mut self,
+        discharged: impl IntoIterator<Item = ContinuationCallIdentity>,
+        defining: ContinuationEmissionOwner,
+    ) -> Result<(), CraneliftBackendError> {
+        for identity in discharged {
+            if identity.emission_owner() != defining {
+                return Err(backend_module(
+                    "a composed source continuation was discharged by a function that is not its \
+                     emission owner"
+                        .to_string(),
+                ));
+            }
+            let consumed = self.claims.get_mut(&identity).ok_or_else(|| {
+                backend_module(
+                    "a composed source continuation discharged a causal token this ledger never \
+                     planned"
+                        .to_string(),
+                )
+            })?;
+            if let Some(previous) = consumed {
+                return Err(backend_module(format!(
+                    "a causal token was claimed twice, first by {previous:?} and then by a \
+                     composed source continuation; one causal obligation is discharged by one \
+                     form, never by both"
+                )));
+            }
+            *consumed = Some(defining);
+            if !self.composed.insert(identity) {
+                return Err(backend_module(
+                    "a causal token was discharged by a composed source continuation in more \
+                     than one generated function"
+                        .to_string(),
+                ));
+            }
+        }
+        Ok(())
+    }
+
     /// Declare THIS owning Function's own `FuncRef` for every causal token it
     /// owns, keyed by the complete four-field identity.
     ///
@@ -1283,7 +3127,7 @@ impl ContinuationClaimLedger {
     /// later, at the exact producer occurrence.
     pub(super) fn declare_owned_in_func<M: Module>(
         &self,
-        defining: PredeclaredFunctionId,
+        defining: ContinuationEmissionOwner,
         module: &mut M,
         func: &mut Function,
         plan: &StaticTransitionPlan<'_>,
@@ -1296,7 +3140,7 @@ impl ContinuationClaimLedger {
         let units = plan.continuation_units()?;
         self.resolved
             .iter()
-            .filter(|(identity, _)| identity.producer_owner() == defining)
+            .filter(|(identity, _)| identity.emission_owner() == defining)
             .map(|(identity, target)| {
                 let unit = units
                     .iter()
@@ -1344,11 +3188,14 @@ impl ContinuationClaimLedger {
     pub(super) fn claim_exact(
         &mut self,
         identity: &ContinuationCallIdentity,
-        defining: PredeclaredFunctionId,
+        defining: ContinuationEmissionOwner,
     ) -> Result<FuncId, CraneliftBackendError> {
-        if identity.producer_owner() != defining {
+        if identity.emission_owner() != defining {
             return Err(backend_module(
-                "a continuation call token was claimed by a unit that does not own it".to_string(),
+                "a continuation call token was claimed by a context that is not its emission \
+                 owner; note this compares the EMISSION owner, not the raw source-occurrence \
+                 provenance owner beside it"
+                    .to_string(),
             ));
         }
         let consumed = self.claims.get_mut(identity).ok_or_else(|| {
@@ -1384,10 +3231,13 @@ impl ContinuationClaimLedger {
     /// same size can differ, and a length comparison here would pass for a
     /// population that swapped one token for another.
     pub(super) fn close(self) -> Result<(), CraneliftBackendError> {
+        // `D8k` -- DECLARATION may remain over the full planned set. An unused
+        // declaration is a `FuncRef` nobody called, not an emitted call, so the
+        // declared population stays equal to planned even where the discharge
+        // took the composed form.
         for (name, set) in [
             ("resolved", self.resolved.keys().cloned().collect::<BTreeSet<_>>()),
             ("declared", self.declared.clone()),
-            ("emitted", self.emitted.clone()),
         ] {
             if set != self.planned {
                 let missing = self.planned.difference(&set).count();
@@ -1397,6 +3247,50 @@ impl ContinuationClaimLedger {
                      {missing} planned tokens absent, {extra} unplanned tokens present"
                 )));
             }
+        }
+        // ⭐⭐ `D8k` -- THE PARTITION. `planned = direct-emitted ⊎
+        // composed-consumed`, asserted as a disjoint union of two sets that
+        // were accumulated from two different kinds of evidence: decoded direct
+        // specialization emissions, and verified composed source-continuation
+        // consumptions.
+        //
+        // ⛔ Not weakened to a count. Two sets of the right total size can still
+        // be the wrong sets, and a program that emitted one token directly and
+        // consumed a different one compositionally would satisfy any arithmetic
+        // statement of this law.
+        //
+        // ⛔ Disjointness is asserted separately from coverage, because they
+        // fail for different reasons: an overlap means one obligation was
+        // answered twice, in two forms; a shortfall means one was never
+        // answered at all.
+        let both = self
+            .emitted
+            .intersection(&self.composed)
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        if !both.is_empty() {
+            return Err(backend_module(format!(
+                "{} causal tokens were discharged BOTH by a decoded direct emission and by a \
+                 verified composed consumption; the two forms partition the planned population \
+                 and an identity in both means one obligation was answered twice",
+                both.len()
+            )));
+        }
+        let discharged = self
+            .emitted
+            .union(&self.composed)
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        if discharged != self.planned {
+            let missing = self.planned.difference(&discharged).count();
+            let extra = discharged.difference(&self.planned).count();
+            return Err(backend_module(format!(
+                "the discharged continuation call population is not the planned one: {missing} \
+                 planned tokens were neither directly emitted nor compositionally consumed, and \
+                 {extra} discharged tokens were never planned. Direct: {}, composed: {}",
+                self.emitted.len(),
+                self.composed.len()
+            )));
         }
         let leftover = self
             .claims
@@ -1418,7 +3312,7 @@ impl ContinuationClaimLedger {
         // from ownership. A wrong owner under today's structure does not reach
         // here -- it surfaces as a leftover claim above.
         for (identity, consumed) in &self.claims {
-            if *consumed != Some(identity.producer_owner()) {
+            if *consumed != Some(identity.emission_owner()) {
                 return Err(backend_module(
                     "a continuation call token was claimed by a unit that does not own it"
                         .to_string(),
@@ -1427,6 +3321,199 @@ impl ContinuationClaimLedger {
         }
         Ok(())
     }
+}
+
+/// **`RT-DECL-CLOSURE-PORT` `D5a` checkpoint 2 — open the ONE cross-pass causal
+/// ledger.**
+///
+/// Called from the orchestration before the first generated `Function`, so
+/// every pass that can declare, claim or emit a causal call accumulates into
+/// this single object.
+///
+/// ⛔ There is exactly one of these and it must not be re-opened. A second open
+/// would discard whatever the first had accumulated and leave a partial
+/// equality reading as a global one, which is the failure mode checkpoint 2
+/// exists to remove — so re-opening rejects rather than replacing.
+pub(super) fn open_continuation_claim_ledger(
+    compiler: &mut Lowering<'_>,
+    bundle: &UnitBundle,
+) -> Result<(), CraneliftBackendError> {
+    if compiler.continuation_claims.is_some() {
+        return Err(backend_module(
+            "the continuation claim ledger is already open; one artifact has exactly one ledger              and re-opening would silently discard every token recorded so far"
+                .to_string(),
+        ));
+    }
+    compiler.continuation_claims = Some(ContinuationClaimLedger::open(
+        &compiler.static_transition_plan,
+        bundle,
+    )?);
+    // `D7` — the aggregate allocation relation opens on the same boundary and
+    // for the same reason: one artifact has exactly one relation, and every
+    // body's events commit into it.
+    compiler.aggregate_allocations = Some(AggregateAllocationLedger::default());
+    // `D7` — the host-effect seat ledger opens on the same boundary: one
+    // artifact has one consumed-seat evidence, and every body claims into it.
+    compiler.host_effect_seats = Some(EffectSeatLedger::default());
+    Ok(())
+}
+
+/// **`D5a` checkpoint 2 — close it, once, after every generated `Function`.**
+///
+/// The single global `planned = resolved = declared = claimed = emitted`
+/// equality. ⛔ Not a per-pass partial: a pass that discharges nothing is
+/// normal, and only the whole-artifact set answers whether every planned causal
+/// token was discharged exactly once.
+pub(super) fn close_continuation_claim_ledger(
+    compiler: &mut Lowering<'_>,
+) -> Result<(), CraneliftBackendError> {
+    compiler
+        .continuation_claims
+        .take()
+        .ok_or_else(|| backend_module("the continuation claim ledger went missing".to_string()))?
+        .close()
+}
+
+/// **`D7` — close the aggregate allocation relation once, over the whole
+/// compilation.**
+///
+/// ⛔ Not a per-body partial. One planner record may govern events in several
+/// bodies -- a synthesized role at a seat reached under both a predeclared unit
+/// and a generated specialization allocates in both -- so `image(R_f) = P` is
+/// false for every individual body and imposing it would refuse lawful
+/// programs. Only the whole-artifact relation answers whether every planned
+/// record was allocated and every event was planned.
+pub(super) fn close_aggregate_allocation_ledger(
+    compiler: &mut Lowering<'_>,
+) -> Result<AggregateRelationClosure, CraneliftBackendError> {
+    let planned = compiler.static_transition_plan.aggregate_ownership_records();
+    compiler
+        .aggregate_allocations
+        .take()
+        .ok_or_else(|| {
+            backend_module("the aggregate allocation ledger went missing".to_string())
+        })?
+        .close(planned)
+}
+
+/// **`D7` — close the host-effect seat authority once, over the whole
+/// compilation.**
+///
+/// ⛔ Whole-artifact rather than per-body, because a seat inside a worker body
+/// is consumed in its predeclared unit and again in each specialization that
+/// contains it; no single body's claims equal the population.
+///
+/// ⭐ **`image(claims) ⊆ P`, exactly as the aggregate relation states it — NOT
+/// an equality.** This comment previously claimed the opposite, on the reasoning
+/// that a seat population derived from the source's own `Effect` occurrences
+/// must be fully reached. That was measured false: an occurrence sitting in a
+/// declaration body a compilation never emits takes its seats with it, and
+/// requiring equality refused such a program. `P` authorizes; it does not
+/// oblige, and an unreached member is lawful and reported. A half-read
+/// occurrence cannot hide in that gap, because completeness is a group-local
+/// equality that has already run at each visit's close.
+pub(super) fn close_host_effect_seat_ledger(
+    compiler: &mut Lowering<'_>,
+) -> Result<EffectSeatClosure, CraneliftBackendError> {
+    let planned = compiler
+        .static_transition_plan
+        .host_effect_seat_records()
+        .to_vec();
+    #[cfg(test)]
+    if effect_seat_visit_mutation()
+        == EffectSeatVisitMutation::DropCommittedGroupBeforeGlobalClose
+    {
+        if let Some(ledger) = compiler.host_effect_seats.as_mut() {
+            ledger.drop_one_committed_group_for_tests();
+        }
+    }
+    let closure = compiler
+        .host_effect_seats
+        .take()
+        .ok_or_else(|| backend_module("the host effect seat ledger went missing".to_string()))?
+        .close(&planned)?;
+    #[cfg(test)]
+    LAST_EFFECT_SEAT_CLOSURE.with(|cell| *cell.borrow_mut() = Some(closure.clone()));
+    Ok(closure)
+}
+
+/// What the last completed seat closeout on this thread measured.
+///
+/// ⚠ Like `b2f_last_unit_emission`, this carries no statement about WHICH
+/// compile produced it: a compile that fails before the closeout leaves the
+/// previous reading standing. Read it only where one compile is known to have
+/// closed.
+#[cfg(test)]
+thread_local! {
+    static LAST_EFFECT_SEAT_CLOSURE: std::cell::RefCell<Option<EffectSeatClosure>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn last_effect_seat_closure() -> Option<EffectSeatClosure> {
+    LAST_EFFECT_SEAT_CLOSURE.with(|cell| cell.borrow().clone())
+}
+
+/// How the `BufferAllocate` capacity seat was DISPATCHED, as `(specialized,
+/// carried)`, since the last reset on this thread.
+///
+/// ⭐ **The premise a carried-capacity control cannot do without.** "The
+/// compile succeeded and returned `InvalidBounds`" is the same green whether
+/// the capacity took the carried route or the specialized one, so a fixture
+/// that quietly stops carrying its capacity would leave the carried arm
+/// untested and every assertion about it still passing. This is the only
+/// instrument that separates those two worlds.
+///
+/// ⚠ It counts EMISSIONS, not executions: one compiled arm may run many times
+/// or none. A control that wants "the carried route ran" needs the program's
+/// own result, and this to know which route was compiled.
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn capacity_phase_dispatch() -> (usize, usize) {
+    super::CAPACITY_PHASE_DISPATCH.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn reset_capacity_phase_dispatch() {
+    super::CAPACITY_PHASE_DISPATCH.with(|cell| cell.set((0, 0)));
+}
+
+/// **`D5a` checkpoint 4 step 1 — declare every generated context into ONE
+/// generated function.**
+///
+/// Same per-function discipline as `WorkerTargets::declare_in_func`: the
+/// `FuncRef`s belong to `func` alone and are never copied between functions.
+/// ⛔ Keyed by the planner's `ContinuationContextId`, never by the body origin
+/// the context executes -- that key is what would let a consumer resolve a
+/// context from a body origin, which is the reconstruction the ruling forbids.
+pub(in crate::cranelift_backend) fn declare_context_calls_in_func<M: Module>(
+    module: &mut M,
+    func: &mut Function,
+    plan: &StaticTransitionPlan<'_>,
+    bundle: &UnitBundle,
+) -> Result<BTreeMap<ContinuationContextId, DeclaredUnitCall>, CraneliftBackendError> {
+    let mut calls = BTreeMap::new();
+    for context in plan.continuation_contexts()? {
+        let target = bundle.context(context.id()).ok_or_else(|| {
+            backend_module(
+                "a planned generated context was never forward-declared".to_string(),
+            )
+        })?;
+        let (offsets, _frame_bytes) = context.slot_offsets()?;
+        calls.insert(
+            context.id(),
+            DeclaredUnitCall {
+                function: module.declare_func_in_func(target, func),
+                // The context EXECUTES this body, so the origin it answers for
+                // is unchanged and the source edge it serves is untouched.
+                origin: context.worker_body_origin(),
+                call_site_origin: context.worker_body_origin(),
+                header: context.header(),
+                slots: context.slots().to_vec(),
+                offsets,
+            },
+        );
+    }
+    Ok(calls)
 }
 
 pub(super) fn define_unit_bodies<M: Module>(
@@ -1440,22 +3527,26 @@ pub(super) fn define_unit_bodies<M: Module>(
     let root = compiler.static_transition_plan.root_emittable_unit()?.function();
     // `D4`: projected once, declared afresh into each generated function below.
     let worker_targets = resolve_worker_targets(&compiler.static_transition_plan, bundle)?;
-    // `D3` — one affine claim per planned causal token, owner-checked against
-    // the exact unit being defined.
-    compiler.continuation_claims = Some(ContinuationClaimLedger::open(
-        &compiler.static_transition_plan,
-        bundle,
-    )?);
+    // `RT-DECL-CLOSURE-PORT` `D5` — opened here because this bundle pass is the
+    // only place a checked same-SCC call can reach a declaration-owned unit.
+    compiler.checked_call_ledger = Some(CheckedCallLedger::open(
+        compiler.oriented_subcontinuation_plan.as_ref(),
+    ));
     let mut root_result = None;
+    // `D5a` checkpoint 1: the SAME population `declare_unit_bundle` walked.
+    // Both passes read `executable_units` so declared and defined cannot
+    // disagree -- reading different methods here is exactly how a phantom
+    // appears.
     let emissions = compiler
         .static_transition_plan
-        .emittable_units()?
+        .executable_units()?
         .into_iter()
         .map(|unit| {
             let (offsets, frame_bytes) = unit.slot_offsets()?;
             Ok(OwnedUnitEmission {
                 function: unit.function(),
                 origin: unit.origin(),
+                definition: unit.definition(),
                 header: unit.header(),
                 slots: unit.slots().to_vec(),
                 offsets,
@@ -1488,13 +3579,19 @@ pub(super) fn define_unit_bodies<M: Module>(
             }
         }
     }
-    // Closure accounting after every unit is defined: no planned causal token
-    // may be left unclaimed.
+    // ⛔ The continuation ledger is NOT closed here. `D5a` checkpoint 2 moved
+    // its lifetime out to the orchestration in `core.rs`, because two more
+    // passes after this one declare, claim and emit causal calls and closing
+    // here reported their tokens absent before they could exist.
+    // `D5` closeout, before the artifact is published: planned = consumed =
+    // emitted, and every emitted actual callee equals its exact resolved
+    // target. ⛔ `consumed` is the affine machinery's OWN set, passed in rather
+    // than mirrored, so the two cannot drift apart.
     compiler
-        .continuation_claims
+        .checked_call_ledger
         .take()
-        .ok_or_else(|| backend_module("the continuation claim ledger went missing".to_string()))?
-        .close()?;
+        .ok_or_else(|| backend_module("the checked call ledger went missing".to_string()))?
+        .close(&compiler.consumed_recursive_call_templates)?;
     root_result.ok_or_else(|| {
         backend_module("the emitted unit bundle did not define its recorded root".to_string())
     })
@@ -1503,10 +3600,102 @@ pub(super) fn define_unit_bodies<M: Module>(
 struct OwnedUnitEmission {
     function: PredeclaredFunctionId,
     origin: StaticOriginId,
+    /// `RT-SRCBODY-BIND-ORDER` `D1` — carried because the ABI descriptor run
+    /// and the source body's semantic environment are now two different orders,
+    /// and only the definition arm says which units get the conversion.
+    definition: AbiUnitDefinition,
     header: AbiFrameHeader,
     slots: Vec<AbiSlot>,
     offsets: Vec<u32>,
     frame_bytes: u32,
+}
+
+/// **`RT-SRCBODY-BIND-ORDER` `D1` — does this unit's body bind a SOURCE
+/// parameter run?**
+///
+/// The ABI lays parameters out in declaration order; a source body indexes its
+/// binders as de Bruijn levels from the innermost, which is the reverse. The
+/// conversion is therefore owed exactly where the run being bound is a source
+/// parameter run:
+///
+/// - `CallableDeclaration` and `ClosureBody` — yes. Both bind a written
+///   parameter list, and `RT-DECL-CLOSURE-PORT` `D2` already treats the two
+///   identically wherever the question is about their parameter/capture runs.
+/// - `SchedulingEntry` — no. Its parameters are the closed process ingress
+///   roles, resolved by `AbiProcessParameter` ordinal rather than by a binder
+///   index, and reversing them would rename the two roles.
+/// - `ContinuationSpecialization` — no. Its run is the planner's own ordered
+///   input projection, positional by construction.
+///
+/// This is a question about the run's PROVENANCE, not its length: a one-
+/// parameter source body is unaffected by the reversal but is still a source
+/// body, and a two-role scheduling entry is affected but is still not one.
+/// **`RT-SRCBODY-BIND-ORDER` `D3` — which host bound a semantic environment.**
+///
+/// The two seats that build one: a unit's own body, and a generated context
+/// that lowers someone else's body. The equivalence `D2` owes is between them.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) enum SrcbodyBindHost {
+    OrdinaryUnit,
+    GeneratedContext,
+}
+
+/// **`RT-SRCBODY-BIND-ORDER` `D3` — one semantic environment, as PRODUCTION
+/// built it.**
+///
+/// The row is deliberately raw: it records the ABI ordinals in the order they
+/// were pushed into the environment, so a control re-derives the conversion
+/// from the sequence rather than being told about it. `converted` is recorded
+/// beside them precisely so a control can catch a build whose classification
+/// is right and whose environment does not follow it — the failure a control
+/// that reads the predicate alone is blind to.
+#[cfg(test)]
+#[derive(Clone, Debug)]
+pub(in crate::cranelift_backend) struct SrcbodyBindOrderObservation {
+    pub(in crate::cranelift_backend) host: SrcbodyBindHost,
+    pub(in crate::cranelift_backend) definition: AbiUnitDefinition,
+    /// What `source_body_binding_order` answered for `definition`.
+    pub(in crate::cranelift_backend) converted: bool,
+    /// The body this environment was built for. The join key for `D2`'s
+    /// cross-host equivalence: one body, two hosts.
+    pub(in crate::cranelift_backend) body_origin: StaticOriginId,
+    /// Parameter ABI ordinals, in SEMANTIC ENVIRONMENT order.
+    pub(in crate::cranelift_backend) parameter_ordinals: Vec<u32>,
+    /// Capture ABI ordinals, in SEMANTIC ENVIRONMENT order.
+    pub(in crate::cranelift_backend) capture_ordinals: Vec<u32>,
+}
+
+#[cfg(test)]
+thread_local! {
+    static SRCBODY_BIND_ORDER: std::cell::RefCell<Vec<SrcbodyBindOrderObservation>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn srcbody_bind_order_record(
+    observation: SrcbodyBindOrderObservation,
+) {
+    SRCBODY_BIND_ORDER.with(|cell| cell.borrow_mut().push(observation));
+}
+
+/// Drains every environment built on this thread since the last take.
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn srcbody_bind_order_take()
+-> Vec<SrcbodyBindOrderObservation> {
+    SRCBODY_BIND_ORDER.with(|cell| std::mem::take(&mut *cell.borrow_mut()))
+}
+
+pub(in crate::cranelift_backend) fn source_body_binding_order(
+    definition: AbiUnitDefinition,
+) -> bool {
+    match definition {
+        AbiUnitDefinition::CallableDeclaration { .. } | AbiUnitDefinition::ClosureBody { .. } => {
+            true
+        }
+        AbiUnitDefinition::SchedulingEntry { .. }
+        | AbiUnitDefinition::ContinuationSpecialization { .. } => false,
+    }
 }
 
 fn define_unit_body<M: Module>(
@@ -1581,7 +3770,7 @@ fn define_unit_body<M: Module>(
     // `Function`; never passed across functions.
     function_local.continuation_calls = match compiler.continuation_claims.as_ref() {
         Some(ledger) => ledger.declare_owned_in_func(
-            unit.function,
+            ContinuationEmissionOwner::Predeclared(unit.function),
             module,
             &mut func,
             &compiler.static_transition_plan,
@@ -1593,13 +3782,71 @@ fn define_unit_body<M: Module>(
     if let Some(ledger) = compiler.continuation_claims.as_mut() {
         ledger.record_declared(function_local.continuation_calls.keys().cloned())?;
     }
+    // `RT-DECL-CLOSURE-PORT` `D5a` contract 3 — AUTHORITY BEFORE EMISSION.
+    //
+    // Projected here, beside the declaration of this unit's own call refs and
+    // **before the function is defined**. ⛔ It is a projection of authority the
+    // planner already issued, keyed on the owner this pass is about to define;
+    // lowering supplies only that owner and never searches, reverse-derives a
+    // consumer, or reads an owner back off anything it emitted.
+    let result_edges = compiler
+        .static_transition_plan
+        .continuation_result_edges_owned_by(ContinuationEmissionOwner::Predeclared(
+            unit.function,
+        ))?;
     // `D3`: the owner operand for the claim, supplied independently of any
     // token -- this is the ordinary producer unit currently being defined.
-    compiler.defining_unit = Some(unit.function);
+    #[cfg(test)]
+    d5a_trace(format!(
+        "UNIT-BODY entry function={:?} origin={:?}",
+        unit.function, unit.origin
+    ));
+    compiler.open_aggregate_events(id)?;
+    // `D8o` — bound for this body's lifetime and released on exit, so no later
+    // Function inherits it. ⛔ The domain is unchanged: `D5a`'s rule that an
+    // ordinary predeclared unit body emits as itself.
+    let ambient = AmbientBodyAuthority::bind(
+        compiler,
+        ContinuationEmissionOwner::Predeclared(unit.function),
+        unit.function,
+    );
+    #[cfg(test)]
+    crate::cranelift_backend::lowering::record_d8o_body_key(
+        compiler.defining_function_id,
+        crate::cranelift_backend::lowering::D8oBodyKey::OrdinaryUnit(unit.function),
+    );
     function_local.unit_calls = declared_calls.static_bodies;
     function_local.declaration_calls = declared_calls.declarations;
+    // `RT-DECL-CLOSURE-PORT` `D5` — the causal control on the ABI half.
+    //
+    // ⛔⛔ **Injected HERE, on the function-local COPY, and never on the plan's
+    // descriptor.** That asymmetry is the entire point: `D5`'s ABI
+    // reconciliation claims the declared call record still agrees with the
+    // immutable descriptor `D3` validated. A mutation applied to both sides
+    // would leave them agreeing and prove nothing; a mutation applied to the
+    // descriptor would trip the ABI plane upstream instead. ⇒ Only a mutation
+    // of the copy measures the reconciliation itself.
+    #[cfg(test)]
+    d5_mutate_declared_calls(&mut function_local.declaration_calls);
     // `D4`: this function's own worker refs, minted here and never copied.
     function_local.worker_calls = worker_targets.declare_in_func(module, &mut func);
+    // `D6b` -- an ordinary unit body performs no retarget, so the two tables
+    // agree. Populated anyway, for the same reason as the context body above.
+    function_local.raw_worker_calls = function_local.worker_calls.clone();
+    // `D5a` checkpoint 1: the raw template contracts, beside the call targets
+    // and deliberately not derived from them.
+    function_local.worker_templates = worker_targets.templates().clone();
+    // `D5a` checkpoint 4 step 1: this function's own context call targets.
+    function_local.context_calls = declare_context_calls_in_func(
+        module,
+        &mut func,
+        &compiler.static_transition_plan,
+        bundle,
+    )?;
+    // `D8n` — this generated Function's own checked-frame consumption
+    // transaction, spanning the ordinary unit body exactly. ⛔ Opened before the builder and
+    // closed after it, so every branch scope inside nests within it.
+    let frame_scope = CheckedFrameFunctionScope::open(compiler)?;
     let mut func_ctx = FunctionBuilderContext::new();
     let root_outcome;
     {
@@ -1664,7 +3911,30 @@ fn define_unit_body<M: Module>(
                 "fixed host-dispatch context is not semantic process-pair storage".to_string(),
             ));
         }
-        let mut env = Vec::new();
+        // `RT-SRCBODY-BIND-ORDER` `D1` — ONE walk, TWO orders.
+        //
+        // The walk below is still the single load of each Parameter/Capture
+        // slot, and `defining_abi_operands` still receives them in descriptor
+        // order, unchanged. What is no longer the same order is the **semantic
+        // environment** the body is lowered against: `lower_expr` resolves
+        // `Var(i)` as a de Bruijn index (`RuntimeExpr::Let` prepends at 0), so
+        // the innermost binder is position 0 — while the ABI lays parameters
+        // out in declaration order, ordinal 0 first. For a source body those
+        // two are reverses of each other, and binding the descriptor run
+        // directly delivered parameter 0 where the body asked for the last
+        // parameter.
+        //
+        // The conversion applies only where the body IS a source body with
+        // declared parameters — `CallableDeclaration` and `ClosureBody`. A
+        // `SchedulingEntry`'s root ingress pair is a closed ABI role, not a
+        // source binder run, and a `ContinuationSpecialization`'s projection is
+        // the planner's own; both keep the descriptor order they had.
+        let mut parameters = Vec::new();
+        let mut captures = Vec::new();
+        #[cfg(test)]
+        let mut parameter_ordinals = Vec::new();
+        #[cfg(test)]
+        let mut capture_ordinals = Vec::new();
         for (slot, offset) in unit.slots.iter().zip(&unit.offsets) {
             if matches!(slot.kind, AbiSlotKind::Parameter | AbiSlotKind::Capture) {
                 #[cfg(test)]
@@ -1745,9 +4015,56 @@ fn define_unit_body<M: Module>(
                 } else {
                     LoweringOperand::Carried(carried)
                 };
-                env.push(LoweringEnvironmentBinding::Value(operand));
+                // `D5a` checkpoint 4 step 1b: the SAME operand, recorded by ABI
+                // position. Taken from this one walk rather than rebuilt, so
+                // "index i is ABI position i" holds by construction instead of
+                // by two walks agreeing.
+                //
+                // `RT-SRCBODY-BIND-ORDER` `D1` — that invariant is about THIS
+                // vector and is unchanged: the push below is still in
+                // descriptor order and is the only thing that writes it. The
+                // semantic environment is now built separately, from the same
+                // operands, and the two orders agree only where the definition
+                // arm takes no conversion. Do not restore the old reading that
+                // one push served both jobs.
+                compiler
+                    .function_local
+                    .defining_abi_operands
+                    .push(operand.clone());
+                // `RT-SRCBODY-BIND-ORDER` `D3c` -- the kind at the same ABI
+                // position, from the same walk, so the observatory can derive a
+                // semantic position from the descriptor instead of searching
+                // the environment for the operand.
+                #[cfg(test)]
+                compiler
+                    .function_local
+                    .defining_abi_slot_kinds
+                    .push(slot.kind);
+                match slot.kind {
+                    AbiSlotKind::Parameter => {
+                        #[cfg(test)]
+                        parameter_ordinals.push(slot.ordinal);
+                        parameters.push(LoweringEnvironmentBinding::Value(operand))
+                    }
+                    _ => {
+                        #[cfg(test)]
+                        capture_ordinals.push(slot.ordinal);
+                        captures.push(LoweringEnvironmentBinding::Value(operand))
+                    }
+                }
             }
         }
+        // `validate_slot_run` proves the Parameter run is a contiguous prefix
+        // of the Capture run, so concatenating the two IS the descriptor order
+        // — which is what the non-source arms below must keep byte-identically.
+        let converts = source_body_binding_order(unit.definition);
+        if converts {
+            parameters.reverse();
+            #[cfg(test)]
+            parameter_ordinals.reverse();
+        }
+        let mut env = parameters;
+        env.extend(captures);
         // The in-process validation API historically stages one ground
         // `RuntimeValue` as the root environment.  It is compile-time material,
         // not launch ingress and not a generated-call transfer, so it does not
@@ -1775,6 +4092,15 @@ fn define_unit_body<M: Module>(
         } else {
             unit.origin
         };
+        #[cfg(test)]
+        srcbody_bind_order_record(SrcbodyBindOrderObservation {
+            host: SrcbodyBindHost::OrdinaryUnit,
+            definition: unit.definition,
+            converted: converts,
+            body_origin,
+            parameter_ordinals,
+            capture_ordinals,
+        });
         let body = compiler.retained_body_occurrence(body_origin)?;
         compiler.select_terminal_result_origins(body_origin, body.expr)?;
         let lowered = compiler.lower_expr(&mut builder, body, &env)?;
@@ -1837,6 +4163,24 @@ fn define_unit_body<M: Module>(
                 }
             }
         } else {
+            // `RT-DECL-CLOSURE-PORT` `D5a` — THE DETACHED-RESULT SEAT.
+            //
+            // The exact retained result is lowered; nothing has been
+            // transferred into a carrier, allocated, published or joined. This
+            // is where the landed object fixture was measured to refuse, and it
+            // is the seat for every producer owner the fixed point detached as
+            // an ordinary unit result.
+            //
+            // ⛔ Applied on the non-root path only, because this is the only
+            // result surface that reaches `transfer_unit_result_into_carrier`.
+            // A root that owned an undischarged projected call would be caught
+            // by the whole-pass claim closure, not silently dropped.
+            let lowered = compiler.eliminate_detached_producer_continuation(
+                &mut builder,
+                &result_edges,
+                lowered,
+                &env,
+            )?;
             let word = match lowered {
                 LoweringOperand::Carried(word) => Some(word.word),
                 LoweringOperand::Specialized(Lowered::Trap(trap)) => {
@@ -1867,12 +4211,35 @@ fn define_unit_body<M: Module>(
         builder.seal_all_blocks();
         builder.finalize();
     }
+    ambient.release(compiler);
+    frame_scope.close(compiler)?;
+    #[cfg(test)]
+    d5a_trace(format!(
+        "UNIT-BODY done function={:?} origin={:?} root={:?}",
+        unit.function, unit.origin, root_outcome.as_ref().map(|_| "root")
+    ));
     compiler.validate_materialized_dead_join_cfg(unit.function, &func)?;
     // `4b` -- the emission-seam equality gate, on the FINISHED function and
     // before it is defined into the module. The callee of every recorded causal
     // emission is decoded out of this CLIF and compared with the planner-issued
     // target; a disagreement rejects here rather than being emitted.
     compiler.verify_emitted_continuation_calls(&func, bundle)?;
+    // `D8j` — same placement in the ordinary unit-body pass. ⛔ Both passes
+    // gate, because a composed discharge can be claimed in either.
+    compiler.verify_recorded_composed_discharges(&func, bundle)?;
+    #[cfg(test)]
+    crate::cranelift_backend::lowering::record_d8j_discharged(
+        compiler.function_local.composed_discharges.keys().cloned(),
+    );
+    // `D8k` -- same accumulation on the ordinary pass. ⛔ The owner supplied is
+    // this unit's own emission owner, so `record_composed` can hold the
+    // discharge to the identity it claims rather than trusting the seat.
+    if let Some(ledger) = compiler.continuation_claims.as_mut() {
+        ledger.record_composed(
+            compiler.function_local.composed_discharges.keys().cloned(),
+            ContinuationEmissionOwner::Predeclared(unit.function),
+        )?;
+    }
     // `4b` closeout control: verify this function's emissions but never
     // accumulate them, so whole-pass set equality has a population to miss.
     #[cfg(test)]
@@ -1886,6 +4253,7 @@ fn define_unit_body<M: Module>(
         }
     }
     verify_cranelift_function(&func, module.isa())?;
+    compiler.commit_aggregate_events()?;
     #[cfg(test)]
     scale_b_record_unit_body(&func);
     let mut ctx = module.make_context();
