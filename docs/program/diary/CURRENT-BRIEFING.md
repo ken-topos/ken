@@ -1,72 +1,119 @@
 # Current briefing (live — read this first on every Steward resume)
 
-> ## ⛔ HOW TO READ THIS FILE, AND WHEN TO DISTRUST IT
+> ## HOW TO READ THIS FILE, AND WHEN TO DISTRUST IT
 >
-> **`origin/main` outranks this file, always.** ⛔ If anything below tells you to
+> **`origin/main` outranks this file, always.** If anything below tells you to
 > do something `git fetch origin` shows as landed, **this file is stale and the
 > repository is right.** Re-read fresh, in this order:
 >
 > 1. `git fetch origin && git rev-parse origin/main`
-> 2. the LIVE block below — ⛔ **only** the LIVE block
-> 3. the open tasks (⛔ do not re-derive priority from memory)
+> 2. the LIVE block below — **only** the LIVE block
+> 3. the open tasks (do not re-derive priority from memory)
 > 4. for what is HELD, DEFERRED, or WHOSE it is: **the node**
->    (`docs/program/issues/*.md`), its operative block — ⛔ never this file
+>    (`docs/program/issues/*.md`), its operative block — never this file
 >
-> ⭐ **This file is a resume POINTER, not an archive. Git is the archive.** When a
+> **This file is a resume POINTER, not an archive. Git is the archive.** When a
 > window closes its block is **deleted**, not demoted to a "superseded" section —
-> ⛔ a superseded block left in the file gets read by someone, eventually.
+> a superseded block left in the file gets read by someone, eventually.
 
-> ### ⚠ REWRITTEN 2026-07-26 ~19:4xZ — 2866 lines → this. Read the bound.
+> ### REWRITTEN 2026-07-26 ~19:4xZ — 2866 lines → this. Read the bound.
 >
 > The prior content (~2700 lines of windows stacked back to 2026-07-21) is at blob
 > **`c26ee67f29d42690f461d43fe15e21c2202a31df`** — `git show c26ee67f`. Nothing was
 > lost; it was archived to git with this pointer.
 >
-> ⛔ **HONEST BOUND ON THE AUDIT: I did not read all 2866 lines.** I read every
+> **HONEST BOUND ON THE AUDIT: I did not read all 2866 lines.** I read every
 > heading, the blocks claiming to be authoritative, and then **scanned** the
 > remainder for sole-source markers, decision ids, held items, and preserved refs.
 > ⇒ **That is a scan, not an exhaustive audit**, and its surface was my own idea of
 > what "load-bearing" looks like. A reader who needs something from before
 > 2026-07-26 should assume it is in `c26ee67f`, not that it was considered.
 >
-> ⭐ **What the scan found is why the rewrite was worth doing: two blocks that
+> **What the scan found is why the rewrite was worth doing: two blocks that
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-07 ~11:5xZ · Both operator decisions RULED; Runtime executing
+## LIVE — 2026-08-07 ~14:2xZ · Runtime EXECUTING RT-CARRIER-BYTESPAN-OBSERVE
 
 > ### NEXT ACTION ON RESUME — read this line first
 >
-> **MERGED. `RT-SRCBODY-BIND-ORDER` landed; `main` moved `533f7c06` ->
-> `7ca5cfc0`.** PR #1529 merged at exact `acfcc915` on `dec_6ajfyekdp2qf8`.
-> **M6 verified 52 changed paths, ALL blob-identical on `origin/main`, 0
-> differ.** Three nodes flipped `merged`. Nothing is with the operator.
+> **The Runtime ring is WORKING and nothing is with me or with the operator.**
+> `main` is `89916fc1`. Two doc-only publishes landed this window (PR #1533
+> release + corrections, PR #1534 Librarian as-built), both verified
+> blob-identical on `origin/main`.
 >
-> 1. **The Runtime ring is FREE and its next node is
->    [[RT-CARRIER-BYTESPAN-OBSERVE]]** (`ready`, size L, frame written, base is
->    **`main`** not the branch — the publisher squashed, so `21fd46dc` is no
->    longer an ancestor of `main`). Run the handoff-gate compaction before
->    releasing it; **that gate was missed once on this ring already.**
+> 1. **RT-CARRIER-BYTESPAN-OBSERVE is RELEASED and `active`.** Kick
+>    `evt_7wg9j79tdkdep` is the thread anchor; base `9c41cb56`; leader
+>    confirmed `Working`. Handoff gate was run on all three seats — leader and
+>    QA showed `Context compacted`, implementer verified at ctx 0%.
+>    **Do not re-release it and do not release a second ring.**
 > 2. **Fleet is still SINGLE-THREADED** (operator, 2026-08-07).
 >    `KERNEL-NESTED-IND` stays stood down despite a written frame and an idle
 >    kernel ring. **A posture, not an oversight — do not "fix" it.**
-> 3. **FOUR cited sources route to the Librarian** —
->    `.github/workflows/ci.yml`, `crates/ken-cli/tests/px4b_native_production.rs`,
->    `crates/ken-cli/tests/rt_parity_native.rs`,
->    `crates/ken-runtime/src/cranelift_backend.rs`.
-> 4. **Two new owner nodes are FILED** — [[RT-WORKER-FIXTURE-DECODE]] and
->    [[RT-CARRIER-PRODUCER-OCCURRENCE]], both `draft`, runtime, size `TBD`,
->    frames owed. **Do not re-file them and do not fold either into a released
->    owner.** Their rows are `#[ignore]`d and **both die at an `expect` before
->    any assertion**, so un-ignoring is NOT the repair.
-> 5. **`AC-5`'s target-redirect red is NOT discharged.** Its detector cannot
->    reach its three `assert_ne!` comparisons and has not been able to for an
->    unknown span. Recorded in the annotation itself so it survives the skip.
-> 6. **I did NOT append the tracker-sync commit** to the ring candidate,
->    deliberately and for the second time: it would have moved the tip off
->    `acfcc915` and voided a Decision scoped to that exact object, and the
->    publisher force-pushes the BRANCH and re-reads its tip. The tracker rides
->    this corpus publish instead — same durability, no voided gate.
+> 3. **The next thing owed to me is the ring's own move**, not a Steward
+>    action. Expect a `D0` baseline or a hard stop. Nine `ready` Runtime nodes
+>    carry frames behind this one and nothing declares a `depends_on` edge to
+>    it, so **no successor framing is owed** — the stay-one-ahead rule is
+>    satisfied.
+> 4. **Framing debt, in priority order, and none of it is blocking:**
+>    [[RT-WORKER-FIXTURE-DECODE]], [[RT-CARRIER-PRODUCER-OCCURRENCE]] and
+>    [[CI-IGNORED-SWEEP]] are all `draft` with frames owed. All three now carry
+>    substantial written inputs, so each is a frame-authoring job rather than an
+>    investigation.
+> 5. **Four of RT-CARRIER-BYTESPAN-OBSERVE's fixed inputs were STALE and I
+>    corrected them before releasing.** The load-bearing one: its `#[ignore]`
+>    deliverable is **30 rows across ten files, not four**. Also corrected —
+>    `FsChangeMode` was listed "not measured" and has three rows; both baselines
+>    in 1c; and the false "fifth px4b row belongs to `RT-ENTRY-TRAP-254`" clause
+>    (that node is `closed`/`superseded_by`, its row un-ignored by
+>    `RT-SRCBODY-BIND-ORDER` `D4`).
+> 6. **`AC-5`'s target-redirect red is NOT discharged**, and the Adversary has
+>    since raised the stakes on it — see the capture-order block below.
+> 7. **RE-ARM THE WATCHDOG.** `set_interval` is process-local and does **not**
+>    survive a compaction or an MCP reconnect. Re-arm it as part of resuming,
+>    before anything else — a scheduler whose backstop silently fell over
+>    catches nothing, and the failure is invisible.
+>
+> **State at the last checkpoint, so a stale read is detectable:** the ring cut
+> `wp/RT-CARRIER-BYTESPAN-OBSERVE-d0-census` from `9c41cb56`, the leader
+> assigned a delta-free `D0` census over all 30 owned rows, and the implementer
+> was running baselines. **If `origin/main` has moved past `89916fc1`, this
+> block is stale — trust the repository.**
+
+### The Adversary's F1 is the one open technical question from the merge
+
+`evt_2yxmdfhvt4fm0`, **both findings verified in source by me before folding**,
+then folded into the `draft` nodes that own them. **The channel is report-only
+(COORDINATION §10⁻a) — I did not reply and must not.**
+
+**F1, folded into [[RT-WORKER-FIXTURE-DECODE]].** `RT-SRCBODY-BIND-ORDER`
+reversed the Parameter run and left the Capture run in descriptor order
+(`lowering/units.rs:4060-4067`), on a predicate `source_body_binding_order`
+(`:3689-3699`) that returns `true` for `CallableDeclaration` **and
+`ClosureBody`** — and `ClosureBody` is the unit kind that carries captures. The
+covering comment at `:4057-4059` appeals to descriptor order, **which is the
+exact ground that same commit refuted for the sibling run.**
+
+**Whether captures SHOULD be reversed is NOT established** — it turns on the
+elaborator's de Bruijn assignment across a closure environment, which nobody
+has read. **Both answers are live. Do not repair it as a bug**; if the
+measurement says the capture run is wrong, that is lowering semantics and it
+goes to the Architect.
+
+It folded into `RT-WORKER-FIXTURE-DECODE` rather than a new node because
+`two_same_shape_workers_are_distinguished` **is** the direct discriminator, and
+restoring that fixture is already that node's deliverable. **The axis is
+unmeasured precisely because the fixture is dark.**
+
+**F2, folded into [[CI-IGNORED-SWEEP]].** The declared population of 46 counted
+what this program **authored**; a sweep selects on the attribute, and the
+anchored count is **50** (`ken-cli` 34, `ken-verify` 10, `ken-runtime` 3,
+`ken-interp` 3). The four extra are **ignored by policy, not base debt** — one
+for ~142s of cost, three for capability not yet in scope for L1 — and would
+answer "still belongs" forever. Node now carries a second cut on
+reason-for-ignoring, plus the caution that it must not be enforced by parsing
+prose reason strings. Also recorded: the one-off no-over-annotation check
+covered **44 of 50**.
 
 ### THE ENUMERATION WAS CLOSED OVER THE WRONG POPULATION — my error
 
@@ -205,7 +252,7 @@ non-default feature on. Cheap check: grep the workspace `Cargo.toml`s for
 
 ### RETRACTED — there was NO mention gap and NO stall. Both were MY instruments.
 
-⛔ **This block previously reported a three-occurrence mention gap on
+**This block previously reported a three-occurrence mention gap on
 `runtime-leader` and a nine-minute implementer stall. Neither exists.**
 Retracted to the ring at `evt_4yh3568e6f488`.
 
@@ -222,13 +269,13 @@ empty composer and no `Working` line, and I called it idle. **The window was
 too small to contain the spinner directly above it.** The implementer had been
 running continuously for 12+ minutes.
 
-⭐ **Both are the same failure: a confident explanation built on an unverified
+**Both are the same failure: a confident explanation built on an unverified
 instrument, which launders a measurement error into a finding.** The tell I
 walked past twice: **my own messages showed the identical `None`**, and I did
 not ask why. ⇒ **When an instrument reports a defect, first check what it says
 about a case whose answer you already know.**
 
-⚠ **Cost:** a false correction posted to a teammate and one redundant
+**Cost:** a false correction posted to a teammate and one redundant
 re-dispatch. **Do not re-derive the mention gap from an older briefing copy.**
 >
 > **Chain:** `21fd46dc` (frozen base) → `aa032cc2` → `8696e8c5` (`D13`, 31
@@ -242,7 +289,7 @@ re-dispatch. **Do not re-derive the mention gap from an older briefing copy.**
 | **base/intersection** | merge-base `e6b4a13b`; `comm -12` of the candidate's changed files against `main`'s is **EMPTY** ⇒ **immaterial, do NOT rebase** |
 | **attributability** | `main` is **GREEN** at `533f7c06` ⇒ any red on the candidate is the candidate's |
 
-⛔ **`git diff --stat origin/main fb99d0fc` shows 89 files / -22863 and that is
+**`git diff --stat origin/main fb99d0fc` shows 89 files / -22863 and that is
 NOT a staleness signal.** A squash applies **merge-base → branch**, never
 **main → branch**, so files `main` gained since `e6b4a13b` that the candidate
 does not touch are **not** reverted. That stat **fires identically on safe and
@@ -254,7 +301,7 @@ it is empty. (COORDINATION §14(5) correction.)
 **Both review requests carried `mentions: None`** — `evt_72f386mgvth4t` (QA)
 and `evt_3mj0a2bv40266` (Architect) name the reviewer **in prose only**. That
 is the classic silent stall (§2). It did not bite: QA answered and the
-Architect pane read `Working`, i.e. **a redundant wake path masked it**. ⛔ The
+Architect pane read `Working`, i.e. **a redundant wake path masked it**. The
 next handoff may not be so lucky. One line to the leader at the seam; **do not
 interrupt a live review over it.**
 > 2. **When it lands**, run M6-M9 (see "Owed the moment the merge lands").
@@ -282,13 +329,13 @@ gutted by the annotation:
 
 **The two zero-selection jobs HARD-FAIL.** CI installs `cargo-nextest@latest`
 = **0.9.140**, whose `--no-tests` default is `auto`, *"defaulting to fail"*.
-⭐ **Measured directly on a dependency-free scratch crate, with a positive
+**Measured directly on a dependency-free scratch crate, with a positive
 control:** a binary whose only `#[test]` is `#[ignore]`d exits **4**
 (`error: no tests to run`); a binary with one live test exits **0**. The
 aggregator (`ci.yml:296-304`) tests only `result == success`, so it fails with
 them.
 
-⛔ **My "CI should go green in one pass" instruction to the ring was FALSE** and
+**My "CI should go green in one pass" instruction to the ring was FALSE** and
 is corrected at `evt_7wyhwwcnec4yq`.
 
 **The third binary fails the OTHER way and is the more dangerous one.**
@@ -321,7 +368,7 @@ anywhere in `.github/workflows/ci.yml` asserts in the present tense that
 `rt_parity_native` currently carries the interp-vs-native differential;
 discharge by grep over the whole file, not by reading the block you edited.*
 
-⛔ **Bounded deliberately — do NOT sweep further.** `:92-94`
+**Bounded deliberately — do NOT sweep further.** `:92-94`
 (`(14m41s, 7 tests) RESTORED`, with a cited measurement source) and the
 measurement sentences after `:103` (`7 tests / 266.7s / 470.6s`, the ~250s
 outlier, the nested-brackets structural fact) are **records and still true**.
@@ -333,7 +380,7 @@ the opposite error and was ruled out explicitly.
 At `7d204438`, on request: `ken-cli` `-- --ignored` = **0 passed / 34 failed**;
 `ken-verify` = **0 passed / 10 failed**. **All 44 suppressed rows still fail.**
 
-⛔ **Nothing in the repo does this automatically** — `--ignored`,
+**Nothing in the repo does this automatically** — `--ignored`,
 `--run-ignored`, `include-ignored` grep **empty** across `.github/`, `scripts/`,
 `docs/program/`. Every skip is write-only, so a landed repair ships with its own
 regression cover off. Filed as **[[CI-IGNORED-SWEEP]]** (`draft`, verify, S) on
@@ -479,7 +526,7 @@ than inherited — re-establish it before publishing any cut.
 | PR **#1528** | open; closes as superseded when #1529 lands |
 | `main` | `533f7c06`, green |
 
-⛔ **Do not read #1529's reds as a candidate defect.** The PR head is two
+**Do not read #1529's reds as a candidate defect.** The PR head is two
 commits behind the annotated tip. The reds are the unannotated base-debt rows,
 which is exactly what the 40-row annotation exists to close.
 
@@ -744,25 +791,25 @@ separate cut on its return. Two things its frame settled:
   window: the Architect posted "resolving on cast" and the object still read
   `proposed` for ~30s.
 
-## ⛔ CORRECTIONS — two claims the old file made that were FALSE
+## CORRECTIONS — two claims the old file made that were FALSE
 
-⭐ Both were **time-varying state wearing a permanent-looking hat** — the exact
+Both were **time-varying state wearing a permanent-looking hat** — the exact
 failure the heartbeat prompt bans. Recorded so the *shape* is recognisable, not
 just the instances.
 
-### 1. ⛔ "ARMED COUNTERS — the SOLE count of record" was stale AND retired
+### 1. "ARMED COUNTERS — the SOLE count of record" was stale AND retired
 
 It read `RT-NATIVE-FNSPLIT: hard-stop 10 · next research pull #11` and `Architect
 production blocks: 6 · next check #9`. **Both numbers were behind**, and the chain
 they counted **is retired** — the operator stopped the FNSPLIT effort on
 2026-07-26 and `SPEC-STORE-SPLIT` replaces it.
 
-⛔ **A counter calling itself "the SOLE count of record" is the worst thing to
+**A counter calling itself "the SOLE count of record" is the worst thing to
 leave stale**: it invites a reader to trust it *instead of* measuring. ⇒ **There
 are no armed counters now.** When the re-cut program exists, its node owns its
 counts.
 
-### 2. ⛔ "TRANSPORT — convo MCP mostly DEAD" is FALSE
+### 2. "TRANSPORT — convo MCP mostly DEAD" is FALSE
 
 The old block claimed only `set_interval`/`subscribe` survived and routed all
 reads through scratchpad HTTP scripts. **Measured across this entire session:
@@ -772,19 +819,19 @@ the claim.**
 
 **What IS true — the part worth keeping:**
 
-- ⛔ **NEVER call `mcp__convo__get_transcript`.** Its `limit` does not bound the
+- **NEVER call `mcp__convo__get_transcript`.** Its `limit` does not bound the
   response and it takes the stdio connection down with it. Operator prohibition;
   fleet law in `AGENTS.md`.
-- ⚠ **Mentions arrive TRUNCATED** — a doorbell, not a message. Fetch full text via
+- **Mentions arrive TRUNCATED** — a doorbell, not a message. Fetch full text via
   the HTTP read path, with **your own** credential.
-- ⚠ **`list_decisions` can exceed the result cap** and spill to a file — grep the
+- **`list_decisions` can exceed the result cap** and spill to a file — grep the
   file rather than retrying the call.
-- ⛔ `claude mcp list` reporting `convo: ✔ Connected` **is not evidence** — it
+- `claude mcp list` reporting `convo: ✔ Connected` **is not evidence** — it
   health-checks a fresh process.
 
-## ▶ Preserved refs — ⛔ QUERY LOCALLY. `origin` carries `main` ONLY.
+## Preserved refs — QUERY LOCALLY. `origin` carries `main` ONLY.
 
-> ### ⛔ THIS SECTION WAS FALSE AS WRITTEN. Both halves.
+> ### THIS SECTION WAS FALSE AS WRITTEN. Both halves.
 >
 > It said *"Origin holds 26"* and gave `git ls-remote origin
 > 'refs/heads/preserved/*'` as the query. **Operator ruling, 2026-07-26:** *"clean
@@ -800,44 +847,44 @@ git for-each-ref 'refs/heads/preserved/*'    # 78 refs
 git ls-remote --heads origin                 # refs/heads/main — and nothing else
 ```
 
-⭐ **A branch on one local ref is the NORMAL state of preserved work, not an
-exposure.** ⛔ Do not raise an unpushed ref as a finding.
+**A branch on one local ref is the NORMAL state of preserved work, not an
+exposure.** Do not raise an unpushed ref as a finding.
 
-⛔ **AND THE "EXISTS NOWHERE ELSE" CLAIM WAS WRONG ON EVERY ITEM IT NAMED.** Each
+**AND THE "EXISTS NOWHERE ELSE" CLAIM WAS WRONG ON EVERY ITEM IT NAMED.** Each
 was checked at `origin/main = a1e29284`:
 
 | the old claim | measured |
 |---|---|
-| `preserved/b2e-rejected-source-oracle` = `159f4109` | ✅ **present locally at that exact SHA** |
-| `wp/RT-FNSPLIT-B2E-boundary-value-elimination` = `e1b540e2` | ✅ **present locally at that exact SHA** — ⛔ delete neither |
-| `preserved/rt-fnsplit-b2f-hardstop-{9,10,11}-evidence` | ⛔ **no local ref of that name exists** — and it does not need to. Hard-stops #9/#10/#11 are all on `main`, across **12** files (`RT-FNSPLIT-B2{E,F,O,R,V}.md`, `RT-NATIVE-FNSPLIT.md`, `RT-VALUE-TOTALITY.md`, the B2O report + predictions, two WP frames, `diary/2026/Jul/25.md`). `bce75fec` is literally *"make hard-stop #11's evidence durable"*. |
-| `preserved/architect-state-*` | ⛔ **wrong prefix** — the refs are `preserved/architect-work-*` (5 locally). A ref name you cannot resolve is not a backup. |
+| `preserved/b2e-rejected-source-oracle` = `159f4109` | **present locally at that exact SHA** |
+| `wp/RT-FNSPLIT-B2E-boundary-value-elimination` = `e1b540e2` | **present locally at that exact SHA** — delete neither |
+| `preserved/rt-fnsplit-b2f-hardstop-{9,10,11}-evidence` | **no local ref of that name exists** — and it does not need to. Hard-stops #9/#10/#11 are all on `main`, across **12** files (`RT-FNSPLIT-B2{E,F,O,R,V}.md`, `RT-NATIVE-FNSPLIT.md`, `RT-VALUE-TOTALITY.md`, the B2O report + predictions, two WP frames, `diary/2026/Jul/25.md`). `bce75fec` is literally *"make hard-stop #11's evidence durable"*. |
+| `preserved/architect-state-*` | **wrong prefix** — the refs are `preserved/architect-work-*` (5 locally). A ref name you cannot resolve is not a backup. |
 
-⭐ **The transferable part: a "this exists nowhere else" note is a claim about a
+**The transferable part: a "this exists nowhere else" note is a claim about a
 population you did not enumerate, and it decays in both directions at once** — the
 copy you were protecting had already landed in the repo, while the ref name you
 recorded it under never existed. ⇒ **Re-derive from `for-each-ref` and `git grep`
 on `main`; never from a hand-kept list of what is precious.**
 
-## Operator rulings — 2026-07-21 ~12:45Z. ⛔ SETTLED, do not reopen.
+## Operator rulings — 2026-07-21 ~12:45Z. SETTLED, do not reopen.
 
-⭐ Kept inline deliberately: this is law, and a settled ruling is a **fixed input,
+Kept inline deliberately: this is law, and a settled ruling is a **fixed input,
 never a question to re-ask.**
 
 - **No "ratification."** The Linux ABI II charter is a **planning document, not a
-  commitment.** Nothing outside the project depends on our timelines. ⛔ Do not
+  commitment.** Nothing outside the project depends on our timelines. Do not
   re-raise status-correction as a decision.
 - **Where anticipated and done diverge, fill the gap first** — hence
   `docs/program/10-linux-abi-completion.md`.
 - **L2-1: no cross-compilation. CROSS-PLATFORM IS INDEFINITELY DEFERRED**
   (restated 2026-07-21 after I re-raised it). Manifest v2 is family-scoped and
   generated, **not** cross-target.
-  ⛔ **This ruling ALREADY ANSWERS any non-linux finding** — do not route one back
+  **This ruling ALREADY ANSWERS any non-linux finding** — do not route one back
   as a scoping question. Record such findings as *observations against a deferred
   lane* and stop.
 - **L2-0: all desirable, nothing deferred.** All nine `RepresentedUnavailable`
   operations get promoted.
-- **Timing, timelines, and budget are the OPERATOR'S domain.** ⛔ Do not reason
+- **Timing, timelines, and budget are the OPERATOR'S domain.** Do not reason
   about schedule or cost.
 - ★ **My lane is token efficiency in terms of delivered work.** That is the axis
   to optimize and the one to report on.
@@ -848,34 +895,34 @@ and delay. Tests should focus on behavior."* ⇒ Executable form: **"does an edi
 that changes nothing about how any program behaves make this test fail?"**
 
 **Standing gate policy (operator, 2026-07-26):** the library currency ledger is
-generated **at version release points**, ⛔ **not enforced per merge.**
+generated **at version release points**, **not enforced per merge.**
 
-**⛔ `origin` CARRIES `main` ONLY (operator, 2026-07-26; restated 2026-07-28).**
-A branch living on one local ref is **normal** and is never a finding. ⛔ No
+**`origin` CARRIES `main` ONLY (operator, 2026-07-26; restated 2026-07-28).**
+A branch living on one local ref is **normal** and is never a finding. No
 durability sweeps, no pushes of WP or seat branches, no ring reporting an
 unpushed ref. The publisher's own candidate-branch push stays — that is how it
 opens a PR.
 
-**⛔ THE `integrator` SEAT IS RETIRED (operator, 2026-07-26).** *"remove any
+**THE `integrator` SEAT IS RETIRED (operator, 2026-07-26).** *"remove any
 references to the integrator. that seat was retired weeks ago."* ⇒ Every operative
 reference is gone as of PR #1052 (`a1e29284`, 50 files) — PR template, CODEOWNERS,
 `ci.yml`, four devcontainer files (including a **functional** `ctx-nudge.sh` case
 arm), `COORDINATION.md`, `04-git-and-integration.md`, 40 WP frames, the roster
-(29→28), git refs, worktrees. ⭐ **The chronicles keep the word deliberately** —
+(29→28), git refs, worktrees. **The chronicles keep the word deliberately** —
 `docs/program/diary/`, `agent/memory/MIGRATION-LOG.md`,
 `docs/program/ds-campaign-judgment-log.md` (17 files, 501 occurrences): there it is
 a true account of what the process **was**. **Instructions get corrected; records
-stay records.** ⚠ One residual is not mine to clear — the convo **participant**
+stay records.** One residual is not mine to clear — the convo **participant**
 still exists; see the LIVE block's operator-owed list.
 
 **Canonical width: 96 (operator, 2026-07-26).** *"re 88 v 96. 96 is what it should
 be. It was an incomplete revision, apparently."* ⇒ `spec/30-surface/31-lexical.md`
 and `CANONICAL_WIDTH` are correct; `conformance/` is the stale side.
-`SPEC-31-WIDTH-ERRATUM` reconciles it. ⛔ Do not re-argue the value.
+`SPEC-31-WIDTH-ERRATUM` reconciles it. Do not re-argue the value.
 
-## ▶ Where durable law lives — ⛔ do not restate it here
+## Where durable law lives — do not restate it here
 
-⭐ **The old file's real defect was restating durable rules inside a diary.** A
+**The old file's real defect was restating durable rules inside a diary.** A
 rule copied into a briefing drifts from its source and then contradicts it. ⇒
 **Point, never copy.**
 
@@ -886,35 +933,35 @@ rule copied into a briefing drifts from its source and then contradicts it. ⇒
 | hard-won operational lessons | `agent/memory/` (`fleet` + `enclave` + `roles/steward/`) |
 | model tiers | `agent/MODELS.md` |
 | reasoning charter | `docs/PRINCIPLES.md` |
-| ⛔ no local `--workspace` builds — CI only | `agent/COORDINATION.md §12` |
+| no local `--workspace` builds — CI only | `agent/COORDINATION.md §12` |
 | build status against the DAG | `docs/program/IMPLEMENTATION-PROGRESS.md` |
 | spec status | `spec/SPEC-PROGRESS.md` |
 
-## ⚠ Standing traps — only the POSITIONAL ones
+## Standing traps — only the POSITIONAL ones
 
-⭐ Each is here because it fires **at a specific command**. That is the whole test
+Each is here because it fires **at a specific command**. That is the whole test
 for belonging in this file rather than in `agent/memory/`.
 
-- ⛔ **Verify landed content by BLOB IDENTITY, never ancestry.** The publisher
+- **Verify landed content by BLOB IDENTITY, never ancestry.** The publisher
   squashes, so an approved SHA is correctly *never* an ancestor of `main`.
-- ⛔ **Verify every object you NAME exists at the base you NAME** —
+- **Verify every object you NAME exists at the base you NAME** —
   `git cat-file -e <base>:<path>`, and quote the blob (§2c step 5b).
-- ⛔ **`git diff --stat` always exits 0.** Use `--quiet` for an emptiness test.
-- ⛔ **The publisher's exit code is the LAUNCHER's** — confirm it exited *and* that
+- **`git diff --stat` always exits 0.** Use `--quiet` for an emptiness test.
+- **The publisher's exit code is the LAUNCHER's** — confirm it exited *and* that
   `main` moved.
-- ⛔ **Never `git fetch` while the publisher is inside its merge→verify window** —
+- **Never `git fetch` while the publisher is inside its merge→verify window** —
   `refs/remotes/origin/main` is shared across ~70 worktrees.
-- ⛔ **Never `pkill -f`** (matches your own shell) · **never `git stash`**
+- **Never `pkill -f`** (matches your own shell) · **never `git stash`**
   (`refs/stash` is shared) · **never `git checkout <ref> -- .`** (reverts
   uncommitted edits worktree-wide).
-- ⛔ **A probe truncated before its filter is not a measurement.** Search the full
+- **A probe truncated before its filter is not a measurement.** Search the full
   stream; truncate the RESULT.
-- ⛔ **Never dump `.moot/actors.json`** to learn its shape — use
+- **Never dump `.moot/actors.json`** to learn its shape — use
   `scripts/moot-actor-id.sh <role>`; the schema-discovery step is what leaks a
   key. Look up a participant id **at post time**, never from memory.
-- ⛔ **`steward/work` is stale immediately after every publish** — reset onto the
+- **`steward/work` is stale immediately after every publish** — reset onto the
   squashed `main` before writing anything new.
-- ⛔ **A `--doc-only` merge can redden `main` and is structurally unable to notice.**
+- **A `--doc-only` merge can redden `main` and is structurally unable to notice.**
   After one, **enumerate consumers of the touched paths** — attestation ledger,
   measured-token censuses, source-text oracles. This is how `95bc855c` broke three
   things and reported none.
