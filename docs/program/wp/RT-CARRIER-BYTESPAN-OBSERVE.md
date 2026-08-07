@@ -31,45 +31,107 @@ outstanding.
 
 ### 1a. The governing base is `main`
 
-**Cut from current `origin/main`, after the `RT-CONTSRC-PRODUCER-LOCAL`
-candidate merges.** Do not continue `wp/RT-DECL-CLOSURE-PORT-typed-units`: the
-publisher **squashes**, so `b914c7ff` is not an ancestor of `main` once it
-lands, and continuing that branch would re-offer 212 already-merged commits.
+**SETTLED 2026-08-07. Cut `wp/RT-CARRIER-BYTESPAN-OBSERVE-<slug>` from
+`origin/main` at `b0a0a20c`.** `RT-CONTSRC-PRODUCER-LOCAL` has merged, along
+with `RT-DECL-CLOSURE-PORT` and `RT-SRCBODY-BIND-ORDER`; all three nodes are
+`merged`.
 
-**The anchors in 1b were measured at `b914c7ff` and must be re-verified against
-`main` before you rely on one.** The squash preserves content, not commit
-identity, so the blobs should match and the commit will not.
+**Do not continue `wp/RT-DECL-CLOSURE-PORT-typed-units`.** The publisher
+**squashes**, so neither `b914c7ff` nor `acfcc915` is an ancestor of `main`;
+continuing that branch would re-offer already-merged commits. A branch that
+dangles ahead of `main` with its content landed is the normal post-squash state
+and is not unmerged work.
 
-### 1a-i. Four of this node's rows are SKIPPED, not passing
+**The 1b anchors have been re-verified against `b0a0a20c` for you** — three
+moved and three did not, and the table below now carries the current blobs. The
+squash preserves content, not commit identity, so a moved blob here means the
+file genuinely changed, not that the anchor drifted.
 
-The four byte-span rows in section 2d ship marked `#[ignore]`, each carrying its
-exact observed signature and this node's id. **A skipped row measures nothing**,
-so at your `D0` the suite will report them ignored rather than failed.
+### 1a-i. THIRTY of this node's rows are SKIPPED, not four
 
-⇒ **`D0` must un-skip the four rows and record their live failure**, and `AC-1`
-is discharged against that live baseline, not against an ignored one. **Removing
-the four `#[ignore]` attributes is this node's deliverable**, and a green suite
-that still carries them has discharged nothing. The fifth row stays ignored — it
-belongs to [[RT-ENTRY-TRAP-254]].
+**CORRECTED 2026-08-07, and the correction is nearly an order of magnitude.**
+This section previously said four. Measured at `b0a0a20c` with the anchored
+form `^[[:space:]]*#\[ignore` — which excludes doc-comment lines that merely
+mention the attribute — **this node's id owns 30 `#[ignore]` attributes across
+10 files:**
 
-### 1b. Content anchors at `b914c7ff`
-
-| path | blob |
+| file | rows |
 |---|---|
-| `crates/ken-runtime/src/cranelift_backend/planning/static_transition.rs` | `7f4fa3c376be34402c4815e0706b896f4363e66d` |
-| `crates/ken-runtime/src/cranelift_backend/lowering/mod.rs` | `69f6ea52361079f3b5432e0d9ff6759c034d03e9` |
-| `crates/ken-runtime/src/cranelift_backend/lowering/core.rs` | `f3c0c5e452b84e8492b61433c9621485ad8a502a` |
-| `crates/ken-runtime/src/boundary_value_clif.rs` | `0ec07c6698aca67eb51084ecb4ab376efa5a6ed0` |
-| `crates/ken-runtime/src/boundary_value.rs` | `ac0745763b2c71c07bb5205fad5edaa3a3718e17` |
-| `crates/ken-cli/tests/rt_parity_native.rs` | `b2df2bbd00644b907cae5d05efa76edd9df1b3f2` |
+| `crates/ken-verify/src/scenario.rs` | 9 |
+| `crates/ken-cli/tests/rt_parity_native.rs` | 5 |
+| `crates/ken-cli/tests/px4b_native_production.rs` | 4 |
+| `crates/ken-cli/tests/rt_escape_second_resource_native.rs` | 2 |
+| `crates/ken-cli/tests/px8ta_oriented_subcontinuation.rs` | 2 |
+| `crates/ken-cli/tests/px7m_hostresult_computational_match.rs` | 2 |
+| `crates/ken-cli/tests/px7l_checked_host_recursive_bind.rs` | 2 |
+| `crates/ken-cli/tests/px7f_resource_native.rs` | 2 |
+| `crates/ken-cli/tests/px8x_single_schema_observation.rs` | 1 |
+| `crates/ken-cli/tests/px7p_constructor_field_composition.rs` | 1 |
+
+**A skipped row measures nothing**, so at your `D0` the suite reports these
+ignored rather than failed.
+
+⇒ **`D0` must un-skip all 30 and record their live failure**, and `AC-1` is
+discharged against that live baseline. **Removing all 30 `#[ignore]`
+attributes is this node's deliverable**, and a green suite that still carries
+any of them has discharged nothing for those rows.
+
+**Do not read 30 rows as 30 units of work.** They are one mechanism — an
+observer plus a helper plus per-seat phase flips — and the rows discharge
+together as seats flip. What the count changes is the **verification surface**
+and the sizing of `D0`, not the design. If it turns out the rows do not all
+discharge from one mechanism, that is a finding and a recut, and the recut is
+the Steward's.
+
+**The former "fifth row stays ignored, it belongs to `RT-ENTRY-TRAP-254`"
+clause is DELETED because it is now false.** `RT-SRCBODY-BIND-ORDER` `D4`
+**un-ignored** that row in the commit that greened it: the entry trap's root
+cause was the source-body binding order, not a byte-span gap.
+[[RT-ENTRY-TRAP-254]] is `closed`, `superseded_by: RT-SRCBODY-BIND-ORDER`.
+**px4b now carries exactly four ignores and all four are yours.**
+
+### 1b. Content anchors at `b0a0a20c`
+
+Measured 2026-08-07 against `origin/main`. The `since b914c7ff` column says
+whether the merges above changed the file — it is there so you know which reads
+are still good and which are fresh.
+
+| path | blob at `b0a0a20c` | since `b914c7ff` |
+|---|---|---|
+| `crates/ken-runtime/src/cranelift_backend/planning/static_transition.rs` | `7f4fa3c376be34402c4815e0706b896f4363e66d` | same |
+| `crates/ken-runtime/src/boundary_value_clif.rs` | `0ec07c6698aca67eb51084ecb4ab376efa5a6ed0` | same |
+| `crates/ken-runtime/src/boundary_value.rs` | `ac0745763b2c71c07bb5205fad5edaa3a3718e17` | same |
+| `crates/ken-runtime/src/cranelift_backend/lowering/mod.rs` | `745f1cda7addbd447f2bbc9b1a2c8095b8bde768` | **MOVED** |
+| `crates/ken-runtime/src/cranelift_backend/lowering/core.rs` | `275bc0f9a0a0b006c86fe4abb092bfd16ebe1328` | **MOVED** |
+| `crates/ken-cli/tests/rt_parity_native.rs` | `242a88fad14d90b944b6fa4ad76b5a0d0301e01c` | **MOVED** |
+
+**The three substrate files this node builds on — `static_transition.rs`,
+`boundary_value_clif.rs`, `boundary_value.rs` — are byte-identical to what
+section 2e was written against.** The audit in 2e therefore still holds as
+written; `BOUNDARY_LOCAL_HELPERS` has not moved.
+
+**`rt_parity_native.rs` moved because its six `assert_narrowed_alike` rows were
+`#[ignore]`d, five of them under this node's id.** That is the annotation
+described in 1a-i, not a change to the rows' content.
 
 ### 1c. Expected baselines, to be re-measured at `D0` and not inherited
 
-- `px4b_native_production`: **14 passed / 5 failed**. Four of the five are this
-  node's subject; the fifth is the `explicit entry trap`, owned by
-  [[RT-ENTRY-TRAP-254]] and **not** this node's to clear.
-- `ken-runtime --lib`, targeted: **778 passed / 2 failed / 1 ignored**, the two
-  reds standing and pre-existing.
+**RESTATED 2026-08-07 against `b0a0a20c`. The previous numbers were measured
+before the quarantine and before the bind-order fix, and both moved.**
+
+- `px4b_native_production`: **19 tests total; expect 15 passed / 0 failed / 4
+  ignored.** The four ignored are this node's. The old reading — 14 passed / 5
+  failed — predates both the annotation and `RT-SRCBODY-BIND-ORDER` `D4`, which
+  greened the fifth (entry-trap) row and un-ignored it.
+- `ken-runtime --lib`, targeted: **expect 783 passed / 0 failed / 3 ignored.**
+  The old reading — 778 passed / 2 failed / 1 ignored — is superseded: the two
+  standing reds are now `#[ignore]`d under [[RT-WORKER-FIXTURE-DECODE]] and
+  [[RT-CARRIER-PRODUCER-OCCURRENCE]]. **Neither is yours**, and neither is an
+  assertion failure — both die at an `expect` before reaching any assertion.
+  Leave them ignored.
+
+**These are expectations to falsify at `D0`, not inputs to inherit.** I derived
+them from the annotations at `b0a0a20c`, not from a run.
 
 **Assert the executed count, not just the exit status.** A filter that matched
 nothing reports green and is indistinguishable from a pass. `0 passed` is a
@@ -127,14 +189,16 @@ AC opening *"carried words cannot satisfy this operation"* would be false.
 
 ### 2c. Where the refusal is raised
 
-`claim_host_effect_seat` (`lowering/mod.rs:7491` at the anchor) asks
+`claim_host_effect_seat` (`lowering/mod.rs:7558` at `b0a0a20c`; it was `:7491`
+at `b914c7ff` — the file moved, see 1b) asks
 `record.avail.admits(observed)` and, on failure, raises
 
 ```text
 seat {slot:?} of {operation:?} needs {need:?}, which it cannot observe in {observed:?}
 ```
 
-`EffectSeatAvail::admits` (`static_transition.rs`, near `:4834`) **is** the
+`EffectSeatAvail::admits` (`static_transition.rs:4839` at `b0a0a20c`; that file
+is byte-identical to the `b914c7ff` anchor) **is** the
 `Need ⊆ Avail` test. The seat carries its own coordinates, so a failure names
 the exact seat of the exact operation.
 
@@ -144,16 +208,33 @@ the exact seat of the exact operation.
 `(ProjectBytesSpan, BytesPointerLength, SPECIALIZED_ONLY)` and returns it at
 exactly these `(operation, ordinal)` pairs:
 
-| seat | measured at tip |
-|---|---|
-| `ConsoleWrite` `Argument(1)` | FAILING (1 row) |
-| `FsReadFile` `Argument(0)` | FAILING (1 row) |
-| `FsWriteFile` `Argument(0)` | FAILING (2 rows) |
-| `FsWriteFile` `Argument(2)` | not measured |
-| `FsChangeMode` `Argument(0)` | not measured |
-| `FsOpen` `Argument(0)` | not measured |
+**CORRECTED 2026-08-07. `FsChangeMode` was listed here as "not measured" and it
+is not — three quarantined rows name it.** Re-derived from the 30 `#[ignore]`
+reason strings at `b0a0a20c`, tallied by the operation each names:
 
-**Four failing rows over three distinct seats, out of a population of six.**
+| operation | quarantined rows naming it | was stated as |
+|---|---|---|
+| `FsReadFile` | 20 | FAILING (1 row) |
+| `FsWriteFile` | 6 | FAILING (2 rows) |
+| `FsChangeMode` | 3 | **not measured** |
+| `ConsoleWrite` | 1 | FAILING (1 row) |
+| `FsOpen` | **0** | not measured |
+
+**Thirty rows over four of the five distinct operations. `FsOpen` is the only
+operation with no quarantined row, and it remains genuinely unmeasured.**
+
+> **READ THE UNIT OF THIS TABLE CAREFULLY — it is not the unit `AC-4` asks
+> for.** The `#[ignore]` reason strings name an **operation**
+> (`the FsWriteFile byte-span seat ...`); they do **not** name an **ordinal**.
+> So this table cannot tell you whether `FsWriteFile`'s six rows sit at
+> `Argument(0)`, at `Argument(2)`, or at both — and `AC-4` is keyed on the
+> **six `(operation, ordinal)` seats**, not on five operations.
+>
+> ⇒ **Resolving operation-tally into per-seat evidence is `D0`/`D1` work, and
+> it is exactly the "first failure is not a population oracle" hazard this
+> frame already warns about.** Do not carry a row's operation into a claim
+> about its seat. The six-seat population in `host_effect_seat_contract` is
+> unchanged and is still what `AC-4` must disposition.
 
 ⇒ **This is the node's governing population hazard and it cuts both ways.**
 Repairing only the three seats that fail leaves an identical seat refusing for
@@ -183,7 +264,8 @@ ken_boundary_int_view_local    (arena, word, out_view)   -> status
 2. **`int_view` is the exact precedent for what is missing.** It returns a
    canonical `{sign, len, limbs}` triple through an out-pointer, its own guards
    are the authority, and `narrow_carried_int_u64`
-   (`lowering/mod.rs`, near `:16745`) is the emitted reader that consumes it.
+   (`lowering/mod.rs:16810` at `b0a0a20c`; `:16745` at the old anchor) is the
+   emitted reader that consumes it.
    Read both before designing anything; the byte-span analogue is
    `{ptr, len}`.
 3. **A per-index byte reader existing does NOT establish that a pointer can be
@@ -311,14 +393,25 @@ Every AC names its owning deliverable. **If one cannot, that is the finding.**
   not be reported as if it did.
 
 - **`AC-3` (`D0`, `D5`) — per row, never a total.** Every row green at `D0` is
-  still green, stated per row. **The `explicit entry trap` row stays ignored and
-  that is correct** — it belongs to [[RT-ENTRY-TRAP-254]].
+  still green, stated per row.
 
-  **Report ignored separately from passed, always.** The suite lands with five
-  rows ignored, so a bare `passed / failed` pair reads green while this node has
-  changed nothing. `18 passed / 0 failed / 1 ignored` and
-  `14 passed / 0 failed / 5 ignored` are the success and the no-op, and only the
-  ignored count tells them apart.
+  **Report ignored separately from passed, always.** A bare `passed / failed`
+  pair reads green while this node has changed nothing, because an ignored row
+  is not a failing one. **Arithmetic restated 2026-08-07** — `px4b` carries 19
+  tests and 4 ignores, all four this node's:
+
+  | reading | meaning |
+  |---|---|
+  | `19 passed / 0 failed / 0 ignored` | success — the four un-skipped and green |
+  | `15 passed / 0 failed / 4 ignored` | **the no-op** — nothing un-skipped |
+
+  **Only the ignored count tells them apart**, and the old `18/0/1` versus
+  `14/0/5` pair is superseded: it assumed a fifth ignored entry-trap row that
+  no longer exists.
+
+  **Apply the same discipline to the other nine files in 1a-i.** `px4b` is one
+  of ten, and a per-file ignored count is the only thing that distinguishes 30
+  un-skips from 4.
 
 - **`AC-4` (`D5`) — the per-seat disposition table, over all SIX seats.**
   For each of the six seats in section 2d, exactly one of:
@@ -379,11 +472,19 @@ Every AC names its owning deliverable. **If one cannot, that is the finding.**
 - **No blanket phase relaxation.** Setting `BytesPointerLength` to
   `EITHER_PHASE` need-wide, rather than seat-wise, asserts a capability that
   does not exist. Availability is recorded per seat for exactly this reason.
-- **Do not clear the `explicit entry trap` row here**, and do not fold
-  [[RT-ENTRY-TRAP-254]] into this node on the strength of "bytes" appearing in
-  its test name. That is the vocabulary inference the Architect already refuted
-  once on this campaign. Whether the two share a root cause is unmeasured and
-  must be measured.
+- **The `explicit entry trap` ban is DISCHARGED, and the question behind it is
+  now answered.** The row was cleared by `RT-SRCBODY-BIND-ORDER` `D4`, and the
+  two do **not** share a root cause: the entry trap was the source-body
+  parameter run reaching its body in ABI descriptor order, not a byte-span gap.
+  [[RT-ENTRY-TRAP-254]] is `closed`. Nothing here is yours to clear or to fold.
+
+  **The reason the ban existed still binds.** It was written to stop a
+  vocabulary inference — "bytes" appearing in a test name — of exactly the kind
+  the Architect refuted once already on this campaign. That the guess would
+  have landed on the wrong cause **is the argument for the discipline, not
+  against it**: the shared word was `bytes` and the shared cause was binding
+  order. Do not infer a seat, a class, or an owner from a name anywhere else in
+  this node.
 - **Do not touch the carried source-match class dispatch.** It stays in
   [[RT-CONTSRC-PRODUCER-LOCAL]].
 

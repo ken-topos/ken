@@ -84,3 +84,66 @@ Two consequences, and the second is what the frame must act on:
   claimed on this row, that claim rested on a test that could not execute.
   Establish what, if anything, covers the property today — and route the answer
   rather than absorbing it.
+
+## The dark detector is the witness for an unmeasured capture-order axis
+
+**Adversary `evt_2yxmdfhvt4fm0` (F1), verified by the Steward against
+`b0a0a20c` 2026-08-07. This raises the node's stakes: the fixture is not just
+dark, it is dark over a question `RT-SRCBODY-BIND-ORDER` left open.**
+
+`RT-SRCBODY-BIND-ORDER` reversed the Parameter run and left the Capture run in
+descriptor order
+(`crates/ken-runtime/src/cranelift_backend/lowering/units.rs:4060-4067`):
+
+```rust
+let converts = source_body_binding_order(unit.definition);
+if converts {
+    parameters.reverse();
+}
+let mut env = parameters;
+env.extend(captures);          // not reversed
+```
+
+`source_body_binding_order` (`:3689-3699`) returns `true` for
+`CallableDeclaration` **and `ClosureBody`** — and `ClosureBody` is the unit kind
+that carries a non-empty capture run. **So on exactly the units that have
+captures, the Parameter run is reversed and the Capture run is not.** The same
+shape appears again at `:2600-2605`. All four facts confirmed in source.
+
+**The covering comment at `:4057-4059` is the part to read:**
+
+> `validate_slot_run` proves the Parameter run is a contiguous prefix of the
+> Capture run, so concatenating the two IS the descriptor order
+
+**Descriptor order is precisely what that commit established is not the
+semantic order for the sibling run.** The sentence justifies keeping the
+capture run in the order the same commit deemed wrong next door.
+
+**What is NOT established: that captures should be reversed.** That turns on
+how the elaborator assigns de Bruijn indices across a closure environment,
+which nobody has read. **Both answers are live**, and this node must not assume
+either.
+
+**Why this belongs here rather than in a node of its own.**
+`two_same_shape_workers_are_distinguished` — the row this node exists to
+restore — **is the direct discriminator**: two same-shape workers differing in
+captured content, with three `assert_ne!` comparisons as the comparison. The
+axis is unmeasured *because* this fixture is dark. Restoring it is already this
+node's deliverable; answering the capture-order question is what the restored
+detector is *for*.
+
+⇒ **Two additions to what the frame owes:**
+
+- **Once the detector is live, use it to decide the capture-order axis** —
+  reversed or correct-by-construction — and state which, with the elaborator's
+  de Bruijn assignment as the evidence, not the test's colour alone. A green
+  row does not by itself distinguish "captures are already right" from
+  "this fixture does not vary captures".
+- **Whichever way it resolves, the comment at `:4057` must say so.** If
+  captures are correct by construction, that fact belongs in the comment,
+  because the current sentence does not say it — it appeals to descriptor
+  order, which is the refuted ground.
+
+**Not asserted as a bug, and do not repair it as one.** There is no repro. If
+the measurement says the capture run is wrong, that is a lowering-semantics
+change and it goes to the Architect, not into this node's fixture repair.
