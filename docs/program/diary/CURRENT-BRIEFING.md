@@ -33,7 +33,7 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-07 ~20:5xZ · `D4` merged, `D4b` released; operator set the sequence
+## LIVE — 2026-08-07 ~22:1xZ · `D0`-`D4b` merged, `D5` kicked; operator set the sequence
 
 > ### OPERATOR SEQUENCING RULING — 2026-08-07, verbatim intent. THIS GOVERNS.
 >
@@ -64,44 +64,43 @@
 
 > ### NEXT ACTION ON RESUME — read this line first
 >
-> **NOTHING IS OWED BY ME. `D4b` is with the ring; wait for its handoff.**
-> Released at `evt_4r9kdtvk2nrk0` on a branch cut from `origin/main`
-> **`076337e1`**. When the exact SHA comes back, run the merge procedure from
-> the file, not from memory.
+> **NOTHING IS OWED BY ME. `D5` is with the ring; wait for its handoff.**
+> Kicked at `evt_695b5s1dv3v0s` from `origin/main` `70d6c384`; the claim sweep
+> was added at `evt_andxjqnc2srb`. `main` is now **`ed0eb80c`**.
 >
-> **`D0`-`D4` ARE MERGED.** `D4` landed as **PR #1546** from exact `ce9ef0f3`,
-> all four paths blob-verified on `main`. `main` is **`076337e1`** after the
-> doc-only follow-up (PR #1547). M6/M8/M9 all discharged — Adversary notice
-> `evt_5a4bms7kvrc9b`.
+> **`D0` THROUGH `D4b` ARE MERGED.** `D4b` landed as **PR #1549** from exact
+> `fe6bd4f4`, four paths blob-verified; M8 sent (`evt_45r2dzea3trk`).
+> Doc follow-ups: **#1550** (the `AC-10` narrowing), **#1551** (the headline
+> rewrite).
 >
-> **`AC-11` IS DISCHARGED; `AC-10` IS NOT AND IS NOW `D4b`.** `AC-11` (the
-> Adversary's `D3` finding: the owner guard proves referent ownership while its
-> doc reads as a guarantee on the returned address) was ruled by the Architect
-> at `dec_5zjh9675253pj` — the view is an **epoch-bounded ephemeral interior
-> borrow**, valid until the next materialization or reservation. **No generation
-> counter, no ABI field.** `AC-10` — make the `ResponseBytes` invariant
-> structural — is the whole of `D4b` and is unbuilt.
+> **`AC-10` IS DISCHARGED ONLY IN THE NARROWED FORM — construction authority,
+> NOT provenance. I PUBLISHED THE STRONGER CLAIM AND IT WAS WRONG.**
+> `rebuild_from_collected(self, pointer, len)` returns `Self { pointer, len }`
+> — **the receiver is never read**, so it proves a caller *holds* a span
+> without constraining the values it returns. That is a **bearer/warrant
+> condition, not a dataflow proof.** Caught by Adversary `evt_6fkpg1wyh6mzr`;
+> ruled by the Architect at **`dec_5ghh87fvg7skn`** — take the claim
+> correction.
 >
-> **THE PUBLISHER OUTAGE WAS NEVER A CREDENTIAL PROBLEM, and the misdiagnosis is
-> the lesson.** `scripts/scripted-pr-automerge.sh:210` mints a `ken-ci[bot]`
-> GitHub App token via `.devcontainer/mint-gh-token.sh`; there is **no user
-> login**, so a missing `~/.config/gh` is normal, not evidence. The mint ends in
-> `curl -fsS ... | python3 json.load`, and `curl -f` on a network blip yields
-> **empty stdout**, so python throws and the token comes back empty — which gh
-> then reports as *"not logged into any GitHub hosts."* **The last line is the
-> symptom; the traceback above it is the cause.** I escalated to the operator
-> for an interactive `gh auth login` that was never needed.
-> ⇒ **Mint with a retry and export `GH_TOKEN` BEFORE invoking the publisher**,
-> so its own `gh auth status` check passes and the flaky step is off the
-> critical path. Durable fix (unfiled): a retry inside `mint-gh-token.sh`.
+> ⇒ **DO NOT "derive the new values from `self`"**, which I had offered as the
+> expensive option. At `rebuild_recursive_argument`, `self` holds **preheader**
+> SSA handles while the arguments are **new loop-header block parameters**;
+> reusing `self` would discard the phi-like recursive values and can break
+> dominance. A real provenance mechanism would have to own the whole
+> flatten → block-parameter → rebuild mapping — a separate WP, never a
+> comment-sized repair.
 >
-> **TWO PUBLISHER TRAPS, both of which cost me a commit today.**
-> **`--target HEAD` is invalid** — it pushes `refs/heads/HEAD` and fails; pass an
-> explicit SHA. And **the publisher exits 0 on failure**, so
-> `publish && git reset --hard origin/main` in one command **discards the commit
-> it never published.** ⇒ **Blob-verify on `main` FIRST, reset SECOND, always as
-> separate steps.** Both commits were recoverable from reflog only because they
-> were committed rather than staged.
+> **My execution check did not cover this, and that is the lesson.** Running
+> the evasion probe to `E0451` proved the **braced literal** is refused. It said
+> nothing about whether a *permitted* mint constrains its own values.
+> **Verifying a mechanism refuses the bypass you thought of is not verifying it
+> enforces what you wrote down.**
+>
+> **`D5` carries a CLAIM SWEEP** (Architect-listed, wider than the two sentences
+> I named): `lowering/mod.rs` `:10031 :10043 :10049 :10082 :10089 :10149-10152
+> :19042-19044`, and `core/tests/constructors.rs:9246-9250`. The frame headline
+> was mine and is fixed. **No artifact may say the rebuilt pair "inherits" or
+> "carries forward".**
 >
 > **`RT-CARRIER-BYTESPAN-OBSERVE` remains `active` — `D4`, `D5`, `D6` are
 > unbuilt.** `D2` and `D3` were partial-WP merges of accepted work; the node is
