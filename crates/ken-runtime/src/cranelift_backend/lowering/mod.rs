@@ -10015,19 +10015,39 @@ impl BoundedNatV1 {
 /// everywhere outside these braces and the two constructors below are the only
 /// way in.
 ///
+/// **Field privacy alone was NOT enough, and the first `D4b` candidate proved
+/// it** (Architect, on `450fff8b`). Closing the braced literal closes a
+/// *spelling*; it does not close *provenance*. That candidate paired it with an
+/// unconditional `established_by_caller(pointer, len)` visible to all of
+/// `cranelift_backend`, so any production descendant could still mint a fresh
+/// span from arbitrary SSA values without ever masking — and the candidate's own
+/// compile-positive sibling was exactly that construction. Named and greppable
+/// is an auditable convention, not a mechanism.
+///
+/// **The production census, which is the actual `AC-10` claim.** Exactly one
+/// production entry point creates a span from nothing, and it masks:
+///
+/// - [`SafeByteSpan::masked_at_producer`] — emits the `select` pair itself.
+/// - [`SafeByteSpan::rebuild_from_collected`] — takes `self`, so it cannot mint
+///   from nothing. It carries an existing span's provenance forward through a
+///   collect/rebuild round trip and is unreachable without one.
+/// - `for_control` — `#[cfg(test)]`, so it does not exist in a production
+///   build at all.
+///
+/// ⇒ a newly added production construction has no raw mint to reach for: it
+/// must either mask, or already hold a span that did.
+///
 /// **What this does and does not establish.** `pointer` and `len` are
 /// Cranelift SSA values, opaque at Rust compile time, so no mechanism here can
-/// *verify* a span. What it makes structural is that the obligation cannot be
-/// discharged silently: [`SafeByteSpan::masked_at_producer`] carries the mask
-/// itself so the `D2` hazard cannot recur by construction, and every remaining
-/// mint must name [`SafeByteSpan::established_by_caller`] — which is a closed,
-/// greppable audit list rather than a property of who happened to read the doc.
+/// *verify* that a span points at live memory. What is structural is the
+/// closure of the construction surface: every production span is rooted in a
+/// mask, by a chain the compiler enforces rather than a convention a reader
+/// must honour.
 mod safe_byte_span {
     use super::{types, FunctionBuilder, InstBuilder};
 
-    /// A `{pointer, len}` byte span whose validity has been established by one
-    /// of the two mints below. The fields are private to this module by
-    /// design — see the module-level note.
+    /// A `{pointer, len}` byte span rooted in a masking mint. The fields are
+    /// private to this module by design — see the module-level note.
     #[derive(Clone, Copy)]
     pub(in crate::cranelift_backend) struct SafeByteSpan {
         pointer: cranelift_codegen::ir::Value,
@@ -10059,19 +10079,39 @@ mod safe_byte_span {
             }
         }
 
-        /// **Obligation-transferring mint: the CALLER warrants the span.**
+        /// **Provenance-carrying rebuild: takes `self`, so it cannot mint.**
         ///
-        /// For the two lawful cases that have no `success` discriminant to mask
-        /// against — rebuilding a span from values that were already lawful when
-        /// they were taken apart, and a control that hand-builds one over real
-        /// backing storage. This deliberately does NOT constrain `len` against
-        /// any source length: the `D2` edge control varies the declared length
-        /// away from the true one precisely so the emitted guards are reachable,
-        /// and a mint that clamped it would silently disarm that control.
+        /// `d9_collect` takes a span apart into a flat value list and
+        /// `rebuild_recursive_argument` puts it back together. The rebuild is
+        /// order-preserving, so the reconstructed pair is the same span that was
+        /// collected — but the point here is the receiver: because this is a
+        /// method on an existing `SafeByteSpan`, a caller that does not already
+        /// hold one cannot reach it. The new span inherits the old span's
+        /// provenance rather than asserting its own.
         ///
-        /// Every call is an audit point; `grep established_by_caller` is the
-        /// closed list.
-        pub(in crate::cranelift_backend) fn established_by_caller(
+        /// This is what lets production keep the rebuild without granting every
+        /// producer a fresh raw mint.
+        pub(in crate::cranelift_backend) fn rebuild_from_collected(
+            self,
+            pointer: cranelift_codegen::ir::Value,
+            len: cranelift_codegen::ir::Value,
+        ) -> Self {
+            Self { pointer, len }
+        }
+
+        /// **Test-only control mint, deliberately unconstrained.**
+        ///
+        /// The two legitimate direct constructions in `core::tests` hand-build a
+        /// span with no `success` discriminant to mask against. This does NOT
+        /// constrain `len` against any source length: the `D2` edge control
+        /// varies the declared length away from the true one precisely so the
+        /// emitted guards are reachable, and a mint that clamped it would
+        /// silently disarm that control.
+        ///
+        /// It is `#[cfg(test)]` so that this freedom cannot leak into a
+        /// production build — that gating is what keeps the census above true.
+        #[cfg(test)]
+        pub(in crate::cranelift_backend) fn for_control(
             pointer: cranelift_codegen::ir::Value,
             len: cranelift_codegen::ir::Value,
         ) -> Self {
@@ -10085,6 +10125,67 @@ mod safe_byte_span {
         pub(in crate::cranelift_backend) fn len(self) -> cranelift_codegen::ir::Value {
             self.len
         }
+    }
+}
+/// **`AC-10`'s PRODUCTION-position probe: the census above, witnessed rather
+/// than asserted.**
+///
+/// The sibling probe in `core::tests::constructors` witnesses that the braced
+/// literal is refused. It cannot witness the census claim that *production has
+/// no raw mint*, because it lives under `#[cfg(test)]`, where `for_control`
+/// exists by construction. This module sits in production code, so it sees the
+/// surface a new producer would actually see:
+///
+/// ```text
+/// RUSTFLAGS='--cfg ken_ac10_production_mint_probe' \
+///   ./scripts/ken-cargo build -p ken-runtime
+/// ```
+///
+/// **Expected, and MEASURED on rustc 1.96.0 at this SHA:** exactly ONE error,
+/// `E0599: no associated function ... named `for_control` ... in the current
+/// scope`, on `refused_raw_mint`. `warranted_rebuild` compiles silently.
+///
+/// ⇒ **MEASURED:** production cannot reach the unconstrained mint.
+/// **CLAIMED:** every production span is therefore rooted in
+/// [`SafeByteSpan::masked_at_producer`], since the only other production route
+/// takes an existing span by receiver. **THE GAP is closed by
+/// `warranted_rebuild`**, which proves the refusal is about *minting* and not
+/// about the fixture: it builds a `ResponseBytes` in this same module and
+/// compiles, because it is handed a span that already exists.
+///
+/// **This probe carries ONE refusal on purpose — measured, not assumed.** It
+/// first also carried the braced literal, and enabling it reported only the
+/// `E0599`: the resolution failure aborts the compilation before the privacy
+/// pass runs, so the `E0451` never appeared and a reader counting errors would
+/// have concluded the braced literal was *accepted* here. One refusal per probe
+/// is the only shape that cannot mask its sibling. The braced literal is
+/// witnessed separately by `ac10_evasion_probe`, and the privacy that refuses it
+/// is module-scoped — `lowering` and its descendants are alike outside
+/// `safe_byte_span` — so that probe covers this position too.
+///
+/// **The production profile is the only one that can see this.** Under
+/// `--all-targets` the lib-test target enables `cfg(test)`, `for_control`
+/// resolves, and `refused_raw_mint` would compile there — the same blindness
+/// that let a `#[cfg(test)]` defect reach production past three approvals
+/// earlier in this WP.
+#[cfg(ken_ac10_production_mint_probe)]
+mod ac10_production_mint_probe {
+    use super::{Lowered, SafeByteSpan};
+
+    type ProbeValue = cranelift_codegen::ir::Value;
+
+    /// The test-only mint, reached from production. Must not compile: `E0599`.
+    pub(super) fn refused_raw_mint(pointer: ProbeValue, len: ProbeValue) -> Lowered {
+        Lowered::ResponseBytes(SafeByteSpan::for_control(pointer, len))
+    }
+
+    /// Non-vacuity: rebuilding through a span that already exists must compile.
+    pub(super) fn warranted_rebuild(
+        existing: SafeByteSpan,
+        pointer: ProbeValue,
+        len: ProbeValue,
+    ) -> Lowered {
+        Lowered::ResponseBytes(existing.rebuild_from_collected(pointer, len))
     }
 }
 #[derive(Clone)]
@@ -18938,12 +19039,12 @@ fn rebuild_recursive_argument(
         Lowered::StructuralNat(_) => Lowered::StructuralNat(StructuralNatV1 {
             value: next(values)?,
         }),
-        // The values were a lawful span when `d9_collect` took them apart and
-        // the rebuild is order-preserving, so the caller's warrant is the
-        // round trip itself.
-        Lowered::ResponseBytes { .. } => Lowered::ResponseBytes(
-            SafeByteSpan::established_by_caller(next(values)?, next(values)?),
-        ),
+        // Rebuilt through the EXISTING span's receiver, so the reconstruction
+        // inherits that span's provenance instead of minting a fresh warrant.
+        // Argument order is left-to-right, matching `d9_collect`'s push order.
+        Lowered::ResponseBytes(span) => {
+            Lowered::ResponseBytes(span.rebuild_from_collected(next(values)?, next(values)?))
+        }
         Lowered::BorrowedNativeValue { .. } => Lowered::BorrowedNativeValue {
             pointer: next(values)?,
         },

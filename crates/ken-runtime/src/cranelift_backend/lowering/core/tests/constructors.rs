@@ -2866,7 +2866,7 @@ fn c2_ac6_host_result_covers_resource_token_and_response_bytes_payloads() {
                 // `D4b`: the span is warranted by `response_backing` above,
                 // which is real storage of exactly `response_len` bytes.
                 error: Box::new(Lowered::ResponseBytes(
-                    SafeByteSpan::established_by_caller(response_pointer, response_len),
+                    SafeByteSpan::for_control(response_pointer, response_len),
                 )),
                 ok: Box::new(Lowered::ResourceToken { value: resource }),
                 err_constructor: symbols.result_err.clone(),
@@ -8747,13 +8747,13 @@ fn d2_runtime_span_edge(source: &[u8], declared_len: i64) -> (i64, Option<u64>, 
         let len = builder
             .ins()
             .iconst(cranelift_codegen::ir::types::I64, declared_len);
-        // `D4b`: `established_by_caller` constrains neither field, which is
+        // `D4b`: the test-only `for_control` constrains neither field, which is
         // what keeps `declared_len != source.len()` reachable here.
         Ok(compiler
             .transfer_into_carrier(
                 builder,
                 root,
-                &Lowered::ResponseBytes(SafeByteSpan::established_by_caller(pointer, len)),
+                &Lowered::ResponseBytes(SafeByteSpan::for_control(pointer, len)),
             )?
             .word)
     });
@@ -9243,11 +9243,19 @@ fn d4_a_seat_whose_need_is_not_a_byte_span_is_refused() {
 /// became `pub` tomorrow. It would also contribute no CI signal at all: CI runs
 /// nextest, which does not run doctests (`values.rs` records this).
 ///
-/// **RESIDUAL — this probe does not guard the mechanism's STRENGTH.** It
-/// witnesses that the bypass is refused today. Nothing here reddens if a later
-/// edit moves `SafeByteSpan` up to `lowering` scope or marks the fields `pub`,
-/// which would silently restore the braced literal everywhere. Pinning that
-/// would require asserting on source text, which the operator rule forbids.
+/// **This probe covers the SPELLING only; its production sibling covers the
+/// PROVENANCE.** Refusing the braced literal here says nothing about whether a
+/// production caller can mint a span some other way — the first `D4b` candidate
+/// passed this probe while leaving exactly that hole open. The claim that
+/// production has no raw mint is witnessed by `ac10_production_mint_probe` in
+/// `lowering`, which must be run against the PRODUCTION profile; `for_control`
+/// resolves here by construction, so this module structurally cannot test it.
+///
+/// **RESIDUAL — neither probe guards the mechanism's STRENGTH.** They witness
+/// what is refused today. Nothing reddens if a later edit moves `SafeByteSpan`
+/// up to `lowering` scope, marks the fields `pub`, or drops the `#[cfg(test)]`
+/// from `for_control`. Pinning that would require asserting on source text,
+/// which the operator rule forbids.
 #[cfg(ken_ac10_evasion_probe)]
 mod ac10_evasion_probe {
     use super::*;
@@ -9261,6 +9269,6 @@ mod ac10_evasion_probe {
 
     /// Non-vacuity sibling: identical but for the mint. Must compile.
     pub(super) fn warranted_sibling(pointer: ProbeValue, len: ProbeValue) -> Lowered {
-        Lowered::ResponseBytes(SafeByteSpan::established_by_caller(pointer, len))
+        Lowered::ResponseBytes(SafeByteSpan::for_control(pointer, len))
     }
 }
