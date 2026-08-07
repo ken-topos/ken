@@ -459,6 +459,59 @@ Every AC names its owning deliverable. **If one cannot, that is the finding.**
 - **`AC-9` (no-regression).** Workspace green **in CI** — never a local
   `cargo test --workspace` (`COORDINATION §12`).
 
+- **`AC-10` (`D3`, `D4`) — the `ResponseBytes`-validity invariant is enforced
+  structurally, not by convention.**
+
+  **STEWARD AMENDMENT, 2026-08-07, after `D2` merged at `4f9f0987`.** Added
+  from Adversary `evt_5xqw6xsbm4v8b`, whose central claim I verified in source
+  before folding it. **This is preventive. There is no defect and no repro —
+  the closure holds at `4f9f0987`.**
+
+  > **MEASURED:** a newly added construction of `Lowered::ResponseBytes` that
+  > does not go through the masking helper is **refused by a mechanism**, and
+  > the refusal is demonstrated by adding one and observing it.
+  > **CLAIMED:** every `ResponseBytes` reaching the carrier is a valid span.
+  > **THE GAP:** today that is enforced by **two call sites and a comment.**
+  > `masked_reply_response_bytes` (`core.rs:64`) is the only production
+  > construction; the two typed producers call it; the second site's comment
+  > says a mask at only one of them "leaves the other dereferencing an
+  > unestablished pointer on its failure path." **That sentence is the author
+  > identifying a closure requirement and discharging it by convention.**
+
+  **Why `D2` raised the stakes rather than creating a bug.** Before `D2`, an
+  unmasked `ResponseBytes` published the host pointer as a borrowed word — wrong,
+  but nobody dereferenced it. After `D2`, the disposition at `mod.rs:9880` maps
+  **every** `Lowered::ResponseBytes` to `(PersistentGround, Bytes)`, so it
+  reaches `emit_carrier_bytes_runtime_span`, whose loop dereferences `pointer`.
+  **The obligation moved from "is this word right" to "is this pointer safe to
+  read", and the type is an ordinary struct variant constructible anywhere in
+  the module.** A third producer added later that builds the literal instead of
+  calling the helper is a dereference of an unestablished pointer, and nothing
+  structural stops it.
+
+  **The mechanism is the ring's call** — private constructor, helper-only path,
+  a debug assert, or something else. **State which and why.**
+
+  **The obstacle to name up front, because it is what makes the obvious fix
+  harder than it looks:** two test sites construct `Lowered::ResponseBytes`
+  directly and legitimately —
+  `core/tests/constructors.rs:2864` and `:8748`, the latter being the `D2` edge
+  test that takes `declared_len` separately from `source.len()` **precisely so
+  the guards are reachable.** A mechanism that forbids direct construction
+  outright disarms the controls that prove the guards work. **Say how the chosen
+  mechanism keeps those two reachable**; if it cannot, that is a finding, not a
+  reason to weaken the tests.
+
+  **Positive control:** the added construction must fail. If it compiles and
+  runs clean, the mechanism is not doing anything and this AC is not
+  discharged. Record what you added and what refused it.
+
+  **If the honest answer is that no structural mechanism is available without a
+  disproportionate change, say so and record it as a residual** — `AC-10` then
+  discharges as *"guarded by review, not by mechanism"*, explicitly, with the
+  reason. **An AC with nowhere to record the honest answer gets recorded as
+  guarded.**
+
 ## 5. Banned scope
 
 - **This is not `Carried -> Lowered`.** That inverse is withheld by design;
