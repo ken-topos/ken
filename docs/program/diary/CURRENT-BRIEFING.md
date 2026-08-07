@@ -33,26 +33,79 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-07 ~18:4xZ · `D2` MERGED, Runtime owes `D3`
+## LIVE — 2026-08-07 ~19:3xZ · `D3` merged, `D4` released; operator set the sequence
+
+> ### OPERATOR SEQUENCING RULING — 2026-08-07, verbatim intent. THIS GOVERNS.
+>
+> **"continue with the D-series, then return to `RT-SEED-CALL-PORT` and
+> continue from there."**
+>
+> ⇒ **Finish `RT-CARRIER-BYTESPAN-OBSERVE` `D4`, `D5`, `D6` first.** Then the
+> **RecursiveDescent retirement campaign resumes, entering at
+> [[RT-SEED-CALL-PORT]]** — which is `ready`, framed, and unblocked
+> (`RT-DECL-CLOSURE-PORT` is merged).
+>
+> **This ANSWERS the open sequencing question and it is no longer mine to
+> weigh.** I had raised that the runtime ring had been off the campaign's
+> critical path for two days while unblocking work compounded, and flagged it
+> as a priority call between ready WPs — the operator's, not mine. It is now
+> decided: **D-series first, campaign second, `RT-SEED-CALL-PORT` is the named
+> entry point.** Do not re-litigate it and do not insert a third thing ahead of
+> the campaign without asking.
+>
+> **Note on `RT-SEED-CALL-PORT` when you get there:** its `D1` may legitimately
+> return "already retired" if `RT-DECL-CLOSURE-PORT`'s machinery subsumed
+> `SeedClosureCall`, at which point the node closes for free. That is recorded
+> in `docs/program/16-recursive-descent-retirement.md §2` as a **prediction, not
+> a measurement** — measure it, do not assume it either way.
+>
+> **PR #1528 is CLOSED** (operator, 2026-08-07). The stale-branch revert hazard
+> is retired and there are now **zero open PRs**.
 
 > ### NEXT ACTION ON RESUME — read this line first
 >
-> **Nothing is owed by me. Do not start anything new and do not nudge.**
-> `main` is **`4f9f0987`**. **`D0`, `D1`, `D2` are all merged.** `D2` landed as
-> **PR #1540** from exact `04e71a6e`; all three `ken-runtime` lowering paths
-> blob-verified on `main`. **The SIGSEGV that held `D2` is fixed and gone.**
+> **NOTHING IS OWED BY ME. `D4` is with the ring; wait for its handoff.**
+> Released at `evt_36w5kphnanrtp` on a branch cut from `origin/main`
+> **`7c2587e6`**. When the exact SHA comes back, run the merge procedure from
+> the file, not from memory.
 >
-> **`RT-CARRIER-BYTESPAN-OBSERVE` remains `active` — `D3` through `D6` are
-> unbuilt.** `D2` was a partial-WP merge of accepted work; the node is not
-> closed and must not be flipped `merged`. **The next move is the ring's:**
-> `runtime-leader` was told to release `D3` cut from `4f9f0987`
-> (`evt_491qrgc0mf7qn`, thread `thr_2w9jmt85jrphw`). Wait for it.
+> **`D3` MERGED — PR #1542**, squashed from exact `960ea370` to `main`
+> `7c2587e6`. M6 done: **both paths blob-verified on `main`** —
+> `boundary_value_clif.rs` `ed70838d`, `lowering/core/tests/control.rs`
+> `305657bc`, both MATCH. M8 sent (`evt_7cp3nvh9mnx57`, this carried code). M9
+> sent. Publisher gate confirmed the merge result onto `da19fe7e` built cleanly,
+> base unchanged; no rebase, so the exact approved object landed.
 >
-> **Six publishes landed this window, all blob-verified:** **#1535**
+> `dec_2q5kqyt5fvkr2` arrived **already resolved by the leader** — correct
+> routing, and the **third request in a row done right** after two mis-routes.
+> Both votes verified from the objects (QA `evt_6nzf1h5hys8tp`, Architect
+> `evt_4ppb34h7t3vra`).
+>
+> **`AC-10` IS NOT DISCHARGED AND MUST NOT BE READ AS CLOSED. IT IS `D4`'s.**
+> I added it (`da19fe7e`, PR #1541) from Adversary `evt_5xqw6xsbm4v8b`: make the
+> `ResponseBytes`-validity invariant structural rather than held by two call
+> sites and a comment. The Architect's `D3` approval says so in its own scope
+> carry, it is stated in **PR #1542**'s body, and the `D4` release restates it
+> with the obstacle. **Three independent places, because this is exactly the
+> shape that gets read as closed by a merge that did not close it.**
+>
+> **`D3` left three axes guarded with NO REACHING WITNESS**, reported rather
+> than counted as laws: wrong-handle-tag (no lawful tag/class pair admits it),
+> owner, and extent (no production producer mints either input). `D4` consumes
+> that helper — **those three are defence in depth, not established behaviour to
+> lean on.**
+>
+> **`RT-CARRIER-BYTESPAN-OBSERVE` remains `active` — `D4`, `D5`, `D6` are
+> unbuilt.** `D2` and `D3` were partial-WP merges of accepted work; the node is
+> not closed and **must not be flipped `merged`** — M7 applied mechanically here
+> would close a node with three deliverables unbuilt.
+>
+> **Eight publishes landed this window, all blob-verified:** **#1535**
 > (RT-WORKER-FIXTURE-DECODE framed), **#1536** (the `D1` census, a ring
 > candidate I resolved under §14a), **#1537** (`D1` currency banner), **#1538**
 > (RT-CARRIER-PRODUCER-OCCURRENCE framed), **#1539** (CI-IGNORED-SWEEP framed),
-> **#1540** (`D2`, the one code merge — M8 notice sent, `evt_602ay3mrrt9r2`).
+> **#1540** (`D2` code — M8 `evt_602ay3mrrt9r2`), **#1541** (the `AC-10`
+> amendment), **#1542** (`D3` code — M8 `evt_7cp3nvh9mnx57`). **Zero open PRs.**
 >
 > **FRAMING DEBT IS CLEARED.** Twelve nodes are `ready` with a written frame, so
 > stay-one-ahead is satisfied with room. There is no framing job queued.
