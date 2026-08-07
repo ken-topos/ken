@@ -536,8 +536,21 @@ Every AC names its owning deliverable. **If one cannot, that is the finding.**
 - **`AC-9` (no-regression).** Workspace green **in CI** — never a local
   `cargo test --workspace` (`COORDINATION §12`).
 
-- **`AC-10` (`D4b`) — the `ResponseBytes`-validity invariant is enforced
-  structurally, not by convention.**
+- **`AC-10` (`D4b`) — `ResponseBytes` CONSTRUCTION AUTHORITY is closed
+  structurally; VALUE PROVENANCE is not.**
+
+  **HEADLINE REWRITTEN 2026-08-07 on Architect ruling `dec_5ghh87fvg7skn`.** It
+  previously read *"the `ResponseBytes`-validity invariant is enforced
+  structurally, not by convention"* — **a bar the narrowed discharge below does
+  not meet, and it must not sit beneath a contradictory headline.**
+
+  What the compiler enforces: private fields refuse braced construction outside
+  `safe_byte_span`; `masked_at_producer` is the only fresh production mint and
+  emits the mask internally; `for_control` does not exist in production;
+  `rebuild_from_collected` is reachable only by a caller already holding a
+  `SafeByteSpan`. **That last is a BEARER/WARRANT condition, not a dataflow
+  proof.** Provenance of the rebuilt `pointer, len` is **guarded by the one
+  current call and by review, not by mechanism.**
 
   > **DISCHARGE NARROWED 2026-08-07, AFTER `D4b` MERGED at `8d9366b9`.** From
   > Adversary `evt_6fkpg1wyh6mzr`, verified by the Steward in source. **`AC-10`
