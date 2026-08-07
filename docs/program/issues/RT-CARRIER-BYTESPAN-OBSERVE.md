@@ -444,7 +444,28 @@ row names the operation at all.
 ⇒ **Neither zero licenses a disposition**, and this census does not supply
 one. It supplies the representation set; per-seat reach evidence is step 5's.
 
-### A bounded question for the Architect, not resolved here
+### A bounded question for the Architect — ANSWERED, see the banner below
+
+> **CURRENCY (Steward, 2026-08-07). This section is a record of what `D1`
+> measured, and its question is CLOSED. Do not build from it as an open fork.**
+>
+> The Architect resolved it at 17:31:47Z in **`dec_6qmstfn6tjqdt`**, bound to
+> this exact census SHA `5437c6ef`, in favour of **reading 1 — normalize into
+> the persistent store.** The producer copies an explicitly bytes-typed
+> invocation-owned pointer/length source, while that source is valid, into the
+> existing persistent-region `Bytes` representation, then uses the existing
+> adoption/publication path. The final row is
+> `PersistentGround / Bytes / PersistentStore / ByteSpan`. In `AC-6`,
+> "invocation-owned" names **pre-normalization source provenance**, not a
+> representation.
+>
+> **Reading 2 is refused:** `D2` must not add `BoundaryTag`/`BoundaryClass`/
+> tag-class rows, reinterpret `BorrowedOpaque`, widen `Avail`, or touch seat
+> contracts. A generic borrowed scalar is not a byte source.
+>
+> The census text below is left intact and unedited — it was true when
+> measured, and the ruling is a later object. **Instructions get corrected;
+> records stay records.** This banner is the correction.
 
 Step 2 says *"convert invocation-owned byte sources into a self-evidencing
 bytes representation at their producer"*, and `AC-6` requires that persistent
