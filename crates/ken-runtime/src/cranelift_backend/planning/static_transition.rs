@@ -4890,15 +4890,14 @@ pub(in crate::cranelift_backend) struct PlannedEffectSeat {
     pub(in crate::cranelift_backend) avail: EffectSeatAvail,
 }
 
-/// **Erase one axis of the seat key, or collapse every seat onto one
-/// contract.**
+/// **Test-only seat construction for the `RT-CARRIER-BYTESPAN-OBSERVE`
+/// `D4` observer control.**
 ///
-/// ⛔ Applied ONLY inside [`build_host_effect_seat_plan`], never in the
-/// re-derivation the close performs. That asymmetry is the whole mechanism: the
-/// rebuild-equality validation mutates on both sides and so cannot see any of
-/// these, which is correct — it checks the derivation is a function, not that
-/// the function is right. What sees them is the independent recomputation of
-/// the contract from the operation and the slot at the ledger close.
+/// ⛔ Gated on its own, and the gate is not decoration: an earlier draft of
+/// this insertion sat between the mutation enum's `#[cfg(test)]` and its
+/// `#[derive]`, capturing the attribute and shipping that enum into
+/// production builds. The `--lib` test profile cannot observe that, which
+/// is why the repair is validated by a production build.
 #[cfg(test)]
 impl PlannedEffectSeat {
     /// A seat record for a control, with a caller-chosen `need`.
@@ -4929,6 +4928,16 @@ impl PlannedEffectSeat {
     }
 }
 
+/// **Erase one axis of the seat key, or collapse every seat onto one
+/// contract.**
+///
+/// ⛔ Applied ONLY inside [`build_host_effect_seat_plan`], never in the
+/// re-derivation the close performs. That asymmetry is the whole mechanism: the
+/// rebuild-equality validation mutates on both sides and so cannot see any of
+/// these, which is correct — it checks the derivation is a function, not that
+/// the function is right. What sees them is the independent recomputation of
+/// the contract from the operation and the slot at the ledger close.
+#[cfg(test)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(in crate::cranelift_backend) enum EffectSeatPlanMutation {
     Exact,
