@@ -33,14 +33,43 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-07 ~18:4xZ · `D2` MERGED, Runtime owes `D3`
+## LIVE — 2026-08-07 ~19:0xZ · `D3` IN FLIGHT on the publisher
 
 > ### NEXT ACTION ON RESUME — read this line first
 >
-> **Nothing is owed by me. Do not start anything new and do not nudge.**
-> `main` is **`4f9f0987`**. **`D0`, `D1`, `D2` are all merged.** `D2` landed as
-> **PR #1540** from exact `04e71a6e`; all three `ken-runtime` lowering paths
-> blob-verified on `main`. **The SIGSEGV that held `D2` is fixed and gone.**
+> **`D3` IS MID-PUBLISH. Finish it before anything else.** Exact
+> `960ea370` on `wp/RT-CARRIER-BYTESPAN-OBSERVE-d3-emitted-observer`, launched
+> background at ~19:0xZ. **On resume: read the publisher output, then owe M6
+> (blob-verify both paths), M8 (Adversary notice — this carries CODE), M9
+> (mention `runtime-leader` to release `D4`).** If the publisher died, re-run
+> it; it is idempotent ("created or found").
+>
+> `dec_2q5kqyt5fvkr2` was **already resolved by the leader** — correct routing,
+> the first time of three. Both votes verified from the objects (QA
+> `evt_6nzf1h5hys8tp`, Architect `evt_4ppb34h7t3vra`). Intersection re-run at
+> publish against `da19fe7e`: **empty**, conflict-free, no rebase.
+>
+> **`main` was `da19fe7e` at launch.** `D0`, `D1`, `D2` merged; `D2` landed as
+> **PR #1540** from `04e71a6e`, all three lowering paths blob-verified. **The
+> SIGSEGV that held `D2` is fixed and gone.**
+>
+> **`AC-10` IS NOT DISCHARGED BY `D3` AND MUST NOT BE READ AS CLOSED.** I added
+> it (`da19fe7e`, PR #1541) from Adversary `evt_5xqw6xsbm4v8b`: make the
+> `ResponseBytes`-validity invariant structural rather than held by two call
+> sites and a comment. `D3`'s base predates it and the candidate touches no
+> `Lowered`. **It is `D4`'s.** Stated in #1543's body so the ring cannot miss it.
+>
+> **OPEN, WITH THE OPERATOR — do not act unilaterally: close stale PR #1528?**
+> Asked, not yet answered. It is the **only** open PR. Head `21fd46dc`,
+> unmerged since 2026-08-06, and **its content is already on `main`** (doc
+> frames byte-identical; `RecursiveDescentResidual` 27/27,
+> `TransparentDeclarationClosure` 6/6 — it rode in with `7ca5cfc0`, whose range
+> starts at that SHA). **It is now a revert hazard:** merge-base `e6b4a13b`,
+> and the intersection is **all 37 of its files** while `main` has changed 100.
+> Disjoint hunks in a shared file union **silently**. Its `+62,576/-13,661` is
+> diff-against-stale-base, not new work. **I do not know why it never merged**
+> — zero checks and `mergeable: UNKNOWN`, consistent with expiry on a stale
+> branch, but I could not distinguish that from an interrupted publisher run.
 >
 > **`RT-CARRIER-BYTESPAN-OBSERVE` remains `active` — `D3` through `D6` are
 > unbuilt.** `D2` was a partial-WP merge of accepted work; the node is not
