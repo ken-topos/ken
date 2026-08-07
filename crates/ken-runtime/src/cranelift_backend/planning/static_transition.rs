@@ -5062,6 +5062,20 @@ fn host_effect_seat_contract(
         Need::BytesPointerLength,
         Avail::SPECIALIZED_ONLY,
     );
+    // `RT-CARRIER-BYTESPAN-OBSERVE` `D5` — the byte-span seats whose carried
+    // route is PROVED, per seat and each against its own measured witness.
+    //
+    // The tuple is shared by construction, so it is deliberately NOT the
+    // discriminator: `bytes` and `carried_bytes` differ only in `Avail`, and a
+    // seat moves between them only when a row was observed refusing at that
+    // exact `(operation, ordinal)` and observed lowering afterwards. `AC-4`'s
+    // disposition table in the node records the evidence per seat, including
+    // the proof for each seat left on `bytes`.
+    let carried_bytes = (
+        Semantic::ProjectBytesSpan,
+        Need::BytesPointerLength,
+        Avail::EITHER_PHASE,
+    );
     let resource = (
         Semantic::ObserveResourceHandle,
         Need::ResourceScalar,
@@ -5084,12 +5098,18 @@ fn host_effect_seat_contract(
     );
     match (operation, ordinal) {
         (Op::ConsoleWrite, 0) | (Op::ConsoleFlush, 0) | (Op::ConsoleIsTerminal, 0) => Some(tag),
-        (Op::ConsoleWrite, 1) => Some(bytes),
-        (Op::FsReadFile, 0)
-        | (Op::FsWriteFile, 0)
-        | (Op::FsChangeMode, 0)
-        | (Op::FsOpen, 0)
-        | (Op::FsWriteFile, 2) => Some(bytes),
+        // PROVED carried, per seat: `D5` measured a carried word reaching each
+        // of these and the observer consuming it. Neither is site-bound.
+        (Op::ConsoleWrite, 1) | (Op::FsWriteFile, 2) => Some(carried_bytes),
+        // LEFT SPECIALIZED_ONLY, and NOT because the observer fails them —
+        // `D5` measured it succeeding at all four. Each is the `SiteOperand(0)`
+        // of its operation's synthesized `FileError`, so the same seat is read a
+        // SECOND time as a compile-time `Lowered` template. Supplying one from a
+        // boundary word is the `Carried -> Lowered` inverse this node bans.
+        // Flipping them makes the refusal later and less legible, not absent.
+        (Op::FsReadFile, 0) | (Op::FsWriteFile, 0) | (Op::FsChangeMode, 0) | (Op::FsOpen, 0) => {
+            Some(bytes)
+        }
         (Op::FsWriteFile, 1) | (Op::FsOpen, 1) => Some(tag),
         (Op::FsChangeMode, 1) => Some(exact_int),
         (Op::FsHandleMetadata, 0) | (Op::ResourceRelease, 0) => Some(resource),

@@ -13350,9 +13350,12 @@ impl<'a> Lowering<'a> {
             cranelift_codegen::ir::Value,
             cranelift_codegen::ir::Value,
         )> = None;
+        // `RT-CARRIER-BYTESPAN-OBSERVE` `D5` — `detail` is a VALUE rather than a
+        // constant, because a byte-span refusal chooses its `ResourceErrorV1`
+        // code at run time from the observer's outcome. Every pre-existing
+        // caller still passes a constant and is unchanged in meaning.
         let mut record_narrow_failure =
-            |builder: &mut FunctionBuilder<'_>, invalid, detail: i64| {
-                let detail = builder.ins().iconst(types::I64, detail);
+            |builder: &mut FunctionBuilder<'_>, invalid, detail: cranelift_codegen::ir::Value| {
                 narrow_failure = Some(match narrow_failure.take() {
                     Some((prior_invalid, prior_detail)) => (
                         builder.ins().bor(prior_invalid, invalid),
@@ -13380,12 +13383,16 @@ impl<'a> Lowering<'a> {
                     .ins()
                     .stack_store(stream, request, request_offset(0));
                 if operation == ken_host::HostOpV1::ConsoleWrite {
-                    let (data, len) = self.wire_bytes(
-                        builder,
-                        seats.specialized(SEAT_1)?,
-                    )?;
-                    builder.ins().stack_store(data, request, request_offset(1));
-                    builder.ins().stack_store(len, request, request_offset(2));
+                    let span = self.wire_bytes_seat(builder, &seats, SEAT_1)?;
+                    if let Some((invalid, detail)) = span.refusal {
+                        record_narrow_failure(builder, invalid, detail);
+                    }
+                    builder
+                        .ins()
+                        .stack_store(span.pointer, request, request_offset(1));
+                    builder
+                        .ins()
+                        .stack_store(span.len, request, request_offset(2));
                 }
             }
             ken_host::HostOpV1::FsReadFile
@@ -13420,30 +13427,34 @@ impl<'a> Lowering<'a> {
                     }
                 };
                 builder.ins().stack_store(token, request, request_offset(0));
-                let (path, path_len) = self.wire_bytes(
-                    builder,
-                    seats.specialized(SEAT_0)?,
-                )?;
-                builder.ins().stack_store(path, request, request_offset(1));
+                let path = self.wire_bytes_seat(builder, &seats, SEAT_0)?;
+                if let Some((invalid, detail)) = path.refusal {
+                    record_narrow_failure(builder, invalid, detail);
+                }
                 builder
                     .ins()
-                    .stack_store(path_len, request, request_offset(2));
+                    .stack_store(path.pointer, request, request_offset(1));
+                builder
+                    .ins()
+                    .stack_store(path.len, request, request_offset(2));
                 if operation == ken_host::HostOpV1::FsWriteFile {
                     let policy = create_policy_tag(seats.specialized(SEAT_1)?).ok_or_else(|| {
                         unsupported("Effect", "FS.WriteFile has a malformed CreatePolicy")
                     })?;
-                    let (bytes, bytes_len) = self.wire_bytes(
-                        builder,
-                        seats.specialized(SEAT_2)?,
-                    )?;
+                    let contents = self.wire_bytes_seat(builder, &seats, SEAT_2)?;
+                    if let Some((invalid, detail)) = contents.refusal {
+                        record_narrow_failure(builder, invalid, detail);
+                    }
                     let policy = builder.ins().iconst(types::I64, policy);
                     builder
                         .ins()
                         .stack_store(policy, request, request_offset(3));
-                    builder.ins().stack_store(bytes, request, request_offset(4));
                     builder
                         .ins()
-                        .stack_store(bytes_len, request, request_offset(5));
+                        .stack_store(contents.pointer, request, request_offset(4));
+                    builder
+                        .ins()
+                        .stack_store(contents.len, request, request_offset(5));
                 } else if operation == ken_host::HostOpV1::FsChangeMode {
                     let mode = seats.specialized(SEAT_1)?;
                     let (mode, valid_int) = self.narrow_native_int_u64(builder, mode)?;
@@ -13535,7 +13546,8 @@ impl<'a> Lowering<'a> {
                     valid,
                     0,
                 );
-                record_narrow_failure(builder, invalid, 7);
+                let detail = builder.ins().iconst(types::I64, RESOURCE_ERROR_INVALID_BOUNDS);
+                record_narrow_failure(builder, invalid, detail);
                 builder
                     .ins()
                     .stack_store(capacity, request, request_offset(0));
@@ -13559,7 +13571,8 @@ impl<'a> Lowering<'a> {
                     valid,
                     0,
                 );
-                record_narrow_failure(builder, invalid, 7);
+                let detail = builder.ins().iconst(types::I64, RESOURCE_ERROR_INVALID_BOUNDS);
+                record_narrow_failure(builder, invalid, detail);
                 // PX8-SPAN-PROV: trailing `span_origin` acquisition token.
                 let span_origin = self.lower_buffer_freeze_resource_seat(
                     builder,
@@ -13615,14 +13628,16 @@ impl<'a> Lowering<'a> {
                     file_offset_valid,
                     0,
                 );
-                record_narrow_failure(builder, file_offset_invalid, 6);
+                let detail = builder.ins().iconst(types::I64, RESOURCE_ERROR_INVALID_OFFSET);
+                record_narrow_failure(builder, file_offset_invalid, detail);
                 let bounds_valid = builder.ins().band(buffer_start_valid, length_valid);
                 let bounds_invalid = builder.ins().icmp_imm(
                     cranelift_codegen::ir::condcodes::IntCC::Equal,
                     bounds_valid,
                     0,
                 );
-                record_narrow_failure(builder, bounds_invalid, 7);
+                let detail = builder.ins().iconst(types::I64, RESOURCE_ERROR_INVALID_BOUNDS);
+                record_narrow_failure(builder, bounds_invalid, detail);
                 if operation == ken_host::HostOpV1::FsWriteAt {
                     // PX8-SPAN-PROV: `FsWriteAt` carries the trailing
                     // `span_origin` acquisition token; `FsReadAt` mints the span

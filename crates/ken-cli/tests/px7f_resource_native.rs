@@ -312,7 +312,7 @@ fn linked_public_escape_is_exact_closed() {
 // those were branch-introduced, this one predates the branch.
 // Annotation only -- test body and expectations are unchanged.
 #[test]
-#[ignore = "RT-CARRIER-BYTESPAN-OBSERVE: the FsReadFile byte-span seat cannot observe a carried word; fails at base 21fd46dc"]
+#[ignore = "RT-CARRIER-BYTESPAN-OBSERVE D5: the FsReadFile path seat at Argument(0) is SITE-BOUND -- the synthesized FileError declares SiteOperand(0), which demands a compile-time Lowered template the carried word cannot supply without the banned Carried->Lowered inverse. D5 landed byte-span observation and it is NOT the blocker; awaiting Steward recut"]
 fn linked_public_right_denial_preserves_exact_masks() {
     let observation = run("right-denial", RIGHT_NOT_HELD);
     assert_eq!(observation.exit_status, 0, "{observation:?}");
@@ -343,7 +343,7 @@ fn linked_public_right_denial_preserves_exact_masks() {
 // those were branch-introduced, this one predates the branch.
 // Annotation only -- test body and expectations are unchanged.
 #[test]
-#[ignore = "RT-CARRIER-BYTESPAN-OBSERVE: the FsReadFile byte-span seat cannot observe a carried word; fails at base 21fd46dc"]
+#[ignore = "RT-CARRIER-BYTESPAN-OBSERVE D5: the FsReadFile path seat at Argument(0) is SITE-BOUND -- the synthesized FileError declares SiteOperand(0), which demands a compile-time Lowered template the carried word cannot supply without the banned Carried->Lowered inverse. D5 landed byte-span observation and it is NOT the blocker; awaiting Steward recut"]
 fn linked_public_second_release_is_closed_and_the_handle_closes_once() {
     let observation = run("double-release", DOUBLE_RELEASE);
     assert_eq!(observation.exit_status, 0, "{observation:?}");

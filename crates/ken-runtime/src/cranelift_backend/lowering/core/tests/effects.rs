@@ -2900,8 +2900,15 @@ fn a_capacity_that_is_not_an_exact_int_fails_closed_and_is_never_invalid_bounds(
 ///
 /// MEASURED: one program shape, one closure boundary, two seats. A carried
 /// capacity at `BufferAllocate.capacity` compiles and allocates; a carried
-/// `Bytes` at `ConsoleWrite`'s byte-span seat refuses, and the refusal names
-/// that exact seat, operation and need.
+/// `Stream` at `ConsoleWrite`'s constructor-tag seat refuses, and the refusal
+/// names that exact seat, operation and need.
+///
+/// **The refusing side was `ConsoleWrite`'s BYTE-SPAN seat until
+/// `RT-CARRIER-BYTESPAN-OBSERVE` `D5` activated it.** It is now the
+/// constructor-tag seat beside it, which is a strictly better discriminator for
+/// the claim: a tag selects a compile-time branch, so it genuinely cannot come
+/// from a boundary word, whereas a byte span only could not until an emitted
+/// helper existed. The pair no longer decays as byte-span seats activate.
 ///
 /// CLAIMED: `Avail` is per seat rather than per phase — admitting `Carried`
 /// somewhere is not admitting it everywhere.
@@ -2927,29 +2934,30 @@ fn the_carried_phase_is_admitted_at_the_capacity_seat_and_still_refused_at_a_tem
     assert_eq!(allocated, 41);
     assert_eq!(probe, CapacityWireProbe { calls: 1, capacity: 8 });
 
-    // The refusing side. `ConsoleWrite`'s byte-span seat needs a pointer and a
-    // length off a compile-time template; no emitted helper in this release
-    // satisfies that from a boundary word.
+    // The refusing side. `ConsoleWrite`'s STREAM seat selects a closed
+    // constructor tag, which is a compile-time branch selection; no emitted
+    // helper can satisfy that from a boundary word, in this release or a later
+    // one.
     let error = run_capacity_fixture(&|_symbols| RuntimeExpr::Call {
         callee: Box::new(RuntimeExpr::LexicalClosure {
             captures: Vec::new(),
-            params: vec!["payload".to_string()],
+            params: vec!["stream".to_string()],
             body: Box::new(RuntimeExpr::Effect {
                 family: "Console".to_string(),
                 operation: ken_host::HostOpV1::ConsoleWrite,
                 capability: None,
                 args: vec![
-                    RuntimeExpr::Construct {
-                        constructor: "ctor:prelude::Stream::Stdout".to_string(),
-                        args: Vec::new(),
-                    },
                     RuntimeExpr::Var(0),
+                    RuntimeExpr::Value(RuntimeValue::Bytes(b"probe".to_vec())),
                 ],
             }),
         }),
-        args: vec![RuntimeExpr::Value(RuntimeValue::Bytes(b"probe".to_vec()))],
+        args: vec![RuntimeExpr::Construct {
+            constructor: "ctor:prelude::Stream::Stdout".to_string(),
+            args: Vec::new(),
+        }],
     })
-    .expect_err("a carried byte span is refused at its seat");
+    .expect_err("a carried constructor tag is refused at its seat");
 
     let reason = format!("{error:?}");
     // ⛔ The discriminating pair, not a substring list. The refusal must be the
@@ -2957,9 +2965,9 @@ fn the_carried_phase_is_admitted_at_the_capacity_seat_and_still_refused_at_a_tem
     // be the generic specialized-only surface's, which is the diagnostic the
     // removed bulk conversion produced for every seat alike.
     assert!(
-        reason.contains("Argument(1)")
+        reason.contains("Argument(0)")
             && reason.contains("ConsoleWrite")
-            && reason.contains("BytesPointerLength"),
+            && reason.contains("ConstructorTag"),
         "the refusal must name the exact seat, operation and need; got {reason}"
     );
     assert!(
@@ -3205,5 +3213,142 @@ fn ac1_a_specialized_constructor_scrutinee_still_selects_and_delivers() {
         unselected, AC1_SIBLING_DEFAULT_STATUS,
         "the unselected producer must take the match's CLOSED DEFAULT, not a \
          trap, a neighbouring case, or a representation refusal"
+    );
+}
+
+/// **`RT-CARRIER-BYTESPAN-OBSERVE` `AC-4` — the byte-span seat inventory,
+/// pinned as the ALLOWED set rather than a forbidden list.**
+///
+/// **MEASURED:** the exact partition of every `BytesPointerLength` seat in the
+/// contract into those whose `Avail` admits a carried word and those it does
+/// not.
+/// **CLAIMED:** `D5` activated exactly the seats it proved, and no others.
+/// **THE GAP this closes:** a forbidden list only reddens on a seat someone
+/// thought to name. This scans the authoritative population and asserts the
+/// whole partition, so a seventh byte-span seat, or a later flip of one nobody
+/// re-derived evidence for, reddens here even though this test never mentions
+/// it.
+///
+/// The two literals are the disposition itself, which IS the contract — this is
+/// a normative compatibility vector, not a snapshot. Changing either side takes
+/// a per-seat evidence decision, which is exactly the review this forces.
+///
+/// The `SPECIALIZED_ONLY` side is not a gap in the observer. `D5` measured all
+/// four of those seats refusing at a SECOND reader: the synthesized `FileError`
+/// declares `SiteOperand(0)`, which demands a compile-time `Lowered` template
+/// that a carried word cannot supply without the banned `Carried -> Lowered`
+/// inverse. The byte-span observation itself succeeds at every one of them.
+#[test]
+fn ac_4_byte_span_seats_are_activated_exactly_where_d5_proved_them() {
+    let mut either_phase = Vec::new();
+    let mut specialized_only = Vec::new();
+    for operation in CRANELIFT_HOST_EFFECT_CONSUMERS_V1 {
+        // Past any real arity, so a seat stranded beyond a hole is found
+        // rather than assumed absent — the same sweep width the gapless
+        // contract test uses.
+        let slots = (0..16u32)
+            .map(EffectSeatSlot::Argument)
+            .chain(std::iter::once(EffectSeatSlot::Capability));
+        for slot in slots {
+            let Some((_, need, avail)) = host_effect_seat_contract_of(operation, slot) else {
+                continue;
+            };
+            if need != EffectSeatNeed::BytesPointerLength {
+                continue;
+            }
+            if avail.admits(EffectSeatPhase::CarriedWord) {
+                either_phase.push((operation, slot));
+            } else {
+                specialized_only.push((operation, slot));
+            }
+        }
+    }
+    assert_eq!(
+        either_phase,
+        vec![
+            (ken_host::HostOpV1::ConsoleWrite, EffectSeatSlot::Argument(1)),
+            (ken_host::HostOpV1::FsWriteFile, EffectSeatSlot::Argument(2)),
+        ],
+        "the EITHER_PHASE byte-span inventory is not the set `D5` proved"
+    );
+    assert_eq!(
+        specialized_only,
+        vec![
+            (ken_host::HostOpV1::FsReadFile, EffectSeatSlot::Argument(0)),
+            (ken_host::HostOpV1::FsWriteFile, EffectSeatSlot::Argument(0)),
+            (ken_host::HostOpV1::FsChangeMode, EffectSeatSlot::Argument(0)),
+            (ken_host::HostOpV1::FsOpen, EffectSeatSlot::Argument(0)),
+        ],
+        "a byte-span seat left SPECIALIZED_ONLY is not the set `D5` dispositioned"
+    );
+    assert_eq!(
+        either_phase.len() + specialized_only.len(),
+        6,
+        "the byte-span seat population is six; a change to it needs its own disposition"
+    );
+}
+
+/// **`RT-CARRIER-BYTESPAN-OBSERVE` `AC-2` — the byte-span observation is
+/// LOAD-BEARING for the row it greened, and the proof is committed rather than
+/// run once.**
+///
+/// **MEASURED:** one carried-`Bytes` program at `ConsoleWrite`'s span seat
+/// lowers unmutated, and refuses under
+/// [`EffectSeatDispatchMutation::RemoveCarriedByteSpanAvailability`] with the
+/// exact pre-`D5` message — that seat, that operation, that need, that observed
+/// phase.
+/// **CLAIMED:** `D5`'s activation of `(ConsoleWrite, Argument(1))` is what makes
+/// this program compile.
+/// **THE GAP:** this is DETECTOR-side. It proves the row depends on the
+/// availability `D5` granted; it does not prove the emitted span is *correct*.
+/// The observer's own outcome controls carry that, and they are `D4`'s.
+///
+/// The mutation withdraws the availability rather than stubbing the observer,
+/// so the refusal is raised by the real `Need` membership test. The assertion is
+/// the whole sentence, never `is_err`: a program that refused for an unrelated
+/// reason would satisfy `is_err` and say nothing about this seat.
+#[test]
+fn ac_2_withdrawing_the_byte_span_availability_restores_the_exact_original_refusal() {
+    let carried_console_write = || {
+        run_capacity_fixture(&|_symbols| RuntimeExpr::Call {
+            callee: Box::new(RuntimeExpr::LexicalClosure {
+                captures: Vec::new(),
+                params: vec!["payload".to_string()],
+                body: Box::new(RuntimeExpr::Effect {
+                    family: "Console".to_string(),
+                    operation: ken_host::HostOpV1::ConsoleWrite,
+                    capability: None,
+                    args: vec![
+                        RuntimeExpr::Construct {
+                            constructor: "ctor:prelude::Stream::Stdout".to_string(),
+                            args: Vec::new(),
+                        },
+                        RuntimeExpr::Var(0),
+                    ],
+                }),
+            }),
+            args: vec![RuntimeExpr::Value(RuntimeValue::Bytes(b"probe".to_vec()))],
+        })
+    };
+
+    set_effect_seat_dispatch_mutation(EffectSeatDispatchMutation::Exact);
+    carried_console_write()
+        .expect("`D5`: a carried byte span lowers at the seat `D5` activated");
+
+    set_effect_seat_dispatch_mutation(
+        EffectSeatDispatchMutation::RemoveCarriedByteSpanAvailability,
+    );
+    let error = carried_console_write()
+        .expect_err("withdrawing the byte-span availability must refuse the same program");
+    set_effect_seat_dispatch_mutation(EffectSeatDispatchMutation::Exact);
+
+    let reason = format!("{error:?}");
+    assert!(
+        reason.contains(
+            "seat Argument(1) of ConsoleWrite needs BytesPointerLength, \
+             which it cannot observe in CarriedWord"
+        ),
+        "the restored refusal must be the original one, whole: operation, slot, \
+         need and observed phase; got {reason}"
     );
 }
