@@ -33,2126 +33,373 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-06 ~12:0xZ · `D9b` partial · `AC-1` scope cut HELD, not taken
-
-**Verify `origin/main` before trusting anything below.**
-`RT-CONTSRC-PRODUCER-LOCAL` is `active` in thread **`thr_6m43v75yndhtj`**.
-
-### The one thing to do next
-
-**Nothing is owed by me. Wait for `D9b`'s corrected child.** The implementer is
-compacting; the leader re-releases `D9b` after. **Do not take the `AC-1` scope
-cut to the operator until the refusal-SITE measurement returns** — see below,
-this is the live trap.
-
-**State of the ring.** All `D`-checkpoints through `D6a`/`D6b`/`D6c`
-(`70d4e8d9` / `c47d94a7` / `bd79daa7`) and all nineteen execution-order rows are
-discharged. **Node QA then BLOCKED on `AC-1`** — which had **no owning
-deliverable**, my framing defect. That is **`D9`**, and every AC in section 4
-now must name its owner.
-
-- **`D9a` `df1ebfb9`** — assembly landed. The repair surface was **two** caller
-  sites, not one, and the Architect's measurement had named the one `AC-1` does
-  not use. Both carried comments asserting the *other* side appended the
-  captures; neither did. Subsumed into `claim_and_call_resolved_continuation`.
-- **`D9b` `b08c1b21`** — HELD as honest partial (Architect `evt_3dk4mj01v0ssk`):
-  the keyed relation never relates a role to its operand, the capture mutations
-  apply **zero** times, and the assembly is recorded before its own cardinality
-  guard. Three bounded corrections owed.
-
-### THE LIVE TRAP — do NOT take the `AC-1` cut on the variant measurement
-
-**The measurement is sound and its ATTRIBUTION is not.** `D0` and HEAD both
-observe `LoweringOperand::Carried` at the `lower_expr` seat. The leader and
-Architect both converted that into *"at `core.rs:7942` the scrutinee is
-`Carried`"* and concluded the residual is upstream and the cut is mine.
-
-⇒ **That is structurally impossible.** `7742`, `7752` and `7942` are all in
-**one function** (`lower_carried_computational_match_inner`, opens `7165`), and
-the `Carried` arm at `7752` **returns**. A carried scrutinee never reaches
-`7942`. The `D3` comment above `7752` says so deliberately.
-
-**The second candidate emitter is `core.rs:3916`, inside `lower_source_machine`
-— this node's own subject.** If that is the emitter, **`AC-1` is in scope and
-there is no cut to make at all.**
-
-**The `7942` anchor was mine** — I named it in the ask, and it propagated into
-both downstream summaries. Both were withdrawn (`evt_4dybxhrjvpcsn`).
-
-⇒ **The discriminator, folded into `D9b`'s correction release:** which
-`unsupported("Match", …)` call actually executes on `AC-1`'s row — `7942`,
-`3916`, or `4075`. **Report the SITE, not the variant.**
-
-**This is the third variant of one failure today, each a level finer:**
-identical message with different causes → identical arrival variant with an
-unmeasured refusal site. It is the node's own `GOVERNING` defect — **an
-observed value and a claimed location that are not keyed to each other.**
-
-### Both candidate gates are met, and stay met
-
-`D8o` plus its bounded remeasurement (recorded at `5154d94a`, **not** implied by
-`D8o`'s discharge) and the retroactive stale-owner question
-(`evt_t4e294qz932v`). Neither is reopened by `D9`.
-
-**Still binding on the candidate, and QA's to evidence:** *"correct and
-unreachable" is the DEFAULT.* This node must not ship a composed mechanism no
-program can reach.
-
-**Four execution-order rows were STALE when I read them** — rows 5-8 said
-`D8h` NEXT and `D8i`-`D8k` held, when my own ruling three sections below had
-declared them complete; rows 18-19 still held `D6b`/`D6c`. All six corrected.
-**Row 5 would have sent QA or an implementer to rebuild a finished
-checkpoint** — check the table against the rulings, not just the table.
-
-### CAMPAIGN — research `evt_2y8a2e5n281ye`, and a constraint it killed
-
-**My split constraint was RIGHT in conclusion, FALSE in reason.** I refused
-three splits with *"a rebase destroys the preserved exact SHAs"* and published
-it. Objects are **not** destroyed — a branch can be cut **at** the held tip. What
-binds is **verdict transfer** (reviews bind exact SHAs; a rebased commit does
-not inherit them, so each needs re-anchoring) and the **merge boundary**. For
-`D7`+Recursor the decisive constraint is neither: it is **semantic atomicity**.
-Corrected at all three sites.
-
-⇒ **A constraint that keeps producing the right answer never gets audited.**
-And **sweep the CLAIM, not the sentence** — I grepped my own remembered wording
-and missed two paraphrased copies; research found them.
-
-**The campaign is NOT four more nodes like #3.** The residual class retired at
-**commit 29 of 201**. Recursor is **not an independent future sample** — its
-hard part already caused much of #3's expansion, so its nominal size would
-**double-count**. Seed Call may find its population **empty**. Trap 2 is a
-reachability warning, **not a monotone size law**.
-
-**Measured process amplifier:** 15+ substantive evidence-review holds, 4
-explicit sizing recuts, 11+ frame-premise/ownership defects before `D9`. A large
-share are mine.
-
-⇒ **The lever is successor-frame quality, not restructuring** — and it is
-**owed work, not optional**: `RT-SEED-CALL-PORT`, `RT-PRODUCER-MATCH-PORT` and
-`RT-RECURSOR-TRANSPORT` must each begin with **complete populations**, **every
-AC naming its owning deliverable**, and **independent keyed controls** stated up
-front. This is the next Steward unit after `D9`.
-
-### THE ACTIVE OPERATIONAL DEFECT — check this before anything else
-
-**`runtime-implementer` returns every handoff with `Mentions: none`.** It names
-the leader in prose (*"next: yours"*) and mentions nobody, so **nothing wakes
-the leader** and both seats look merely idle. **Four stalls today — roughly 11
-+ 15 + 15 + 7 minutes, about 48 minutes of critical path.**
-
-**The detector, and it is one call:** `get_recent_context(detail="full")`
-prints `Mentions:` above the body. Run it on any implementer return **before**
-forming a theory about a silent seat. **The trigger to look is a per-seat
-cadence break** — the leader answers within ~2 minutes of a real mention, so
-anything past ~5 is anomalous *for it*. A fixed threshold is useless here: the
-T1 implementer legitimately runs for hours.
-
-**The repair is a mention from me naming the exact SHA**, which has woken the
-leader in ~10-20 seconds every time. **The fix is not mine to apply** — Steward
-to implementer is not a routing edge. The leader's and Architect's own posts
-carry mentions correctly; this is one seat's post shape.
-
-**CORRECTED 2026-08-06 ~10:5xZ, and the correction is the useful part.** I
-diagnosed this as non-compliance and escalated the **venue** twice: a channel
-ask, then a line inside the release (`evt_4r0j4x74rzcss`, which the leader did
-carry). **The very next return was still `Mentions: none` — five for five.**
-
-⇒ **The instruction itself was unfollowable. `mentions` takes participant IDs,
-not role names.** It said *"put `runtime-leader` in the `mentions` field"*; the
-field wants **`agt_37reqrd72cg00`**, and a role name there is dropped
-**silently**. So the seat could comply exactly and still wake nobody. I asked
-the leader (`evt_7vw7gz7wmm8kw`) to put the literal id in its next release,
-resolved via `scripts/moot-actor-id.sh <role>`.
-
-**The tell I missed for three rounds:** a seat that complies precisely on
-everything else and fails one thing **every** time is hitting a mechanism, not
-ignoring you. This implementer applied four corrections, then two prose
-passages, then unprompted **strengthened its own mechanical proof** on noticing
-the previous one masked string literals — while never once populating
-`mentions`. **Repeating an instruction more loudly is what you do when you
-believe it is being ignored; it buys nothing against a mechanism, and each
-round costs a stall.** After the second failure, go read what the field accepts.
-
-**Falsifier, so this does not run forever:** if the next return is still empty,
-the hypothesis is dead and the seat cannot populate the field from where it
-sits — a harness issue for the operator, not something to restate again.
-
-**Do not read the spent `D7a`-`D7e` block as a live route** — its surviving
-prose is why the banned retention kept looking available.
-
-### The queue is deep — verified, so do not re-derive it
-
-Six nodes sit behind this branch; the five not yet started are **all `ready`
-with written frames**: `RT-SEED-CALL-PORT`, `RT-DESCENT-RETIRE`,
-`RT-CONTSPEC-LEDGER`, `NATIVE-HANDLE-CARRIER`, `PX8-ERRID-ALLOC`. No framing
-debt. `RT-UNIT-CLOSURE-CONVERT` reads as a successor but is correctly `closed`
-(false premise, remainder folded into this node's `D5`).
-`RT-CONTSRC-CALLABLE-CONTRACT` is `ready` but **off the critical path by its
-own §0**. All six wait on one unmerged branch, now **191+ commits** ahead —
-that concentration is the parked campaign-sizing question for the operator.
-
-**`runtime-implementer` was compacted `ctx 69% → 0%`** at `400bddde` (clean, 191
-ahead). ⛔ **Never `handoff-gate-compact.sh` that seat** — it hard-resets to
-`origin/main` and would move the branch ref off the whole preserved evidence
-chain. Hand-drive `/compact` on the single quiescent pane.
-
-### A clean compile has THREE explanations — standing check now in the frame
-
-**This node has reported "equal values" as "no guard" three times**: `D8m`'s
-permutation, `D6b`'s raw-to-`worker_calls` mirror, `D6c`'s wrong-order swap.
-The frame now carries a `STANDING PRE-REPORT CHECK` beside the swap LIMIT:
-before reporting a clean compile as a missing refusal, say whether the two
-subjects hold **equal values**, and record application count separately from
-outcome. **My own gate asked the right question naming the wrong mechanism** —
-I demanded `hits > 0` (mutation never applied); every cell fired and the tell
-was equal values instead.
-
-### FIVE frame defects were mine, in TWO shapes. The second shape is new.
-
-**Shape 1 — a requirement carried forward by COPY and never re-grounded**
-(four): `D8g`'s same-witness conjunction, its exact-key clause, `D6b`'s
-non-vacuity diagnosis, `D6b`'s attribution conjunct. The frame **contained the
-refutation** of the last one about 400 lines away and had since 2026-08-05; I
-recut that very paragraph hours earlier and left it standing. **A 3600-line
-frame can hold a requirement and its refutation at once, and the diff shows
-neither.**
-
-**Shape 2 — reading a ruling that PRESCRIBED A REPAIR as one that CLOSED A
-PATH.** I cited `evt_6azsr4xrch1he` to retire the selected-argument call as
-impossible. It had diagnosed a gap and prescribed the fix, and **`D8d`/`D8e`
-had already delivered it** — both DISCHARGED in the execution-order table I had
-open. **A ruling's description of a gap outlives the gap.** Before citing one
-as a live prohibition, check whether the checkpoints it prescribed have
-discharged.
-
-**Two instruments, and each caught a different shape.** Absence-checking
-withdrawn text catches shape 1 — a diff is silent about a stale claim nobody
-touched, and equally silent about one you just re-introduced by copying a
-superseded ruling. **Sweeping the clause you replace is not enough; sweep every
-site that CITES it.** Shape 2 was caught only by **gating the publish on the
-ruling's author** — I could not have caught it by reading, because I had
-already read the discharge rows and drawn the wrong conclusion from them.
-
-**`D8p` DISCHARGED at exact `2be7adb0`** (`evt_6sk9hbp17893t`). **`D8f`
-CLASSIFIED bounded and IN-NODE** (`evt_3ynqrahtzngaz`) — ⭐ **no further
-predecessor, so the `D8n` flip condition never had to be applied.** The leader
-released the three-case claim-disposition repair from `2be7adb0`
-(`evt_4m0ad56ry110r`); implementer working. ⛔ **Both the classification
-question and the release were routed by the RING, not by me — do not re-route
-either.**
-
-⭐ **Why it was bounded, and it is nearly the opposite of what the refusal
-suggests:** the two calls are **already** separated by an exact authority at the
-right seat, which **correctly** leaves the ordinary call pending and consumes
-only at the exact occurrence. **The refusal is DOWNSTREAM of a decision that is
-already right** — both seats call `claim_composed_discharge` regardless of it,
-so the ordinary call claims first and the unchanged affine ledger **correctly**
-rejects the duplicate. ⛔ **Nothing was missing.** The three-case law and its
-bans are in the frame's **`D8f` CLASSIFIED** section.
-
-**`D8f` IS DISCHARGED** at exact `04c40d4c` (Architect `evt_6cka0ecwnd25t`).
-The route: three-case disposition partial accepted at `c49d0652`, then the four
-refusal controls took **five** bounded evidence holds, closing substantively at
-`d94a3df9`. `04c40d4c` is a whitespace-only identity child of it — one deletion,
-zero words moved.
-
-**Still NOT a candidate.** The discharge verdict says so explicitly: it
-releases neither `D8g` nor the candidate, and the frame's post-`D8f` sequencing
-governs.
-
-⭐ **The shared-identity shape I flagged for QA was resolved in that child:**
-the two defining bodies share **one** planner-issued causal identity, so the
-closeout now asserts **identity-global** nonduplication and **no per-body claim
-law remains.** `reset_d8j_discharged()` runs before **each** named compilation,
-so clause 2 cannot inherit another test's events and clause 4 cannot inherit
-clause 1's — **each observation is attributable to the program its clause
-names.**
-
-⭐ **The frame is being executed verbatim.** The release carries my `D6c`
-disambiguation (*"not `D6c`'s separately scoped target-selection refusals"*)
-and the GOVERNING rules — independent side, keyed relation not a bag, actual
-body kind, **the permutation LIMIT** (required only where subjects hold
-distinct values; record a same-valued no-op honestly and name what would make
-it discriminate), and **the sixth sub-shape** (a difference proof must withhold
-the sole producer of its observable).
-
-⛔ **`D8f`'s four refusals are NOT `D6c`'s.** Both lists open *omission,
-duplicate*; `D8f`'s is about **which call consumes a pending checked-IH
-marker**, `D6c`'s about **selecting the raw/IH target pre-emission.**
-**Discharging one discharges nothing of the other.** Disambiguated at both
-sites in the frame.
-
-**`D8g`'s owner re-measurement is DISCHARGED** at `1b367065` — **outcome (1),
-the owner VARIES but SEPARATES nothing.** The prohibition stands on a checked
-premise, and no owner positive is authorized or required. The measurement asked
-**injectivity**, not "do owners differ anywhere?" — `px8tr` carries two genuinely
-distinct owners, so the naive census would have returned the opposite answer.
-
-**Then the closeout HARD-STOPPED, correctly, and the root cause was my frame.**
-Its two required facts live in **disjoint witness families**: `px8tr` reaches the
-same-body `GeneratedContext` IH but every discharge is `composed: None` with an
-empty facet log; the composed family reaches composed-target emission but has no
-generated context. The implementer measured before building and refused the
-substitution that would have gone green — weakening *emission through* the
-composed-call target into *a composed target exists in the plan*.
-
-**The recut, as ruled and now written into the frame.** Two populations, joined
-at one exact production seam rather than at their outputs: `px8tr` owns the
-table-choice and suffix contract; the composed family adds a distinct **ingress**
-to the same `call_static_worker_with_inputs` emitter. Both relations must name
-that seam and prove neither ingress duplicates target or operand assembly.
-**No combined witness** — a combined fixture would cover no additional route
-contract and would manufacture the ungrounded conjunction being removed.
-
-**Then** `D6b` closeout (which also owes the raw-target declared-call-table
-representation `D6a` left honestly inert), `D6c`, candidate, `D6` closure.
-
-**The provenance, because it generalises.** The same-witness conjunction was
-**inherited, not derived** — it rode from the superseded **`D7e`** paragraph
-into `D8g` by copy, while the `D8l` clause independently assigned composed
-emission to a **composed** witness, and the two were never reconciled. `D7e` is
-now annotated in place naming both of its withdrawn clauses, since a reader
-tracing the recut lands there. **A requirement carried forward by copy has not
-been grounded by the checkpoint that copied it.**
-
-That copy also survived my own verification grep — checking that withdrawn text
-is **actually absent** rather than trusting the diff is what surfaced it. A
-publish verified by tree hash would have been green and silent.
-
-**Watch `D6c` specifically.** It is the next control family big enough to
-repeat `D8f`'s five-hold arc, and it inherits the same governing rule. The
-frame's new **WHAT DISQUALIFIES A SIDE** block exists for it.
-
-**The successor node is framed and its staleness is repaired.**
-`RT-CONTSRC-CALLABLE-CONTRACT` is the sole live successor —
-`RT-UNIT-CLOSURE-CONVERT` also names this node in `depends_on` but is
-`closed`, so it is not frontier work. Its frame described `D8e` as **open on a
-whole-node causal-projection hard stop** and the series as ending at `D8g`;
-`D8e` was ruled and discharged at row 9 and the series ran to `D8p`. A reader
-would have priced the predecessor as possibly-not-delivering. Corrected, and
-the enumeration of what-remains-ahead was **removed rather than refreshed** —
-restating the execution-order table is what went stale. Its `D0`
-re-derivation and hard stop on measurement 3 were already right and are
-untouched.
-
-**What the five holds cost and bought, because the shape will recur.** Every
-one landed on the SAME axis — the independent side — and I set myself a trigger
-that a fifth would mean the rule was underspecified. It fired, and the
-assessment came out the other way: the rule adjudicated cleanly each time and
-the implementer conceded each finding. **The rule was not ambiguous; it was
-satisfiable three ways that feel independent and are not** — distance (reading
-the mechanism on a lawful comparison compile), complement (naming one subject
-and defining the other as "the rest"), and a shared collector. Those are now
-written into the frame as **WHAT DISQUALIFIES A SIDE**.
-
-**The accepted surface climbed on every pass**, which is why this was
-convergence and not mis-sizing: refusal planes accepted at `f42fff78`, keyed
-relations at `8671825c`, independent populations at `cf770717`, both origins
-named from `StaticTransitionPlan::child_static_origin` at `d94a3df9`. Repeated
-rejects mean mis-sized only against a FLAT accepted surface.
-
-**Read one detail before `D8g`:** the implementer declined to overclaim the
-wrong-occurrence row. It refuses at the **affine causal** law, not a marker
-law, and they said plainly that no marker-plane wrong-occurrence refusal
-distinct from the occupancy gate was found on the ordinary production path.
-That is the honest shape, not a shortfall — do not ask for the stronger claim.
-
-⚠ **That review was STRANDED for ~10 minutes and I nearly missed it.** The
-leader's request sat **unsubmitted in the Architect's composer** under a
-finished turn, while the Architect's own status read *"awaiting Architect
-review request."* ⛔ **Both convo instruments agreed the ring was healthy** —
-the event log showed the request posted, and the recipient said it was waiting
-for one. **The status was true when set, and the strand is what stops it being
-updated**, so a stalled seat emits a status that AGREES with the stall.
-⛔ **`steward-pane-sweep.sh` reported `ok` for every seat**; this was found by
-reading the pane. Repaired by probe (`zz` **appended** ⇒ real input, not a
-placeholder), BSpace, Enter. Lesson filed at
-`agent/memory/roles/steward/a-stranded-delivery-is-corroborated-by-the-recipients-own-status.md`.
-
-⭐ **`D8p` found the missing relation was SMALLER than the frame's shape
-suggested: a second call edge that never consulted the seam.** Two call edges
-emit a static-worker call — the direct descent in `lower_expr`, and the source
-machine's. **The direct one has consulted the checked-IH seam since `D5a`; the
-source machine's never did.** ⛔ My earlier reading — *"the ordinary unit body
-has no static-worker seat at the application"* — was **wrong**: `env[4]` **is**
-a `StaticWorker` and the call takes the worker route. **What was absent was the
-seam call, not the binding.**
-
-⭐ **`D8p` retired a standing production claim.** The gate's comment read
-*"UNWITNESSED, and measured to be so — mutating it to ALWAYS admit leaves the
-whole suite green."* **True until `D8p`, false now** — the always-admit mutation
-reds. `198b7c14` states the current measurement and keeps the old one as dated
-history.
-
-⛔ **`D8f`'s frame WAS defective and the defect was mine** — it read as though
-occupancy were the only question, while the implementer had already measured
-that the two-call witness **refuses downstream** at *"one causal identity was
-discharged twice in a single function"*. Recut landed; see the **`D8f` RECUT**
-section of the frame.
-
-⚠ **THE RECUT ITSELF THEN NEEDED CORRECTING, and the error is instructive.** I
-made it *"conditional on the `D8p` accept — unless the block is on mechanism."*
-**The verdict was NEITHER branch:** it blocks on **evidence fidelity** while
-**accepting the mechanism**, and one finding **retires a claim the recut
-quotes**. ⛔ **A two-branch condition has no cell for that**, which is the same
-defect shape the recut exists to fix — committed inside the fix.
-
-**What survives, at the strength actually earned:** the **always-admit mutation
-reds** and that stands (untouched by all three findings), so the standing
-"UNWITNESSED" production comment is genuinely retired. ⛔ **But the cross-body
-permutation discriminator is RETIRED — both bodies observe the SAME occurrence
-and target values, so the swap is a no-op** — and the **two-call ordering is
-NOT settled either way**, being a within-body claim where finding 3 is
-cross-body. ⇒ **`D8f` must not re-run the always-admit mutation, but it may NOT
-treat the two-call ordering as discharged.** The trap the original wording set:
-skipping a within-body proof on the strength of a cross-body discriminator just
-measured **absent**.
-
-⭐ **RE-DERIVED against accepted `2be7adb0`, and BOTH rows stand.** Finding 4 of
-the accept: both defining bodies bind `StaticOriginId(21)` and call
-`StaticOriginId(29)` **with the same contract**, so the swap is **explicitly** a
-no-op — the "retired" row is correct. And the leader's gate states the other
-directly: *"`D8f`'s actual two-call occupancy state is now **reachable**, but it
-refuses downstream."* ⛔ **Reachable is not proved.** ⇒ Had the original wording
-survived, `D8f` would have been released with licence to skip a proof the
-accepted object shows is **reachable and unproved**.
-
-⭐ **`D8g` is now framed too, and its FIRST deliverable is a MEASUREMENT** — see
-the frame's *"`D8g` — RE-MEASURE the owner-separation prohibition before obeying
-it."* The `D8a` WATCH forbids an owner-based positive because *"the owner buys
-NO discrimination on any current population"* — ⛔ **that is undated, says "as
-measured", and was measured at `D8a`, before `D8h`-`D8p` added ten checkpoints
-of new planner facts.** Neither outcome licenses manufacturing a population; the
-fabrication ban is not in question, **only the factual claim that none exists.**
-
-Then `D6b` closeout, `D6c`, candidate.
-
-⛔ **`D8f`'s HARD STOP IS ACCEPTED and `D8f` is NOT discharged** (Architect
-`evt_6jay1wesbfhbw`, preserved exact `0eb04397`). ⛔ **Do not re-release `D8f`
-before `D8p` discharges.** **`D8m` DISCHARGED `01263e44`, `D8o` `3aadbaae`,
-`D8n` `3a63fe64`.**
-
-⛔ **`D8f` could not absorb it.** `D8f` owns one question — whether exact
-application occurrence distinguishes the ordinary call from the checked call
-under one pending marker — and **the measured program never reaches that
-two-call state.** Reaching it needs a relation that **does not exist on this
-object**:
-
-```text
-(exact defining body, exact checked application occurrence,
- checked call template + slot)
-    -> function-local callable binding and operand authority
+## LIVE — 2026-08-07 ~02:1xZ · ONE blocker left: nine `scenario.rs` rows, with the operator
+
+**The GitHub outage is over. CI works. `main` is still `3015aafd`.**
+
+### The candidate is exonerated and `ken-cli` is GREEN
+
+**Candidate: `wp/RT-SRCBODY-BIND-ORDER` at `8696e8c5`. HELD — not routed for
+review.** `wp/RT-DECL-CLOSURE-PORT-typed-units` frozen at `21fd46dc`.
+
+**`D12` complete `--no-fail-fast` enumeration** (a closed enumeration, because
+fail-fast is per **binary**, not per test): **40 candidate failures, every one
+also fails at base `21fd46dc`. ZERO REGRESSIONS.** The candidate additionally
+**FIXES SIX** base failures.
+
+**31 authorized rows annotated at `8696e8c5`** — annotation-only, 290+/21-,
+nine files, each row carrying its **exact signature**, **owning node**, and
+**"fails at base `21fd46dc`"**. Result:
+`ken-cargo test -p ken-cli --no-fail-fast` = **120 passed / 0 failed / 34
+ignored**. **`px7o` is UN-ignored and passing 3/0.**
+
+### THE ONLY THING LEFT
+
+**Nine `ken-verify` LIB UNIT TESTS in `scenario.rs`** — unit tests over
+production source, not integration parity rows. **With the operator.** Their
+skip authorization plausibly aimed at the integration/CI-gate surface, and this
+is a different kind of debt. **DO NOT ANNOTATE `scenario.rs` until they rule.**
+
+⇒ On their answer: add the nine to `8696e8c5` **or** close the set at 31.
+**One review cycle either way** — QA then Architect on the exact final SHA. A
+new SHA voids `dec_wyn3kvzhs9at`; read Decisions from the **object**.
+
+### THE NUMBER IS 31 — my off-by-one, twice
+
+I said 39, then 30. **`D12`'s 40 are CANDIDATE failures and `px7o` is NOT among
+them — it PASSES.** Removing its wrong annotation removed no row from the
+failing set. **40 = 30 `ken-cli` + 10 `ken-verify`**; only **9** of `ken-verify`
+are the held `scenario.rs` tests, and `px8f_write_partition` is an authorized
+integration row already annotated. **40 − 9 = 31**, plus the four `px4b` = **35
+`#[ignore]` total.** The ring caught this and escalated the arithmetic while
+following the unambiguous substantive instruction — the right precedence.
+
+### `RT-ENTRY-TRAP-PX7O` IS CLOSED — false premise, mine
+
+CI reports the bare name `nested_err_payload_reaches_both_real_executors`,
+defined in **two** binaries. I attributed it to `px7o`; the red one is **`px7n`**
+(owned by [[RT-FRAME-MARKER-ONCE]]). **`D10` measured `px7o` at the BASE, where
+it does fail, and I carried that forward as if it described the tip.** I also
+told the operator the repair "cleared `px4b` but not `px7o`, so it may be
+incomplete" — **it cleared both.** Do not re-file the node; do not re-skip
+`px7o`. **A bare test name shared by two binaries names neither.**
+
+### Owners, all filed
+
+`BytesPointerLength` → [[RT-CARRIER-BYTESPAN-OBSERVE]]; **`ResourceScalar` →
+[[RT-CARRIED-RESOURCE-SCALAR]]** (same refusal shape, **different need** — never
+call these byte-span); frame marker → [[RT-FRAME-MARKER-ONCE]]; closure lane →
+[[RT-CLOSURE-BOUNDARY-LANE]]; `ComputationalMatch` →
+[[RT-COMPMATCH-TREE-SCRUTINEE]]; `ProcessExitStatus` →
+[[RT-PROCESS-EXIT-STATUS]]. **An unmatched row gets its OWN node, never a
+nearest fit.**
+
+### Still unexplained — do not paper over it
+
+**CI showed 14 where local shows 40.** Fail-fast plus sharding explains the
+direction; it is **not proven**. The ring correctly refused to size an
+annotation on that discrepancy.
+
+### Why the set kept growing, recorded because I missed it once
+
+**`cargo test` and CI are both fail-fast PER BINARY.** One failure and the
+binary's remaining tests never run and never report, so **annotating a row
+un-hides the next row in the same binary.** The implementer caught this during
+`D10` and reported it; **I then scoped `D11` off CI's truncated list and called
+it complete.** `D12`'s whole-package `--no-fail-fast` run is the closed
+enumeration that ended the peeling.
+
+### BLOCKED ON A GITHUB ACTIONS OUTAGE — not on the candidate, not on a seat
+
+**Incident `qcvjkzcs7j74`, Critical, open since 2026-08-06T15:22Z.** Webhook
+triggers throttled to roughly 15%. **The merge cannot land until Actions
+recovers**, and no action here changes that.
+
+**The tell, so nobody re-diagnoses it:** PR #1528 has a `ken-ci` **check-suite**
+with **no workflow run behind it** and `updated_at` frozen at `created_at`, and
+**no workflow run exists repo-wide since 12:11Z**. The workflow is `active`; my
+token cannot read `actions/permissions` (403), so repo settings were ruled out
+by the repo-wide gap rather than by reading them.
+
+To resume: read the Actions component at
+`https://www.githubstatus.com/api/v2/summary.json`, confirm a run finally
+exists, then re-run the publisher on the same SHA. If the suite still never
+dispatches after recovery, closing and reopening the PR is the standard nudge —
+**ask the operator first.**
+
+### State of the publish
+
+| item | value |
+|---|---|
+| candidate | `21fd46dce478ed3a1a17622c33212e20ca545991` |
+| its parent | `b914c7ff`, the previously approved candidate |
+| Decision | `dec_4w8wn4ymn32cm` — **resolved**, Architect approved on cast |
+| PR | **#1528**, open, `MERGEABLE`, head = `21fd46dc` |
+| CI | check-suite `ken-ci` **created and QUEUED** at 20:19:06Z |
+
+**The publisher exited non-zero and that is NOT a candidate failure.** It waited
+322s, found **zero check runs** because the suite was still `queued`, printed
+*"no checks reported on the branch"* and died. **A queued suite and a suite that
+never triggered are indistinguishable to `gh pr checks`**, and the script treats
+both as fatal.
+
+⇒ **Resume by re-running the publisher on the same SHA.** `gh pr list --head`
+finds #1528, so it will not create a second PR; it proceeds to poll and merge.
+Do **not** re-push, do not open a new PR, do not re-vote.
+
+```sh
+export GH_TOKEN="$(/workspaces/ken/.devcontainer/mint-gh-token.sh)"
+scripts/scripted-pr-automerge.sh \
+  --target 21fd46dce478ed3a1a17622c33212e20ca545991 \
+  --title "RT-DECL-CLOSURE-PORT + RT-CONTSRC-PRODUCER-LOCAL: continuation source coordinate and typed-unit port; five known rows ignored" \
+  --description-file <the file below>
 ```
 
-⚠ **The existing checked template NAMES the application, but the `Function`
-that enters the marker has NO callable binding at that occurrence.** ⇒
-Supplying one changes **planner population, unit-body binding and lowering
-emission** before `D8f` can ask its question.
-
-⛔ **`0eb04397` is HARD-STOP EVIDENCE ONLY** — its sentinel and corrected
-post-`D8m` explanation are sound evidence, **not a candidate mechanism**.
-⚠ **`git diff --check 01263e44..0eb04397` reports a new blank line at EOF in
-`control.rs` — must NOT transfer into a candidate.**
-
-⭐ **The sizing call, and WHY it was cheap:** in-node, because I applied **the
-flip condition I recorded at `D8n`** — *"if this node's branch ever merges
-before the lifecycle work is done, the answer flips to a node."* The branch is
-**unmerged, 168+ commits ahead**, so the condition is **not met** and the
-topology argument stands. ⚠ **The case for a separate node IS stronger here**
-(three planes; the Architect said "substrate"; it would stand alone) — but a
-node reaches the held branch only by **rebasing away every preserved exact
-SHA**, including the `0eb04397` just ruled on. ⛔ **Whether the CAMPAIGN should
-be restructured is the OPERATOR's standing question, not answered by this.**
-
-⭐ **THE `D8m` FINDING MOST WORTH CARRYING INTO `D8f`/`D8g`: a stop-point claim
-generalized across a witness family whose members stop in THREE DIFFERENT
-PLACES.** The doc had said the projected-causal-edge stop is where *"every
-witness in this family stops, the checked one included."* ⛔ **That was FALSE:**
-the two-occurrence checked witness **compiles**; the single checked witness
-stops **earlier**, at the missing-slot guard; only the new ordinary witness
-stops at the causal-edge seat. ⇒ **Three programs, three outcomes, and none may
-be read onto another.**
-
-⭐ **How the ordinary positive handles not compiling green** — it reaches the
-arm, is classified, then stops. So the row compares **outcome EQUALITY across
-three perturbations** (withheld tuple, wrapper-occurrence substitution, pre-`D8n`
-ledger) rather than asserting success. **If any switch ever changes WHERE it
-stops, that is the finding.** ⭐ **The witness is the `D8m` witness with its
-bridge respelled as an ordinary `Match`** — same scrutinee, constructors, binder
-counts, default — **so it is a control on the classification, not a second
-unrelated program**, and the expected arm is restated from the witness's own
-**source text**, never from the recorder, plan, or lowering.
-
-⚠ **`D8m` CORRECTS EVIDENCE ACCEPTED AT `7d7f248b`, and flagged it as such** —
-the Architect should review it as a change to accepted text, not as new work.
-⛔ **`d8m_the_source_frame_identity_survives_the_bridge` clause 1 was GREEN FOR
-THE WRONG REASON.** It assumed the slot-marker guard is unreachable while the
-bridge carries `None`; **the same match is ALSO lowered by the DIRECT path**,
-which carried the identity before `D8m` and still does, **so the refusal
-arrives whether or not the bridge transports anything.**
-
-⭐ **Caught by mutation, and this is the cheap test:** reverting the bridge to
-its pre-`D8m` all-`None` tuple **reds four of five rows and leaves clause 1
-GREEN.** ⇒ **A difference proof that survives removal of the difference is not
-a difference proof** — it needs the withheld mechanism to be **the ONLY
-producer of the observable.** ⛔ **Binding on `D8f`/`D8g`; the defect is in the
-SUBJECT, not the comparison, so a perfectly chosen independent side does not
-save it.** Corrected in place (clause 1b) rather than removed, because a false
-difference proof standing beside four real ones is worse.
-
-⭐ **The second occurrence, and why it works:** two structurally identical
-checked composed bridges side by side, distinct frame ids and slot templates,
-**deliberately EQUAL fingerprints** — invisible to every shape-keyed check, so
-transported identity is the only discriminator, **and** equal fingerprints are
-what let a transplant reach lowering at all. ⇒ **The anti-vacuity permutation
-is now ENFORCED, not recorded.**
-
-⛔ **`wp/RT-DECL-CLOSURE-PORT-typed-units` is 168 commits ahead of
-`origin/main` and `D8m` resumes from `cc88e745`, NOT from `main`.** ⛔ **Do NOT
-run `handoff-gate-compact.sh` on this ring** — it does `git reset --hard
-origin/main` on the seat's worktree to satisfy *"start new work from current
-`origin/main`"*, which is the wrong semantics mid-node. **I compacted the
-implementer by sending `/compact` to the pane directly** (ctx 88% to 0%,
-verified; branch intact).
-
-⭐ **What `D8m` still owes**, from the implementer's own handoff: the five
-plan/marker refusals; the same-shaped distinct-occurrence control against
-wrapper-origin substitution (**needs a REAL second occurrence** — the
-placeholder was removed and not replaced); two population clauses; frame/marker
-count equality; and that the one-shape-off controls **reach the bridge hazard
-rather than an earlier rejection**.
-
-⚠ **It stopped at a clean boundary deliberately**, saying the remaining work is
-the intricate fixture kind and *"that's exactly where my last several passes
-have each needed a correction."* **Read that as the frame working, not as a
-stall.**
-
-⛔ **`D8o` took THREE rounds: mechanism accepted first pass, evidence blocked
-TWICE** (`evt_6gk0n7p2eazn2`, `evt_4y1q8s6cq5m11`). ⛔ **Do not re-cut `D8o`
-and do not size a new node from those blocks — they were evidence-only.**
-⛔ **The bounded `D8i`/`D8j` remeasurement is DONE, inside `D8o`.**
-
-⛔⛔ **MY FRAME UNDERSPECIFIED THE GATE, AND THAT IS WHY THERE WERE TWO
-EVIDENCE ROUNDS.** It said *"compare its live `defining_unit` /
-`defining_emission_owner` **pair** to the planner-issued body authority."*
-**That asks for a PAIR COMPARISON. The requirement is a KEYED RELATION.** The
-ring built what I asked for, twice. **The frame is corrected** — `exact body
-key → live (owner, unit)`, each of the three kinds non-empty, **and swapping
-two lawful pairs between two bodies must RED.**
-
-⭐ **What discharged it, and the shape to copy into `D8m`:** `D8oBodyKey` is a
-**closed sum over the exact planner descriptor identities**, supplied at the
-pass that owns each descriptor — never reconstructed from ambient owner,
-`FuncId`, raw origin, or a composed identity. **The swap discriminator is a
-PERMANENT control, not an argument in a comment:** it builds the swapped
-expectation and requires it not to match, and the implementer **measured that
-the swap reds before writing it.** Map cardinality prevents body collapse; all
-three kinds explicitly non-empty.
-
-⭐ **THE GOVERNING FINDING — fifth of its shape on this node**, now stated in
-the frame as *"GOVERNING — name the INDEPENDENT SIDE, and KEY the relation."*
-**Binding on `D8m`/`D8f`/`D8g`.** Two halves:
-
-1. **Name the INDEPENDENT SIDE** — derivable without consulting the mechanism
-   under test.
-2. **KEY THE RELATION** — when the property is *"each X has its own Y"*,
-   compare `exact key → value`. ⛔ **Comparing the BAG of values proves only
-   that the right values exist SOMEWHERE.**
-
-⛔ **Two corollaries that LOOK like they close the gap and do not:**
-
-- **A component's DISTINCTNESS is not a key.** "Every observed `FuncId` is
-  distinct", alongside a pair-multiset equality, **does not restore the missing
-  join.**
-- **A VARIANT is not a KIND.** ⚠ **A generated context and a specialization
-  body BOTH lawfully carry a `Specialization(...)` owner**, so an assertion
-  named `from_specialization` over `(FuncId, ContinuationEmissionOwner)`
-  classifies an **owner variant**, not a body kind. ⇒ **When a kind must be
-  proved, the kind must be PRESENT IN THE COMPARED VALUE.**
-
-⭐ **The cheap discriminating question for any such control:** *what lawful
-permutation of my observed data leaves this assertion green?* **If swapping two
-records between two subjects passes, the relation is unkeyed.**
-
-⭐ **Round 1's own findings, all still standing:** the ordinary-unit call
-recorded its `function` **before** `open_aggregate_events(id)`, so that field
-was already wrong on the landed object — **and the test missed it only because
-it never USED the field** (⇒ an unused recorded field is unmeasured surface,
-not slack); **three of four observations had `function: None`** and could not
-be joined at all; and the expectation needs **`executable_units`, not
-`emittable_units`** — a template-only unit is declared and never defined, so it
-binds nothing.
-
-**What `D8o`'s accepted mechanism landed:** a committed census
-(`docs/notes/rt-contsrc-d8o-ambient-body-authority-census.md`); **writers were
-TWO, not three** — a specialization body set **neither** field; and **eight
-readers, of which FOUR DECLINE.** ⭐ **That split is why this was silent** — a
-declining reader cannot tell *"no body is being defined"* from *"a body is being
-defined and left the wrong value here."* ⇒ **Only the writer can distinguish
-those two cases**, which is why the repair is a body-lifetime binding and not
-validation at the readers.
-
-⛔ **A SECOND real production defect, found by `D8n`'s evidence probe.**
-`define_continuation_bodies` opens each specialization `FuncId` with
-`open_aggregate_events(id)`, which sets **only** `defining_function_id` — the
-loop **never binds `defining_emission_owner`** before lowering its source body.
-Ordinary bodies bind `Predeclared(unit.function)`; generated contexts bind
-`Specialization(context.enclosing)`. ⇒ **A specialization body inherits
-whatever owner the prior pass left behind**, and the probe measured exactly
-that: distinct specialization and ordinary `Function` consumptions under **one
-stale predeclared owner**.
-
-**This field is active production authority** — continuation claiming/calling,
-composed-worker selection and authority checks, composed-discharge ownership,
-carried-context resolution, aggregate reconciliation. ⛔ **`defining_unit` is
-likewise unbound there, so a one-field patch without a read/write census is
-unsafe.**
-
-⭐ **THE RETROACTIVE QUESTION IS ANSWERED — and asking it paid**
-(`evt_t4e294qz932v`). ⛔ **No checkpoint is invalidated: `D8a`-`D8k` are NOT
-reopened.** `D8a`/`D8b`/`D8h` derive everything from planner-issued records;
-`D8k`'s row passes the owner explicitly; `D8i`'s and `D8j`'s positives are
-measured in **ordinary declaration-owned / root** bodies where the owner **is**
-bound before lowering; `WrongClaimingOwner` substitutes `None` rather than a
-second agreeing value.
-
-⛔ **But ONE control is self-correlated: `D8i` clause 2.** Its mutation picks a
-"foreign" identity by asking for a target whose owner **differs from
-`self.defining_emission_owner`**, and the guard compares that identity's owner
-**back to the same field**. ⇒ It proves the guard rejects disagreement
-**relative to the ambient value**, not that the ambient value is planner
-correct — **if the field were stale, mutation and guard would still agree.**
-Not a false green today (the refusal lands in the ordinary pass), but **it may
-no longer be cited as evidence for specialization-body owner correctness.**
-`D8j` verification 2 has the same limitation.
-
-⇒ **After `D8o`, re-run and record `D8i` clause 2 and `D8j` verification 2's
-positive and negative rows on the `D8o` descendant.** ⛔ **Bounded
-remeasurement, not rework — preserve their prior exact SHAs as baselines, do
-not rewrite or reopen them.** `D8a`/`D8b`/`D8h` and `D8k` need ordinary
-regression coverage only. **If no lawful specialization-body composed claim
-exists, record the population EMPTY; do not fabricate one.**
-
-**Sequencing:** `D8o` does not mechanically block `D8n`'s evidence-only edit,
-but must precede a candidate **and** the `D8m` witness, which spans both
-function kinds and needs trustworthy ownership facts when measured.
-
-`D8h`-`D8l` complete, `D8e` DISCHARGED, `D8l2` QA-approved. **`D8f`, `D8g`,
-`D6b` closeout, `D6c`, candidate, `D6` closure and downstream remain held.**
-
-### Environment
-
-**Disk was reclaimed 2026-08-06 ~01:35Z: 99% -> 85%, 33G free**, from 30G of
-stale `tmp/ken-*` scratch, **no `target/` touched**. The fix is per-test scratch
-cleanup in the `ken-runtime` harness; **do not fold it into any `D8`
-checkpoint.** See the memory `devcontainer-disk-topology-and-safe-reclaim`,
-whose header block carries the three rules that matter.
-
-⛔⛔ **THE REFILL RATE IS MUCH HIGHER UNDER AN ACTIVE RING THAN THE EARLIER
-~400 dirs/hour FIGURE. Re-measure before you plan against it.** Two readings
-taken 38 minutes apart during `D8m`'s matrix work:
-
-| time | disk | free | `tmp/` | dirs |
-|---|---|---|---|---|
-| 02:47Z | 80% | 46G | 24G | 911 |
-| 03:25Z | 82% | 40G | 29G | 1091 |
-
-⇒ **~8G/hour and ~280 dirs/hour**, because a matrix checkpoint re-runs the
-`ken-runtime` suite repeatedly. **At 40G free that is roughly five hours of
-headroom, not days.**
-
-⛔ **Do NOT reclaim while the implementer is LIVE** — it holds the shared build
-turn and **no instrument reads a `flock`; ask the holder.** ⭐ **Reclaim at the
-next handoff seam**, freeing only `tmp/ken-*` older than 2h (576 such dirs at
-03:25Z). ⛔ **Never `target/` while the ring is mid-node** — that costs a cold
-rebuild under the machine-wide `ken-cargo` lock.
-
-⛔ **`D5a-1` and `D5a-2` are SPENT LABELS — their text is refuted.** So is my
-published *"new member at ordinal 2, not 3"*. So is the whole
-continuation-input projection: `ContinuationInput(0)` **already is** the outer
-success binder with exact case-body provenance, and a second input is the
-banned fabricated availability. So is the `ContinuationOrdinaryEnvelopeRole` +
-ABI `Parameter(ValueWord)` route — the selected recursive argument is a
-**closure capsule** with no lawful `ValueWord` form.
-
-⚠ **Each of those three would have passed a `Var(2)`-only positive.** At
-ordinal 2, `Var(2)` still resolves to a success payload while `Var(1)` is
-silently wrong. **Assert the whole run.**
-
-**The corrected law:** `[IHs, ALL constructor arguments in source order, outer
-frame]`. The functionized construction **replaces the selected recursive
-argument with its IH** — that is the defect. Frame text is fixed; source
-comments carry the same false law and are the implementer's to correct.
-
-**`D6a`'s mechanism is ACCEPTED at exact `625b7860`** (Architect review
-`evt_3hx267n11sm9k`): `730/7/1` to **`736/2/1`**, five rows repaired including
-the governed `Var(2)`, run `[IH RawWorker, SelectedRecursiveArgument RawWorker,
-ContinuationInput(BufferAllocate Ok)]`, `D4a` boundary reached. **Held for
-fidelity only** — a comment-only child of `625b7860` is authorized, no
-executable change.
-
-⛔ **I wrote a FALSE ROUTE LAW into the frame and it is corrected.** The
-conditional law: `SelectedRecursiveArgument` **always** carries `RawWorker`;
-`InductionHypothesis` carries `GeneratedContext` **iff** the planner issued and
-this unit resolved one, else it lawfully carries `RawWorker`. So the governed
-fixture's **Raw/Raw is lawful** and **degenerate on route** — `D6b`'s
-discriminating control must use the **mixed landed-object witness**
-(`GeneratedContext`/`RawWorker`) and assert the exact pair directly.
-
-⚠ Also retracted: *"a tail-appended member silently passes."* It does not — the
-typed worker binding refuses in value position and five rows redden. **Keep the
-whole-run control; the silent-pass rationale was wrong.**
-
-⛔ **`D6b` IS MIS-SIZED and FROZEN** (Architect `evt_6azsr4xrch1he`). Exact
-`d86be55d` is preserved as **accepted partial progress** — the route consumer
-and both function-local tables are sound. `D6c`, QA, candidate, `D6` closure and
-downstream are frozen with it.
-
-**Another false claim of mine, corrected:** the two lowering paths do **not**
-build the same segments at the recursive field. Composed/source-machine
-(`core.rs:2929`, `:3467`, `:4649`) enters **every** constructor field as
-`Value`; the functionized specialization **alone** substitutes the
-`StaticWorker` (`units.rs:1696-1764`). ⇒ **A production representation/consumer
-gap, not a missing fixture** — the released bounded witness repair could never
-have discharged it, because the only source shape that exercises the raw table
-is refused earlier. That is why its wrong-table mutation stays green.
-
-**Next: WAIT for the Architect's causal-projection ruling.** Routed at
-`evt_59dyjmzy6hqkw`. Runtime holds exact `89e36ec1`; `D8f`/`D8g`, `D6b`
-closeout, `D6c`, QA, candidate, `D6` closure and downstream all held. ⛔ **The
-mechanism fork is the Architect's, not mine** — (a) a claim seat reachable from
-the composed path, (b) an exemption for composed producers from result-edge
-projection, or (c) something unnamed. **I size and cut it once ruled.**
-
-⛔⛔ **`D8e` WHOLE-NODE HARD STOP at exact `89e36ec1`.** The witness is **lawful
-and the positive route is PROVED** — `745/2/1`, exactly three new rows, no new
-reds, both profiles clean, test-only.
-
-⭐⭐ **MY STATED WHOLE-NODE CONDITION DID NOT FIRE — a different one did.** I
-wrote *"if the four cannot lawfully coincide."* **They DID coincide.** The
-blocker is **what the conjunction NECESSARILY CREATES**: interning the
-specialization projects a causal call onto the same emitting unit
-(`continuation_result_edges_owned_by` is keyed on emission owner and admits
-every projected call), so **the edge is the same act as satisfying fact 4.** Its
-only two discharges are both impossible here — the sole
-`claim_and_call_continuation` site sits on the ordinary producer branch the
-composed path returns **before**, and a unit result that **is** the planned
-producer constructor is the very thing the composed path **eliminates in
-place**. ⇒ Refuses at the **`D5a` detached-result seat**; the outer raw-body
-closure refusal my law named is **independently NOT reached**.
-
-⛔ **The fabrication that would have gone GREEN, found and refused:** a
-**different occurrence of the same constructor** as the unit result reaches the
-second discharge — **the identity check is per-symbol** — while emitting a
-specialization call for the **wrong occurrence**.
-
-⚠ **`D8d`'s sentinel is RE-SCOPED, not deleted** — its "do not coincide
-anywhere" wording is now false; ⛔ do not restore it. The surviving narrower fact
-(neither of `D8d`'s two populations crosses over) is what keeps the witness a
-**construction rather than an inheritance**. The refusal assertion is a
-**labelled sentinel: it reds the moment a lawful discharge exists.**
-
-⭐ **STANDING, third occurrence: satisfying a required fact can CREATE an
-undischargeable obligation** (`D7a`→`D7b`, `D7a2`'s retention, now fact 4). Each
-surfaced only when something **downstream** used it. ⇒ **A checkpoint owes a
-statement of what its fact OBLIGES, not only what it provides.**
-
-`D8a`/`D8b`/`D8d` discharged; `D8e` consumer + witness proved but **not
-discharged**.
-
-⭐ **`D8d` DISCHARGED at exact `c2e8314f`** (`742/2/1`). The target-derived
-`StaticWorkerBinding` is installed at the selected recursive source-order
-position; **not** a `Value(Closure)`, so value-position use stays fail-closed at
-`value_at`. Owner-collision guard deleted; `emission_owner`'s selector role
-re-measured live afterwards.
-
-⚠⚠ **THE BINDING IS CORRECT AND MEASURABLY NEVER INSTALLED** — the two
-preconditions coincide nowhere in the suite. Pinned as a **sentinel**, measured
-with **two counters** because *"unreadable by design"* and *"never built"* are
-indistinguishable from outside. **That sentinel is `D8e`'s inheritance and its
-real work.**
-
-⛔ **Third occurrence on this node** — `D6b`'s raw table, `D7a2`'s retention, now
-`D8d`'s binding, all correct-and-unreached. **On this node the mechanism is the
-cheap half and the WITNESS is the deliverable.** ⛔ **If `D8e` cannot build its
-witness through the ordinary production planner/lowering path, that is a
-WHOLE-NODE finding** (the composed path cannot exercise this substrate at all) —
-hard-stop to me, do **not** hand-construct a plan to make the witness exist.
-
-⛔ **`D8c` IS RETIRED — folded into `D8e`** (Architect `evt_nwgvvr4vaf7y`,
-**outcome (c) at the CHECKPOINT boundary, not the whole-node boundary; the node
-remains well-sized**). Order is now `D8d` (install the target-derived binding) →
-`D8e` (consume at the callee seat **and** close the no-unit-boundary law) →
-`D8f` → `D8g` → `D6b` closeout → `D6c`. ⛔ The label `D8c` is **not reused**.
-
-**My error:** `D8c`'s consumption statement is an **integration property, not a
-predecessor mechanism** — I read the mechanism family's three properties as
-three checkpoints when the third is a property of the **composition** of the
-other two. `D8d` owns binding, `D8e` owns consumption, and only together can
-they establish it.
-
-⛔ **Build neither returned form.** Resolving the target in `source_call_state`
-from a threaded selector is a **second target-selection authority** and is not
-self-authenticating; installing a target-derived `Lowered::Closure` as `Value`
-is a **second callable representation** that lets the template enter value
-positions. ⛔ **No temporary `Value(Closure)` bridge and no consumer-side lookup
-that `D8d`/`D8e` later replace** — a scaffold the next checkpoint deletes is not
-a checkpoint.
-
-⭐ **`D8b` DISCHARGED at exact `e4b4c26c`** — `ComposedCallTarget` minted,
-withdrawn retention machinery removed, no fork returned. The raw-body-versus-
-route-resolved-callee question **dissolved** (the view already carries route
-eligibility, so the target is a representation, not a route decision) and stays
-dissolved despite citing the now-retired `D8c`.
-
-⭐ **The `D8c` hard-stop clause worked as written** — the implementer returned
-two forms rather than choosing, built nothing, and left the tree clean at
-`e4b4c26c`.
-
-⭐ **`D8a` DISCHARGED at exact `e02ef413`** (`742/2/1`, both failures the
-`d86be55d` baseline pair). **The fork resolved to the STRUCTURAL branch and was
-measured before it was chosen** — a test-only hook removed reason one (disjoint
-walks) exactly and nothing else, and still yielded no second owner, because the
-`D5a` availability law refuses first on both plans. Disarmed run is the positive
-control.
-
-⚠ **The owner buys NO discrimination on any current population** — correctness
-insurance and an earlier transplant catch, not a key that separates anything.
-**`D8g` must not attempt an owner-based-separation positive**; there is no
-population to demonstrate it on.
-
-**Steward disposition added to `D8b`:** delete the owner-collision refusal in
-`composed_worker_view` — measured unreachable and unexercised, and the ruling
-authorized encoding the invariant **instead** of a discriminator, not alongside
-a dead guard. ⛔ **Not the `D6b` unwitnessed-residual case:** `D6b`'s table was
-unreachable because the mechanism was **incomplete**; this is unreachable
-because the planner **proves the population impossible**. Delete the collision
-guard, **not** the field — the owner's selector role is separately live.
-
-**Why the `D8` series exists.** The `D7a`-`D7e` cut is **SPENT** — Architect
-ruling `evt_3dcafs581921e` returned **outcome (c), mis-sized**, on preserved
-exact `f3427dae` (`D7a`) and `9f21ff0e` (`D7a2`). Both are **non-candidate
-evidence**. The governing cut is `D8a`-`D8g`, and the `D8` series is allocated
-so that **label order IS execution order** — the `D7` letters were allocation
-order and misled twice.
-
-Order: `D8a` (owner-qualified selector) → `D8b` (composed-call target, planner)
-→ `D8c` (the consumption seam) → `D8d` (one environment authority) → `D8e`
-(source-machine callee consumer) → `D8f` (checked-marker occupancy) → `D8g`
-(non-vacuous closeout) → `D6b` closeout → `D6c`.
-
-**Finding 1 — the selector is FIVE fields, owner-qualified.** Four was
-necessary and not sufficient. The planner **deliberately interns distinct
-generated contexts for the same raw worker under different continuation
-identities**, so two `emission_owner`s can name **different exact callees**
-while sharing all four source coordinates. Accepting only when the complete
-views agree makes **agreement, not causal identity, the selector**. My analogy
-to `continuation_call_binding_for` was the false step — that lookup may fail
-closed on duplicate tokens; the composed view **projects an owner-specific
-answer**.
-
-**Finding 2 — `9f21ff0e` FALSIFIED `D7a2`'s own premise.** Retaining the
-required raw body defines a standalone `Function` whose result is a
-`Constructor` containing a raw `Closure`; all 25 newly-red rows stop at the
-permanent unit-result closure boundary (`741/2` unarmed, `716/27` armed, one
-predicate). ⇒ *"Make the raw body declared-and-defined"* **reopens the exact
-boundary the generated-context design exists to avoid.**
-
-**Withdrawn — all three are MY text:** `D7a2`'s raw-body executable-set
-equality; `D7e`'s *"prove the raw target is both declared and defined"*; the
-four-field selector as final identity.
-
-**The lawful mechanism is a planner-issued COMPOSED-CALL TARGET**, distinct from
-both the standalone `RawWorker` `Function` and the IH `GeneratedContext`:
-preserve the selected argument's raw argument/capture semantics, consume its
-result **in the exact source-machine continuation**, with the closure-valued
-result **never crossing a unit boundary**; owner-qualified, and
-occurrence-qualified where more than one source call can consume the binding.
-
-⛔ Banned: closure carrier, ABI/runtime lane, boundary exemption, flipping the
-test-only retention predicate, substituting the IH `GeneratedContext` (different
-semantics and operands), accepting the raw table as a permanently unwitnessed
-residual, any carrier callable/helper route.
-
-⚠ **The reconciliation gate now REFUSES IN PRODUCTION by design** at `9f21ff0e`.
-Anything that starts calling it before the route is settled reads that as a
-**regression** rather than as the checkpoint's own finding.
-
-⭐ **The concurrent review was worth requesting.** `D7a2` was already built on
-`f3427dae` when I routed it; the review found the base incomplete, which is
-exactly the coupling that mattered — `D7a2`'s exact-set equality is keyed on
-`D7a`'s selector, so both sides of that equality would have been derived from
-the same wrong key.
-
-### ⛔⛔ I PUBLISHED A FALSE CONCLUSION AND IT IS WITHDRAWN
-
-**This file said "the five reds are the runtime correctly rejecting a malformed
-fixture — no Ken defect." THAT IS FALSE.** Its premise — that nothing at the
-match level binds `AllocatedBuffer` — counted only the inner
-`ComputationalMatch`'s binders and **omitted the enclosing ordinary `Match`**
-over `BufferAllocate`, whose `Result::Ok` case has `binders: 1` and **is** the
-governed buffer.
-
-The nearest-first environment is
-`[InductionHypothesis, ScopeArgument, AllocatedBuffer, ...outer]`, so **`Var(2)`
-is well founded** — local under three binders. Confirmed independently by the
-production walk `required_surrounding_environment_prefix`, by both lowering
-constructions, and by the fixture's own committed structural assertion.
-
-⇒ ⛔ **The five reds are a REAL DEFECT: a functionized-unit environment
-transport failure.** The emitted unit keeps the inner IH and constructor
-argument and **loses the outer ordinary-`Match` success binder**. ⛔ **Do not
-touch the fixture.**
-
-⭐ **The shape to learn from:** three successive dispositions — mine, the
-Architect's, and the ring's — each inherited an unprobed premise from the one
-before. The anchor was never measured; then the binder count was taken from the
-inner match alone. **Each artifact read as grounded because its predecessor
-did.**
-
-### `D5` — recut as REAL transport work, split `D5a`/`D5b`
-
-**No new node** (same branch, one candidate — the reasoning that closed
-[[RT-UNIT-CLOSURE-CONVERT]]). ⚠ **But `D5` is no longer small.**
-
-**`D5a` planner:** derive the outer ordinary-case binding from the enclosing
-`Match` **success-binder provenance**; represent it as an **explicit typed
-unit-environment member**, never an implicit caller tail; retain the closed
-order **`IHs ++ arguments ++ outer frame`**; **fail closed before emission** on
-omission, redirection, wrong provenance, wrong order, or fabricated
-availability.
-
-**`D5b` lowering:** consume **that exact planned member**; **positive** that
-`Var(2)` is the real `BufferAllocate` success payload **and the `D4a` boundary
-is still reached**; **negative** that dropping or redirecting **only** that
-member hits the **pre-emission** refusal.
-
-⛔ **Banned:** no capture edit, no source `Var` rewrite, no padding, no
-shifting, no synthesized capture, no caller-tail recovery.
-
-⭐ **Still standing:** the `LexicalClosure.captures` **totality** law; the
-`Scope`-constructor closure is **innocent** (correct empty capture run); the
-`StaticWorker` is **non-causal**. ⭐ **The per-depth compounding worry is
-DEAD** — each level builds its own outer match and success binder.
-
-⭐ **[[RT-UNIT-CLOSURE-CONVERT]]'s GAP STATEMENT was right all along** — the
-unit environment does not carry what its body needs. Only its **mechanism**
-(capture slots) was wrong. It stays `closed`; capture conversion stays banned.
-
-### `D5` — recut TWICE; both earlier edits are WITHDRAWN
-
-`D5` is `RT-CONTSRC-PRODUCER-LOCAL`'s **last deliverable** and clears the
-candidate gate. Its authorized edit is now the fixture's **scope tracking**.
-
-| withdrawn edit | why |
-|---|---|
-| correct `test_objects.rs:176`/`:220` capture literals | ⛔ **wrong anchor.** Those bodies are genuinely closed — zero `Var` nodes — so `captures: Vec::new()` is right and editing them fabricates captures |
-| correct the `:12038` capture literal | ⛔ **also innocent.** `closure_scope` is an empty `BinderScope` binding only the closure's own `"buffer"` param, so its `Var(1)` is that param; ambient demand is **zero** |
-
-⛔ **The wrong anchor rode through THREE artifacts** — `D1c` named it from a
-grep rather than a probe, then the Architect's ruling and my own `D5` release
-each inherited it as measured. ⭐ **A `file:line` in a code fence reads as
-measured and is only a claim.**
-
-⭐ **Standing:** `LexicalClosure.captures` must be **total** for ambient lexical
-demand (Architect `evt_5g7kaec1xzaf6`) — a **totality** ruling, not a
-minimality one; a conservative run may be larger, never shorter. And the
-`StaticWorker` at de Bruijn 0 is **non-causal** — it sits innermost, the missing
-binding is outermost, so ⛔ `Var` shifting stays banned.
-
-⚠ **Unmeasured, and it belongs to the repair's evidence — NOT another
-measurement round:** the construction recurs at every depth and a nested call
-builds indices from a fresh `BinderScope::default()` under enclosing binders.
-Whether that compounds per level is open.
-
-⛔ **Whatever the ruling, the corrected fixture must still be a `D4a` witness,
-proved by a discriminator** — a fixture that stops reaching the boundary is a
-deletion wearing a fix's clothes.
-
-### Superseded — the contract question, ANSWERED
-
-Routed at `evt_7p0jwvxm9kwmw`, answered `evt_5g7kaec1xzaf6`:
-
-> **Must `LexicalClosure.captures` cover every free index its `body` reaches?**
-> **YES** — total for ambient lexical demand, no lawful undeclared caller tail.
-
-⛔ **INVENTORY IS CLOSED. There will be no `D1d`.** Three passes (`D1`, `D1b`,
-`D1c`) each corrected its predecessor's premise; I said `D1c` terminates it and
-it does. **Do not authorize a fourth measurement** — the one still owed is
-conditional on the ruling (below).
-
-⛔ **`RT-UNIT-CLOSURE-CONVERT`'s PREMISE IS RETIRED.** It was framed to
-"activate function-unit closure conversion" for a substrate gap. **There is no
-measured production instance of that gap.** My frame defect, the fifth of this
-class on this campaign.
-
-### `D1` returned a HARD STOP at `bc754c03`, and I did NOT size from it
-
-Doc-only child of `b3ba2820`; source tree unchanged, all probes reverted.
-Record at `docs/program/wp/RT-UNIT-CLOSURE-CONVERT-D1.md` (on the branch, not
-`main`). **Accepted.**
-
-- **`CaptureSlot { ordinal: u32 }` CONFIRMED.** Identity exists **only** in
-  `captures: Vec<RuntimeExpr>` (`ir.rs:443`), which is consumed for its
-  **length** (`semantic_ir.rs:444`) and discarded at the semantic-plane
-  boundary. Nothing downstream — `CaptureLayout`, `AbiSlot`, `AbiFrameHeader` —
-  has a field that could name a captured value.
-- **All five `RT-FNSPLIT-B2R` elements are PRESENT, none a stub**, and live for
-  the other **127** closures (90 `LexicalClosure` with one capture, 30 with two,
-  7 `Closure` with one). ⭐ **The honest reading is not "the mechanism is
-  missing" but "all five are driven off one input that is empty for this
-  population."**
-- **The five failing units are lexical closure bodies declaring `captures: 0`
-  whose bodies reference a free variable.** ⛔ **ABSENT, not inert** — no
-  declared-but-unbound slot exists. Binding it would **fabricate a capture**,
-  one of the four banned repairs.
-
-⛔ **I REFUSED TO SIZE, and this is the reasoning to keep.** Read alone the
-record sizes this as a large node — a new free-variable analysis **plus** a new
-identity-bearing representation. **But the record itself says it has not
-established why those closures arrive with an empty capture list while 127
-others do not**, and those two statements are in tension: *something* populates
-`captures` for the 127. **That producer, and the basis on which it decides
-membership, is what sizes this node — and it is unmeasured.** Sizing on the
-first reading would be creating work on speculation.
-
-**`D1b` is FOLDED, not a new node** (relax, fold, then cut). It asks what
-writes `LexicalClosure { captures }` / `Closure { captures }` and on what basis,
-then why that list is empty for `defining_origin` 88 and 14. **Three readings
-are live and it must distinguish them:** a producer with a gap for this
-population (repair is upstream, may be small); a producer copying an
-already-known set whose input lacks it (the question moves one plane further
-out); or nothing computing captures anywhere (only then is a new analysis the
-honest answer).
-
-⚠ **Do not assume the `Var` index is right and the capture list wrong.** The
-record's own numbers put the converse in play: `index=2 env_len=2` and
-`index=3 env_len=3` against a header of `{parameters: 1, captures: 0}` — **the
-lowering environment is already longer than the declared slot run**, so
-something other than declared captures contributes to it. If that reading holds,
-this population never needed a capture at all.
-
-⛔ **Banned in `D1b`:** any production edit, repair, or representation change —
-**specifically, do not add an identity field to `CaptureSlot`.** If `D1b`
-confirms a new representation or analysis pass is genuinely required, **that is
-an Architect question and I route it**; it grows substrate and is not mine to
-cut unilaterally.
-
-### What `D1b` and `D1c` then established — READ BEFORE ACTING ON `D1` ABOVE
-
-⛔ **`D1`'s account above is SUPERSEDED on its central claim.** It said "a free
-variable with no declared capture slot", which **assumed the `Var` is valid and
-the captures are wrong** — unmeasured. Both later passes are on the branch:
-`D1b` `a8b66c5c`, `D1c` `e27d297a`, records at
-`docs/program/wp/RT-UNIT-CLOSURE-CONVERT-D1{b,c}.md`.
-
-**`D1b` — the membership basis is POSITIONAL DEPTH, not free variables.** All
-three production writers are
-`captures: (0..runtime_depth).map(RuntimeExpr::Var).collect()` and **nothing
-inspects a body**. ⭐ **The declaration is therefore TOTAL by construction** —
-which is the load-bearing fact for the ruling now pending.
-
-⭐ **The `StaticWorker` at de Bruijn 0 is NOT the cause**, and this kills the
-tempting repair: both failures are `index == env_len`, short by exactly one at
-the **outermost** position, and removing the worker makes the shortfall
-**worse**. That is why shifting `Var`s stays banned rather than merely
-discouraged — the measurement makes it look plausible.
-
-**`D1c` — the failing units NEVER REACH THAT PATH.** Zero records across the
-entire `ken-runtime` lib suite **and** the `ken-elaborator` lib suite. The empty
-list is a **literal written by a fixture author**:
-
-```rust
-// crates/ken-runtime/src/cranelift_backend/test_objects.rs:176, :220
-RuntimeExpr::LexicalClosure { captures: Vec::new(), params: vec!["response"], body: … }
+Description body is preserved at
+`docs/program/diary/pr-1528-description.md`. Check the suite first:
+
+```sh
+gh api repos/swe-toolkit/ken/commits/21fd46dc.../check-suites \
+  --jq '.check_suites[] | "\(.app.slug) \(.status) \(.conclusion//"-")"'
 ```
 
-among **92** empty-capture construction sites. ⛔ `D1b`'s own hard stop naming
-`ken-elaborator` as the required route was an **inference, not a measurement**,
-and its author corrected it in place.
+### THE PUBLISH REF IS FROZEN AT `21fd46dc`. A live trap was disarmed here.
 
-### ⛔ THE TRAP — do not clear the five reds by editing the fixtures
+**The ring committed `c4112237` (RT-ENTRY-TRAP-254 `D6`) onto
+`wp/RT-DECL-CLOSURE-PORT-typed-units` — which is the HEAD OF APPROVED PR
+#1528.** Local moved to `c4112237` while origin stayed at `21fd46dc`.
 
-**Do not "correct" the five fixtures while the ruling is open.** They came from
-`D4a`'s admitted population and exist to exercise something. Greening five reds
-by editing the fixtures that produce them is the exact shape of weakening a
-proof — and if the contract turns out to be the wider one, it erases the only
-witnesses to a real defect. **The reds stay until the Architect rules.**
+**The publisher force-pushes `refs/heads/$head_branch` by design, and
+`resolve_branch` derives `head_sha` from the BRANCH, not from `--target`.** So
+the queued re-run would have pushed `c4112237`, moved the PR head off the
+approved SHA, and voided `dec_4w8wn4ymn32cm`.
 
-### What each ruling outcome means, decided in advance
+**Disarmed 2026-08-06:** `D6` preserved at **`wp/RT-ENTRY-TRAP-254-d6`**
+(`c4112237`, nothing lost); `wp/RT-DECL-CLOSURE-PORT-typed-units` reset to
+`21fd46dc`, matching origin. Ring told to work on the `-d6` branch.
 
-| ruling | consequence |
-|---|---|
-| `captures` **must be total** | the fixtures are malformed; small correction; `RT-CONTSRC-PRODUCER-LOCAL`'s candidate unblocks cheaply; **I recut this node to that** and it stops sitting large on the critical path |
-| a body **may** reach an undeclared enclosing binding | real capability gap; the end-to-end measurement below becomes owed; **a substrate node follows and that expansion is the ARCHITECT's to authorize, not mine to cut** |
+⇒ **BEFORE ANY PUBLISHER RE-RUN, assert the branch is still at the approved
+SHA:**
 
-⚠ **The measurement still owed, CONDITIONAL on the ruling:** whether
-*elaborated* Ken programs ever produce a closure whose body outruns its declared
-captures. Neither suite reaches those sites, so that behaviour is **unmeasured —
-not shown correct.** It needs an end-to-end `ken-cli` corpus. ⛔ I did **not**
-authorize it, because whether it is needed depends on the ruling.
-
-⚠ **OPERATOR-FACING, and it is the campaign-sizing question they already
-hold:** only on the second ruling is this node large and sitting ahead of all
-seven `RecursiveDescent` retirement nodes, which funnel through
-`RT-DECL-CLOSURE-PORT`. That is a critical-path fact, not a Runtime execution
-problem. Do not decide it here.
-
-⭐ **Second silent stale anchor this campaign:** the `B2R` table's
-`CaptureSlot` at `semantic_ir.rs:438` now lands **six lines from the
-`capture_slots` derivation at `:444`** — a reader following the stale table
-would plausibly believe they were in the right place. All seven `B2R` anchors
-moved again; the re-derived table is in the `D1` record.
-
-⛔ **No merge is owed by me yet.** `RT-CONTSRC-PRODUCER-LOCAL` `D4b` is
-**discharged** at exact `b3ba2820` (Architect `evt_gqph7jhjeybx`), and that is
-its **last in-node checkpoint** — but the **node candidate stays held**, on
-three counts the Architect named: the five `Var: no runtime binding` reds are
-the `RT-UNIT-CLOSURE-CONVERT` gate; exact per-instance `V` accounting is still
-a candidate `AC` that the coarser diagnostic census does **not** silently
-replace; and CI/no-regression plus candidate review have not run.
-
-### The sequencing ruling I made at ~16:1xZ, so it is not re-litigated
-
-The Architect discharged `D4b` and referred the release boundary to me,
-reporting that two published artifacts contradict. **They do not — the
-contradiction was inside ONE file, six lines apart**, and it was mine.
-
-`docs/program/issues/RT-UNIT-CLOSURE-CONVERT.md` said in one section that the
-gate is *"prose, not a `depends_on` edge, because an edge both ways is a
-cycle... both `active`, one branch"* — and then in the next section that the
-node *"enters the frontier when `RT-CONTSRC-PRODUCER-LOCAL` merges, with no
-Steward pass in between."*
-
-⛔ **Read literally the second sentence is a DEADLOCK**: producer-local's
-candidate cannot close until unit-convert lands, so waiting for its merge waits
-forever. Both **frames** were consistent and correct all along; only the issue
-node's status prose was false. It was my standing one-release-ahead boilerplate
-applied to the one pair it does not govern.
-
-⭐ **The corpus settled this itself.** The same file names the governing
-precedent two paragraphs up — `RT-CONTSRC-PRODUCER-LOCAL` against
-`RT-DECL-CLOSURE-PORT`, **both `active`, one branch** — and that pattern is
-live right now: producer-local is `status: active` with an unmerged
-`depends_on`. I did not need a new rule, only to stop contradicting the one
-already there.
-
-**Ruling: the same-branch atomic-set sequence stands.** The two nodes land in
-one candidate and **both flip `merged` in one commit**. The `depends_on` edge
-is **retained** — it states checkpoint order, which is true, not merge order,
-which is not — and `status: active` is the lever that keeps the node off the
-releasable frontier (`gen-progress.sh` computes that frontier as `ready` AND
-every `depends_on` merged, so a stale `ready` advertises in-flight work as
-available to release).
-
-### `D3b` is checkpoint-APPROVED at exact `012a2c88`
-
-A comment/record-only **fidelity child** of `d14eddd6`, tree
-`35c72b8fa806b3761d39e2187c166b10a1ef966b`. The Architect verified the delta is
-exactly three paths, **every changed Rust line a `//` or `///` comment, zero
-non-comment Rust delta** — so QA's evidence on the parent still applies and was
-deliberately not re-run.
-
-**QA's evidence on `d14eddd6`:** `728 passed / 7 failed / 1 ignored`, both
-`check -p ken-runtime` and `check --profile test` clean, and the seven reds
-attributed exactly — 2 standing `D0`, 5 `D4a` at the unit-body `Var: no runtime
-binding` boundary.
-
-The child corrected three statements that still asserted the retired mechanism:
-the alias index is **not** a post-shift index; `D3b` consumes **planner-issued
-alias availability**, not source ABI position; and the record now names the
-**nearest-exact-alias lexical index**. Surviving `post-shift` mentions only name
-and explain the retired spelling, and the quoted old `source_abi_position`
-sentence is explicitly marked previously-true-and-now-false.
-
-⭐ **The frame addition was vindicated by measurement.** The implementer's
-mutation of "first coordinate-containing member" reds **only control 3**;
-controls 1 and 2 pass under it. `max` for `min` reds 1 and 2 but not 3. Neither
-catches the other — which is exactly why the frame says control 3 is not a
-variant of control 1.
-
-⭐ **Implementation facts worth keeping:** `nearest_exact_alias` is **one total
-rule shared by the planner that issues the claim and the consumer that
-revalidates it**, so they cannot drift; `min` is a **fold over the whole
-eligible set, not an early break** (an early break reads as first-match and a
-later reordering of the scan would silently change the answer). Two-stage
-`EntryFrame` is **two types**, so a half-stamped claim is unrepresentable rather
-than merely unwritten.
-
-### `D4b` — released 15:07Z, and what it owes
-
-It owns **behavioural activation** of the generated-frame route plus the
-post-admission census closeout:
-
-- prove the exact contract partition at the current base: `interned = V`,
-  `declined = R`, no extra route modality or special case;
-- **re-run the census with program fingerprint identity.** `C`/`V` may move with
-  fixtures; ⛔ **the three named `R` causes are the invariant**;
-- **exercise the generated-frame consumer behaviourally, not only by
-  construction controls** — this is what closes the standing **0/60** boundary
-  (no lowered program consumes a generated frame identity today);
-- preserve `D3b`'s separately validated views and every fail-closed boundary.
-
-⛔ **The five unit-body `Var` reds are known and out of scope.** No unit-frame
-edit, padding, `Var` shifting, caller-tail copying, or fabricated captures.
-`RT-UNIT-CLOSURE-CONVERT` is `ready` but dependent. **If that boundary blocks
-required `D4b` evidence, the answer is a hard stop naming the concrete missing
-route — never a weakened proof.**
-
-### The ruled law: nearest-exact-singleton-alias
-
-The exact-once **lexical position** precondition was FALSE and is retired. It
-conflated *does this position certainly hold `S`* with *is it the only position
-that holds `S`*; `D3b` needs only the first. `join` deduplicates
-`Closed([S])` records, so two positions each holding exactly `Closed([S])` are
-**proved aliases of one semantic source** — the measured `let y = x` at indices
-0 and 2. Select the **minimum de Bruijn index among eligible positions**, where
-eligible means the held authority is exactly `Closed([S])` against the complete
-`S` (coordinate, carrier, ownership, storage owner, affinity).
-
-An `If` yielding `S` or `T` joins to `Closed([S, T])` and is not eligible; if
-both branches yield `S` the join stays `Closed([S])`, which is the proof. **No
-SSA-equality instrument is needed** and adding one would duplicate a fact the
-planner authority already states.
-
-**Four operative sites were replaced, not two** — the ruling named `D3b`'s
-exact-once walk and the "two positions refuses" clause; the sweep also found
-`D2b`'s duplicate-membership fail-closed arm and **both** definitions of the
-`CurrentLexical` claim as carrying a "post-shift index", which is what an
-implementer builds the claim from.
-
-**The judgment call is SETTLED — CONFIRMED CORRECT, do not reopen.** I kept
-`exactly once` for a frame's **ordered capture projection** and for predeclared
-frame membership; the Architect verified the landed blob and ruled it right, with
-a sharper reason than mine, now recorded in the frame: the lexical case is
-licensed by `Closed([S])` from the forward semantic walk **plus de Bruijn
-ordering**, and a frame projection has **neither** — it declares ordered ABI
-slots. Two frame members carrying one full coordinate make the declared source
-slot non-unique, and **selecting one would reintroduce the unkeyed first-member
-rule at the ABI boundary.**
-
-⭐ **Two additions beyond the literal ruling**, both load-bearing: the six alias
-controls **with the note that control 3 is not a variant of control 1** (3
-selects the outer position, 1 the inner — a suite with only 1 and 2 passes under
-a positional shortcut too), and a **carve-out in the first-match ban**, which
-would otherwise have forbidden the law just ruled. The discriminator is
-**eligibility, not ordering**.
-
-### Standing results from that turn — do NOT re-measure
-
-- **Caller-frame multiplicity is NEGATIVE.** Direct owner = emission owner
-  40/40; capture indexed frame = enclosing spec's emission owner 20/20 — and
-  structurally, since `emission_owner` is a field of
-  `ContinuationSpecializationKey`.
-- **The capture consumer's source-frame defect is fixed.**
-- ⛔ The earlier specialization census suggesting multiplicity was a
-  **per-compile-id artifact**; its own author retired it. Not available as
-  evidence.
-- **Two-stage `EntryFrame` stays in `D3b`**, not moved to `D4b`. The 0/60
-  generated-owner consumptions explains the evidence boundary and does not
-  authorize a half-stamped accepted plan.
-- ⛔ **`41d2b1e5` is not an object on the branch** — quoted from memory in two
-  posts, corrected twice.
-
-### The gating multiplicity question is ANSWERED: NO multiplicity
-
-The measurement the previous window flagged as decisive came back **negative**,
-so no per-causal-edge claims are needed and no hard stop is owed on it.
-
-- direct emission: `defining_owner == unit.emission_owner()` — **40/40**
-- capture: indexed frame = the enclosing spec's emission owner — **20/20**
-
-Structural, not just observed: `emission_owner` is a **field of
-`ContinuationSpecializationKey`**, so two emitting frames give two keys and two
-interned specializations; a context interned on `(enclosing,
-worker_body_origin)` determines the enclosing unit and hence its emission owner.
-The source frame is a **function of the context's own key**, and the 60
-observations are its positive control.
-
-**The implementer's own first census was an artifact and it flagged it as one** —
-keyed on `ContinuationSpecializationId` alone, which is per-compile, so it merged
-different fixtures and reported one specialization consumed from three frames.
-The collision-immune form asks the question **within one plan**. Do not carry the
-old specialization census forward as evidence; the implementer explicitly retired
-it.
-
-**The same measurement found and fixed a live defect:** the frame whose
-`defining_abi_operands` the capture consumer indexes was a **predeclared**
-function in every observation, never the enclosing specialization.
-
-### The NEW hard stop: duplicate full-coordinate lexical claims
-
-Exact `456ec7e6`, `722 passed / 10 failed` — the 7 prior reds unchanged, 3 new
-ones sharing one cause. **Exact-once `CurrentLexical` membership fails:** at a
-predeclared direct-emission seat, `EntryAbi { owner 0, abi position 1,
-Parameter }` occurs at lexical indices **0 and 2**.
-
-This is lawful `let y = x` — a non-`Effect` `Let` pushes the bound expression's
-own authority, so one root identity occupies two distinct bindings. An `If` join
-may also carry the same coordinate with a **potentially different SSA value**.
-No lowering fixture reaches duplicate membership; the three rows are
-planner-only.
-
-**Innermost selection makes all 3 pass with no other regression, and the
-implementer declined to take it** — it is textually first-match and unmeasured
-for value equivalence. That refusal is the frame working; do not read the
-passing variant as an available shortcut.
-
-Two-stage finalization remains **deferred**, not built.
-
-**Lineage** (all of `fad24816` and later compile under `--profile test`; the
-mid-migration red at `e70ae04c` is cleared):
-
-```
-456ec7e6  record the two-stage path's reachability
-d81359ae  the deliverable record
-8298a321  re-cut the rows the new law changed
-fad24816  the capture consumer's source frame, measured
-e70ae04c  (the WIP partial the turn resumed from)
+```sh
+git rev-parse wp/RT-DECL-CLOSURE-PORT-typed-units   # MUST be 21fd46dc...
 ```
 
-**`41d2b1e5` is not an object on the branch.** It was quoted from memory in two
-posts and corrected twice; ignore it wherever it appears.
-
-### The earlier partial at `e70ae04c` — HISTORY, and its red is CLEARED
-
-*(Superseded: the turn resumed from it and reached `456ec7e6`. `fad24816` and
-later compile under `--profile test`. Kept because the description of what
-`1f6fc5cf` lands is still the accurate account of the representation.)*
-
-Lineage `f5e4fa9f` (base) → `1f6fc5cf` (production) → `e70ae04c` (WIP), all
-contained by `wp/RT-DECL-CLOSURE-PORT-typed-units`. `e70ae04c` did not compile
-under `--profile test` because the test migration was mid-flight — that was
-where the implementer chose to stop on a working-budget limit, not a
-regression, and it was never routed to QA.
-
-**The stop was working budget, not a defect.** The implementer stopped short of
-a restructure rather than strand a half-done one, and handed over an exact
-state. Read it as the frame working.
-
-**What `1f6fc5cf` lands and is believed correct:** availability as two
-consumer-specific planner-issued claims over `CurrentLexical` and `EntryFrame`,
-in a closed record keyed by consumer kind — no unkeyed vector, no first-match,
-no generic immediate slot, no arm falling back to the other's. At a predeclared
-direct-emission seat every input takes `CurrentLexical`, entry root and
-producer-local alike. `GeneratedContextCapture` is subsumed. All four clauses
-retired by name. Both cross-presentation cases fail closed.
-
-The load-bearing feasibility fact: `continuation_owner_entry_sources` already
-seeds the forward walk with `EntryAbi` coordinates, so this needed **no new
-walk** — the existing search finds either root arm exactly-once-or-refuses.
-
-One gain worth keeping: the injectivity law at the emission seat could
-previously only be scoped to the producer-local domain, because comparing an
-ABI-frame slot against a lexical index *was* the conflation. Every claim at one
-seat now names a position in the same environment, so the law widens to the
-whole emission.
-
-### The ruling that landed MID-TURN and supersedes part of it
-
-Architect `evt_7e04y1zmvrnps` (13:22Z) arrived after `1f6fc5cf` and invalidates
-two of the three things built in that same turn. It is binding and requires no
-frame recut:
-
-1. **Two-stage construction.** `ContinuationContextId` does not exist while
-   `exact_continuation_projection` interns a specialization key, so that phase
-   cannot build the final generated-`EntryFrame` claim and later mutation of an
-   interned projection is unlawful. `(enclosing_specialization,
-   worker_body_origin)` is a **provisional interning key only**; finalization
-   resolves it to exactly one `(ContinuationContextId,
-   ContinuationSpecializationId)`. Zero or multiple matches refuse. Never expose
-   a half-stamped claim. **Not built** — the partial keys on the pair.
-2. **The frame ID names the SOURCE/CALLER frame** whose `defining_abi_operands`
-   are indexed, not the target `context` argument to `call_declared_context`.
-   **Not built** — the partial names the enclosing specialization.
-3. **Caller-class ambiguity is fail-closed, not a widened slot.** Never reached.
-
-### The measurement that had to come first — DONE, answered negative
-
-*(Superseded by the LIVE block above: no multiplicity, 40/40 and 20/20 within
-plan, and the structural argument from `ContinuationSpecializationKey`. Kept
-only as the record of why it was sequenced ahead of the claim shape.)*
-
-**Three planner rows assert refusals the re-cut changed** — the crossed
-owner/context refusal (`"different producer owner"`) and the caller
-current-lexical proof (`"does not carry a current-"`). Their authority is not
-lost: under the re-cut the caller's proof lives in the enclosing
-specialization's own projection, built with a predeclared emitter and therefore
-carrying the `CurrentLexical` claim. **They must be re-cut onto that, not
-deleted.**
-
-### Framing debt: still clear
-
-`docs/program/wp/RT-UNIT-CLOSURE-CONVERT.md` exists and its node is now
-`active` — `D1` released 2026-08-05 from exact `b3ba2820`. ⛔ **The sentence
-that used to sit here — "it enters the frontier when `RT-CONTSRC-PRODUCER-LOCAL`
-merges, with no Steward pass in between" — was FALSE and is retired.** See the
-sequencing ruling in the LIVE block: the two nodes are one atomic set on one
-branch, so that merge never precedes this node.
-
-### `D3c` RETURNED: the position MOVES. `D3b`'s premise is FALSE.
-
-QA-approved at exact **`f5e4fa9f`** over preserved `bc371f13`; production
-unchanged, every added line test-gated. At a real predeclared seat under one
-intervening binder, `source_abi_position = 0` but the entry operand `v15` is at
-immediate position **1** — production reads `producer_env[0]` and gets `v44`,
-the producer-local the binder pushed. In bounds, identical lowering shape, and
-**`D3b`'s own consistency law passes**, because both numbers are 0. The seam
-emits a well-formed operand of the right contract carrying the wrong value.
-Zero-depth rows agree position-for-position in the same window, so the
-divergence is attributable to the binder.
-
-### The fidelity recut, and the block it had to clear (history)
-
-The Architect ruled (crossed-post confirmation): **the pairing table does not
-survive.** Availability becomes **consumer-specific planner-issued claims** over
-`CurrentLexical` and `EntryFrame`, with `GeneratedContextCapture` **subsumed**
-into the generated-context `EntryFrame` case. Retired by name: `RootIsImmediate`,
-the three-lawful/three-crossed table, `immediate_slot == source_abi_position`,
-`ContinuationImmediateResolution::root`.
-
-**A fourth pairing does not fix it** — one unqualified index cannot be authority
-for two consumers holding different environments (direct emission reads
-`producer_env`; context-capture append reads `defining_abi_operands`).
-
-Recut published at `evt_6wk0fznne72z1`, `origin/main` `b9bd4602`. **Three sites
-beyond the checkpoint carried the same premise and were swept**: `D1`'s "Entry
-ABI availability remains its existing case, untouched"; Finding 2's rejection
-rule, whose basis was emitter-class-for-root-domain; and `AC-2`, which named
-three consumers when the count is ten.
-
-⛔ **The first recut was BLOCKED by the Architect and is now corrected.** I
-transcribed the `D3b` ruling faithfully and left `D2b`'s operative two-arm law
-standing three hundred lines up, with a paragraph under it saying to read `D3b`
-instead — annotation around an operative deliverable. Corrected at
-`evt_5s943gevnthec`; `origin/main` **`10f492aa`**, frame blob
-**`07f49bac4b5a6ce98b359d0efb96928c31fb7a7e`**, object-verified. `D3b` unfrozen.
-
-⭐ **The reusable half:** I treated text as historical because the checkpoint
-that wrote it was discharged. **What makes text operative is whether a reader
-would build from it, not whether its author is done.** Sweep by that test. Two
-hits were then deliberately KEPT with the reason recorded at each — `D3a`'s
-refusal sentence (a true record of what it landed; rewriting falsifies history)
-and `D1`'s `unchanged` on the Entry ABI **root source** (correct — root identity
-is preserved; only *availability* was replaced).
-
-**Three scope calls already made (`evt_3n4k9xx4mvq8b`), do not re-litigate:**
-
-1. The correction **folds in** as the re-cut `D3b`. No new node — same seam,
-   same node, and this node's own `D1` already separated the two facts.
-2. `D3b`'s landed arms stay **directionally accepted evidence**. The premise is
-   what is false, so the re-cut takes the resolution law and the consistency
-   check, not the `GeneratedContextCapture` membership machinery or the
-   consumer-mutation apparatus.
-3. **The masking defect is scheduled work, so this is not latent.** The
-   implementer correctly noted the defect is unreachable in green programs
-   today because that population already dies at the unit-body boundary.
-   `RT-UNIT-CLOSURE-CONVERT` exists to clear that boundary — **landing it is
-   what unmasks this.** The correction lands before or with that node.
-
-The one-release-ahead sweep is **done and clean**: both nodes whose
-`depends_on` names `RT-CONTSRC-PRODUCER-LOCAL` — `RT-UNIT-CLOSURE-CONVERT` and
-`RT-CONTSRC-CALLABLE-CONTRACT` — are now `ready` with written frames, and all
-six `RT-DECL-CLOSURE-PORT` successors were already `ready` with frames. **There
-is no framing debt on this branch.** (`blocks` and `depends_on` disagree in
-this corpus; `gen-progress.sh` reads `depends_on`, so that is the one to grep.)
-
-**Do not schedule `RT-CONTSRC-CALLABLE-CONTRACT` ahead of the campaign** — it
-closes 1 of 83 instances and 0 of the 6 failing `D0` rows. That priority is
-stated in section 0 of its frame rather than encoded as a withheld status,
-which is how it was expressed before and which made it look unstarted.
-
-**`D3b` landed at `bc371f13` and is PRESERVATION-ONLY, not complete**
-(Architect `evt_56jh63qntwtfe`). My scope recut: `evt_7he9qv8wbv1yq`. `D4a` was
-QA-approved at `ac897a08` (`evt_7yydatq78eqvg`).
-
-⭐ **The two boundaries, and why the split went the way it did.** Item 2 — the
-`EntryAbi` premise — **folds in** as `D3c` and **sequences ahead of any further
-`D3b` work**, because `D3b`'s pairing law couples root provenance to immediate
-availability and its *premise* is what is in doubt (QA proved *fidelity*, which
-is a different claim). Item 1 — the unit-body short environment — **cut out** as
-[[RT-UNIT-CLOSURE-CONVERT]] rather than folded, because
-`RT-CONTSRC-PRODUCER-LOCAL` is already four checkpoints past its own recut, was
-itself cut out of `D7`, and is the sole gate on all seven campaign nodes.
-
-⛔⛔ **THE SIZING FACT THAT WILL BE GOT WRONG:** the Architect's mechanism list
-reads as an `L` node. It is not. **`RT-FNSPLIT-B2R` is MERGED and landed the
-closure-conversion CONTRACT `Inert only`** — typed capture slots, exact
-free-variable identities, and the reject-on-missing/extra/mismatched validator
-are **production code on `main` today**, with zero executable edge. `B2F`,
-`C3-ACTIVATION` and `RT-NATIVE-FNSPLIT` are **also merged**. ⇒ The node
-**activates merged substrate** for a population that did not exist until `D4a`
-admitted it. ⭐ Its `D1` is an inventory and that inventory is the sizing
-instrument. ⛔ Do not size it before that answer exists.
-
-⚠ **`runtime-leader` STALLED AT CAPACITY at ~11:47Z and I re-prompted it.** The
-QA approval reached it, the model refused with *"Selected model is at capacity"*,
-and ⛔ **the Codex turn ended SILENTLY** — approval unprocessed, ring frozen,
-pane looking merely quiet. Re-prompt recovered it (`• Working`). ⭐ **Capacity is
-transient and the seat does NOT self-recover; a re-prompt is the whole fix.**
-
-⚠ **Earlier, the implementer was STRANDED, not idle** — composer held unsubmitted
-text behind a finished turn. ⛔ **`handoff-gate-compact.sh` leads with a bare
-`Enter`, which would have SUBMITTED that strand instead of compacting.** Hand-drove
-one pane with a clear-first; `C-u` did not clear and the render stayed stale, so
-a probe string proved the buffer empty before staging. ⭐ **The displayed line is
-not the buffer.**
-
-### `D4a` ROUND 2 — gated YES, run once, and where it actually stands
-
-**The Architect gated my ruling YES** (`evt_65xkzqppdqdaj`), agreeing the fixture
-supplies only the population. ⭐ **It added the half most easily lost: the `D4a`
-mutation proves the INSTRUMENT; the `D3b` mutation proves the CONSUMER.** Once
-the real `D3b` consumer exists, substituting the locator index for
-`post_shift_index` must make the same fixture fail at the consumption boundary.
-`D4a` passing does not discharge that. It also pinned condition 5 to my frame
-correction: the fixture may add to `V`, **never to `R`**; re-census `C`/`V` at
-the new base; any new `R` member or decline cause is a hard stop.
-
-**Released (`evt_6cfjzp9yzvw8g`), run, nothing landed** — tree restored to
-`52422da5`, `724/7` unchanged, branch free.
-
-⭐ **THE ORIGINAL BLOCKER IS CLEARED.** Three lanes measured through the real
-production path: `ConsoleRead` refused (the old hard stop), `ConsoleIsTerminal`
-**visited but plans no seat at all** (it returns `Bool` before seat synthesis),
-and **`ConsoleWrite` lowers, reaches the emission seam, and produces a
-`CurrentLexical` record**. So a lawful lowerable shifted-population fixture is
-reachable and the lane question is answered.
-
-⛔⛔ **THE "NO SHIFT" READING WAS AN INSTRUMENT DEFECT, AND I PUBLISHED IT.** The
-mid-round report said no nesting could shift the value, and I wrote its
-scrutinee hypothesis into this file as the next bounded act. ⭐ **The first half
-was true and the second half was wrong — the probe recorded ONE LINE PER SEAM,
-but the seam carries a VECTOR of continuation inputs.** The shifted input was at
-**ordinal 1** the whole time, in the shape already built:
-
-| ordinal | binding | locator index | post-shift index |
-|---|---|---|---|
-| 0 | the enclosing `Match`'s case binder | 0 | 0 |
-| 1 | the `Let`-bound host-effect result | 0 | **1** |
-
-⭐ **No nesting search was needed and none should have been scheduled.** This is
-exactly the recorded lesson *a short-circuiting probe measures the first cause,
-not the set* — it reports one member of a vector and reads as a property of the
-population. ⛔ **The `env_len` observations were the tell and I read them as the
-obstacle:** growing to 5 while "the index" stayed 0 was the probe holding ordinal
-0 fixed, not the program refusing to shift.
-
-**MEASURED at the production planner and lowering path**
-(`recursive_port_process_compiles`):
-
-```
-post_shift_index = 1        locator.environment_index = 0
-producer_env[1] = HostResult(v246, Ok, Err)   <- creation seat recorded v246
-producer_env[0] = HostResult(v466, Ok, Err)   <- the decoy
-```
-
-⭐ **The decoy is a second `ConsoleWrite`** in the `Match` scrutinee's constructor
-argument, matching on carrier, phase, lowering shape and constructor pair — **only
-the SSA word differs**, which forces the oracle to be the SSA word rather than any
-incidental discriminator.
-
-⭐ **Oracle independence, the part `D3b` relies on:** lowering records the operand
-it builds at the binder-creation seat, keyed by its own occurrence id with no
-environment index in play; the seam half reads by index; the two join on
-`binding_origin`, so **a wrong index breaks the join.** No planner re-walk, no
-index arithmetic, no fixture-authored expected index, no direct construction.
-
-**Mutations:** `UseLocatorIndex` and `SwapSlots` committed inside the control,
-each asserting its own flip. ⭐ **`SwapSlots` is not redundant** — both indices
-stay lawful and in bounds, so it survives a repair that merely bounds-checks.
-Three more run by hand and reverted, including *drop the intervening binder*,
-which reds loudly if the fixture stops being shifted — **act 1's gap, closed.**
-
-⚠ **One trap a successor must not re-pay:** `ConsoleIsTerminal` looks like a free
-win from the consumer list and is not — it returns `Bool` before seat synthesis
-and plans no seat at all.
-
-### THE `D4a` BIND — RULED, and round 1's stop. History; do not re-derive.
-
-**The bind was:** the Architect required (`evt_tkzyc61rmd3`) a four-part proof at
-one exact predeclared emission — a reaching `CurrentLexical` with
-`post_shift_index != locator.environment_index`, the real operand at each index,
-an **independent lowering-side** discrimination that does not re-run the planner
-walk as its oracle, and a bounded wrong-index mutation. But the only durable
-shifted fixture emits **zero seam records**: its `Let`-bound effect is
-`HostOpV1::ConsoleRead`, absent from the fixed 13-element
-`CRANELIFT_HOST_EFFECT_CONSUMERS_V1`, so lowering refuses it as an unavailable
-lane before the seam. ⭐ **The fixture is shifted precisely BY the construct that
-makes it unlowerable.** Every route to the seam was already prohibited, so the
-required evidence was unobtainable and choosing what gives was a ruling.
-
-**My ruling: a lowerable shifted fixture is AUTHORIZED**, as a second bounded
-`D4a` extension round. ⛔ **No new node** — it folds. It lifts exactly one
-prohibition (*"do not add a new population member"*) and nothing else. Full text
-is now in the frame under checkpoint `D4a`; the three constraints are:
-
-1. ⭐ **The fixture supplies the POPULATION; the MUTATION supplies the
-   discrimination.** Building a fixture to exhibit the shift and then observing
-   the shift measures nothing. ⛔ **No mutation row ⇒ no fixture**, and the
-   outcome is a hard stop, not a green suite.
-2. ⛔ **Do not inherit `D2b`'s effect lane.** The shifted value may be a case
-   binder; those are already in `V`. Reaching for `ConsoleWrite` is analogy from
-   the old fixture's shape, not derivation from the requirement.
-3. ⛔ **`contsrc_d2_both_binding_kinds_fixture` is untouched.** Additive only.
-
-**And `D4b`'s counts are now correct in the frame:** `C`=83 / `V`=80 are
-**measurements at `e6d4f085`, not invariants** — the discharge condition already
-said *post-admission* census. ⛔ **`R`'s three named causes are the invariant.**
-A new fixture adding to `R` is a real finding; adding to `V` leaves the partition
-intact.
-
-⚠ **The grounding move worth repeating:** the prohibition I lifted was the
-Architect's, and their own release named this outcome as *"the new boundary"* and
-handed it back. A boundary is a scope call, so it was mine — but the soundness
-axis stays theirs, which is why this is one confirming gate and not a
-notification.
-
-⛔ **`D4a` measurement is a distinct axis from `D4a` admission.** `52422da5`
-already proves admission, a real depth-one predeclared emission, length
-agreement and planner-side placement. **Equal indices make the pass-through
-defect observationally identical**, and length agreement does not identify the
-lowering value — which is why the Architect did not discharge it.
-
-⛔ **THE BINDING ORDER IS FOUR, NOT MY TWO** (Architect `evt_7vc8zh0rvqyps`,
-superseding my own `evt_11esqaep9awbs`):
-
-1. **`D3a`** — non-lowering closure; both lowering consumers explicitly refuse;
-   seam and pending population stay **visible**. **DONE, QA-approved.**
-2. **`D4a`** — bounded admission and measurement. ⭐ **MAY BE DELIBERATELY RED.**
-   It exists to produce real reaching producer-local emissions so nonzero-depth
-   `CurrentLexical` correspondence can be measured. ⛔ A red here is the
-   instrument working, **not** a regression to chase.
-3. **`D3b`** — lowering closure, only after that evidence exists; seam deleted
-   only when its closed population is empty.
-4. **`D4b`** — closeout: `interned = V`, `declined = R`.
-
-⛔ **My recut said `D3b` lands "with or after `D4`" and that was
-under-specified where it counts** — `D4` as one unit cannot both *create* the
-population and *prove* the partition, so it never named what produces `D3b`'s
-evidence. `D4a` is that mechanism. ⭐ Same defect class as the `D1` clause: a
-load-bearing sequencing term left ambiguous across two things.
-
-⛔ **Option 2 is INVALID, not merely worse:** `D4` cannot safely admit before
-the lowering consumers are explicitly fail-closed — hence `D3a` before `D4a`.
-
-⛔ **The ABI ruling, so it is not re-litigated:** `AbiContinuationInputAuthority`
-carries a **closed tagged provenance sum** — `EntryAbi { source_owner }` |
-`ProducerLocal { binding_owner }` — keeping ordinal and affinity. A domain-total
-bare owner was **rejected as lossy**: it collapses `EntryAbi { source_owner: X }`
-and `ProducerLocal { binding_owner: X }` into the same value.
-
-⛔ **"Any mismatch is a hard stop" is CORRECTED as overbroad**
-(`evt_6p6vf0aqnjn3g`). Seam 1 must reject `CurrentLexical` at a specialization
-emitter before indexing any operand run; a predeclared emitter must reject
-`GeneratedContextCapture`. Applying the `CurrentLexical` comparison to a
-specialization emitter is **itself a category error**. ⛔ Do not carry the old
-phrasing forward from earlier posts in the thread.
-
-⚠ **It woke on the mention, and that contradicts this file's own wake-asymmetry
-claim below.** The standing note says a Claude implementer's mention push never
-reaches the session. It did here. ⛔ Do not rely on either reading — **read the
-pane before rousing**, which is what caught it. I did not establish the
-mechanism, so this is an observation, not a retraction.
-
-**`D2b` is QA-APPROVED at exact `7316e13a`** (`evt_3w4s25ta13hc4`), lineage
-`e6d4f085` (base) → `2bd724cd` (record) → `7316e13a`. `D3` was released on top
-(`evt_7rk80sgaq07fg`), the implementer scoped it and **made no edits**
-(`evt_5pqxd21sw5m57`) — branch free, tree clean. ⛔ No merge is owed by me: the
-node is mid-flight and the branch accumulates until the WP completes.
-
-⭐ **This ring keeps stopping clean rather than half-applying, twice now.** Both
-times it posted the scoping instead of holding it in context, so compaction cost
-none of it. Read the stops as the frames working, not as under-delivery.
-
-**`D3b`, `D4b`, candidate, `D6` closure, `#27`/case-emission, the call-result
-SCC and downstream `D7` all remain held.** ⛔ `D3a` is DONE (QA-approved) and
-`D4a` is ruled-but-ungated, not building — neither is merely held. WIP clock:
-derive it from the latest reset event in the thread, never from a stamped
-deadline.
-
-### Where the node stands
-
-| deliverable | state |
+**`--target <sha>` does NOT protect you.** The publisher resolves the SHA to a
+branch and then re-reads that branch's tip.
+
+### RT-ENTRY-TRAP-254 is CLOSED (superseded). The repair is RT-SRCBODY-BIND-ORDER.
+
+**Architect mechanism ruling `evt_7yfs6qxp9hm5b`.** The `D0`-`D9` chain found a
+**general multi-parameter source-body binding permutation**; the skipped
+`ProcessInput` row is **one discriminator** for it.
+
+**THE DEFECT.** `lowering/units.rs:3701-3790` does **one slot-order walk doing
+two jobs**: it records `defining_abi_operands` in ABI descriptor order
+(**correct**) and pushes the same operands into `env` in that order
+(**wrong**). A declaration body reads **de Bruijn-NEAREST-FIRST**, and
+`core.rs:14705-14714` **already states** reverse-then-append. So
+`main(input, caps)` gives `env = [input, caps]` while the body names `input` as
+`Var(1)` ⇒ `Var(1)` reads `ProgramCaps`. **A bug fix restoring a stated
+contract, not a mechanism change.**
+
+**REPAIR:** keep the ABI run and `defining_abi_operands` unchanged; build the
+semantic env as `reverse(Parameter run) ++ Capture run in D3 order`.
+
+**`D9`'s ATTRIBUTION WAS REFUTED and the refutation is load-bearing.** It blamed
+the common transfer coordinate. `call_declared_unit_target` **already pairs
+positionally**, `carry_call_input` cannot select a sibling or change position,
+and **a carried word bypasses `transfer_into_carrier` entirely** — so a caller
+occurrence there cannot change which word occupies slot 0. ⇒ **Per-argument
+transfer coordinates are BANNED: a design change that would leave the defect
+intact.** Also banned: reversing the process root's ABI roles, rewriting
+continuation specializations, touching `carry_source_call_inputs`,
+`carry_call_input`, `call_declared_unit_target`, or `mod.rs:5958-5978`.
+
+**BLAST RADIUS — AGGREGATE-NESS IS NOT CAUSAL.** Not one row, and **not "every
+aggregate through `call_declared_unit_target`" — that framing was the Steward's
+and is wrong.** The class is **every activated non-root functionized source-body
+unit with at least two parameters whose body distinguishes parameter
+positions**; it surfaces for ints, bools, capabilities, borrowed handles or
+constructors. The 97-`Constructor` census does **not** bound it. **Unary units,
+unused parameters and equal values MASK it.** Operator told; **it does not alter
+the publish ruling by itself** but is materially larger in logical scope.
+
+**`D2` is not optional:** generated contexts claim **byte-for-byte equivalence**
+with the raw unit while installing parameter-then-capture order
+(`units.rs:2523-2547`). Fixing the unit alone makes that committed claim
+**false** — worse than the original defect, because the claim is what a reader
+relies on.
+
+**Four controls, and control 1 is the important one:** a two-parameter
+declaration with distinct **NONAGGREGATE** values reading both positions
+(proves the fix is not aggregate-shaped); the `ProcessInput`/`ProgramCaps`
+discriminator; a root-adapter control proving its ABI-role order was **not**
+reversed; raw-worker vs generated-context equivalence on a body that
+**distinguishes** its parameters (a unary body proves nothing — unary units are
+invariant under reversal). **Expect CI reds and attribute each individually;
+never re-baseline.**
+
+**`D6` landed** (stale carried-scrutinee reachability comment) at `c4112237` on
+`wp/RT-ENTRY-TRAP-254-d6` — follow-up PR when Actions returns.
+
+### RT-SRCBODY-BIND-ORDER in flight — candidate `5d388e37`, QA HELD
+
+- **`5d388e37`** meets `D1`, `D2`, `D4`, all four controls red-before-green.
+- **`D3` control 4 and `AC-3` were AMENDED by the Steward** (`evt_gpekyt7jzb67`).
+  The required population does not exist — no body is present at both hosts,
+  retargeted raw workers are template-only, **every generated-context worker is
+  unary**. The ring reported the weakness instead of widening the fixture.
+  **`AC-3` as originally written was UNDISCHARGEABLE and that was a frame defect
+  of mine.**
+- **The ruling, one fact:** `reverse([p]) ++ captures` is identical to the
+  parameter-then-capture order already installed, so **`D2` is INERT at unary
+  arity.** ⇒ the obligation becomes an **ACTIVATION GATE** on the first
+  multi-parameter generated-context worker, shipped as a **TRANSITION
+  SENTINEL** that asserts the measured population and reddens by itself.
+  **Non-vacuity required:** observed RED against a hand-added two-parameter
+  worker, then restored. **`AC-3` must NOT be recorded as "equivalence
+  verified"** — equivalence is unfalsifiable at unary arity.
+- **NOT authorized:** changing the checked IH call-site arity to manufacture the
+  fixture. Population expansion into a checked mechanism, and the constraint
+  demanding it was **this frame's own prose**.
+- **ARCHITECT is reviewing `D3c` unrequested** (`evt_28gv50xst6sqf`): tracing
+  `RootIsImmediate` from its stored coordinate into the **post-`D1` semantic
+  environment**. **This is the right question and I did not think to ask it** —
+  `D1` reorders the semantic env, and `D3c`'s per-consumer availability claims
+  are keyed to that env, so a claim could now name the wrong value. **QA is
+  correctly held pending it. Do not release QA or alter `D3c` until it lands.**
+
+### Compaction verification: a LOW ctx is proof, a HIGH ctx is NOT disproof
+
+**Measured 2026-08-06 on runtime-implementer.** `handoff-gate-compact.sh`
+returned, the pane still read `ctx 27%`, and a **full-stream** grep for
+`Compacting|Context compacted` returned **0**. I resent `/compact` to that one
+pane and ctx went **27% -> 7%** — while the marker grep *still* returned **0**.
+
+⇒ **The marker text is transient and its absence proves nothing** (the progress
+bar clears). **The ctx number showing a DROP is conclusive; the ctx number
+showing HIGH is inconclusive**, because it can be a stale render.
+
+**So verify in this order:** ctx dropped ⇒ done. Otherwise resend to that one
+pane and re-check ctx. Do not conclude "did not compact" from an absent marker,
+and do not conclude "did compact" from the script returning.
+
+### GATE MISS, MINE: I released a new node without the before-work compaction
+
+**`COORDINATION §15` / `steward/compaction.md`: always compact before new work,
+no exceptions, no threshold, ctx unread.** I released `RT-SRCBODY-BIND-ORDER`
+after roughly fifteen consecutive diagnostic releases to the same ring **and
+never ran the handoff gate once.** The **implementer asked for the seam** —
+the backstop caught what the gate should have.
+
+⇒ **The gate is the fix, the ctx scan is only the backstop.** When the scan (or
+a seat's own request) is what catches it, **the gate already failed upstream.**
+Run `scripts/handoff-gate-compact.sh <every member>` at each new-node release.
+
+**Mechanism note for next time:** the script does `git reset --hard
+origin/main` on each worktree. It was safe here **only because** all three
+runtime worktrees sat on their own `<role>/work` branches at `3015aafd ==
+origin/main`, so no protected ref was checked out. **Check that first** — the
+frozen publish ref `wp/RT-DECL-CLOSURE-PORT-typed-units` (`21fd46dc`) and
+`wp/RT-ENTRY-TRAP-254-d6` (`c4112237`) must never be the checked-out branch when
+it runs. **And note the base mismatch:** this node's base is `21fd46dc`, not
+`origin/main`, so the reset puts worktrees on the wrong base and the ring must
+re-checkout.
+
+### Origin's WP ref was DIVERGENT and the force-update was safe
+
+`origin/wp/RT-DECL-CLOSURE-PORT-typed-units` stood at `03f0510c` — **34 commits
+that were neither ancestor nor descendant** of the candidate, left by the failed
+`fc758323` publish. **`git cherry 21fd46dc 03f0510c` returned `-` for all 34**,
+so every one is patch-equivalent-present in the candidate. The publisher's
+`--force-with-lease` lost nothing. **Checked before the push, not after.**
+
+### The five rows that ship marked `#[ignore]`
+
+All in `crates/ken-cli/tests/px4b_native_production.rs`, Linux-only. Each
+comment carries the exact observed signature, the owning node, and the
+branch-introduced provenance (absent at merge base `e6b4a13b` and `main`
+`3015aafd`).
+
+| test | owner |
 |---|---|
-| `D0` `12d9612a` (zero delta), `D1` `77a24320` | accepted `evt_5zkydewv5kspb` |
-| `D2` identity + value contract | accepted preservation at exact `e6d4f085` |
-| `D2b` immediate availability | **QA-APPROVED** exact `7316e13a` — `evt_3w4s25ta13hc4` |
-| `D3a` | **QA-APPROVED** exact `14b111ae` — `evt_62g4pganvk6f6` |
-| `D4a` | **QA-APPROVED** exact `ac897a08` — `evt_7yydatq78eqvg`. `V` admitted `52422da5`; rd 1 hard stop `evt_7xwdw87mgf1q3`; rd 2 ruled `evt_28xx7t69z7j76`, gated `evt_65xkzqppdqdaj`, shifted fixture landed |
-| `D3b` / `D4b` | held, in that order |
-
-⛔ **There is no undivided `D4` any more.** The SET EQUALITY definition below
-still governs — it is what **`D4b`** discharges; **`D4a`** admits `V` to create
-the population `D3b` needs to measure.
-
-**`D2`'s route was blocked once and corrected twice, and both stops were
-sound.** `a5a6ce9b` stamped one blanket `ValueWord` contract across a
-`ComputationalMatch` binder run that is **not homogeneous** — it is ordered
-`[recursive IH binders, constructor argument binders, outer environment]`.
-`5377d2ab` fixed the argument half by **reading** the carrier from the
-scrutinee's shape instead of choosing one, and hard-stopped on the IH half
-rather than defaulting. `e6d4f085` added the census and the fidelity
-correction.
-
-### `D4` is now SET EQUALITY, not closure
-
-Unit: **one call to `exact_continuation_source_environment`**, identified by
-program fingerprint + consumer owner + continuation origin + producer construct
-origin + recursive position + closure origin.
-
-| set | contents |
-|---|---|
-| `C` | all **83** `(identity, full required vector)` instances |
-| `V` | the **80** fully closed under the current value-slot authority |
-| `R = C \ V` | exactly **3**: `OPEN[ih-binder]`, `OPEN[let-value:Construct]`, `AMBIG2[let-value:If]` |
-
-`D4` discharges when `interned = V` and `declined = R`. ⭐ **All 17 parity
-instances are in `V`** — the population behind the six failing `D0` rows, and
-the critical-path fact. ⛔ Call the three **outside-this-contract-domain
-residuals**, never "unrepresentable" — the Architect corrected my wording, and
-nothing claims a future authority cannot represent them.
-
-⛔ **The program fingerprint is load-bearing.** `StaticOriginId`s are per-compile,
-so without it edges from different fixtures collide and the census silently
-undercounts: a first pass reported 58 identities of which six were collisions.
-
-### `D2b` — why `D3` hard-stopped, and it is MY frame this time
-
-`D3` reached the real emission seam and measured that **a producer-local value
-has no member in the run the seam indexes.** Resolving its arm would need one of
-three exits this node bans: widening the emitting function's input ABI run,
-giving the seam a second non-ABI environment, or reusing a convention slot.
-
-⛔ **The root cause is a `D1` clause I wrote.** It promised "an exact
-emission-time locator into the environment that actually contains it" and
-**never said which environment**. `D2` read it as the semantic environment and
-populated a scope-relative `(environment_origin, environment_index)`; the seam
-indexes a different space. **A load-bearing term left spanning two coordinate
-spaces** — a different defect class from this campaign's earlier four, which
-were false laws. Nobody could have discharged it as written. `D1`'s wording is
-now corrected in place.
-
-⛔ **Do not pin "`producer_env` is always the ABI operand run."** The Architect's
-precision correction: the 61 records prove the **currently admitted** population
-only, and there are **two** consumers — the retained-frame seat passes the
-current `LoweringEnvironmentBinding` run, the detached/generated-context seats
-read a function-local ABI operand run.
-
-⭐ **The implementer withheld six of nine consumer sites** rather than land a
-partial that would leave the seam no longer naming its own remaining work. That
-is now frame law: no partial `D3`. It also **withdrew its own parity remark**
-unprompted — it had reverted the probe while the parity run was in flight, so
-the empty result could not distinguish "no parity emission reaches this seam"
-from "the probe was not compiled in". An absence presented as corroboration,
-caught and retracted by its author before anyone read the stop through it.
-
-### The lesson from my own fork, because it will recur
-
-I put a **binary** fork to the ring: zero IH-bearing edges ⇒ no node; nonzero ⇒
-substrate first and `D3` waits. The census returned **1 of 83**, and the leader
-applied my rule correctly — but the decisive fact had no cell in it: **the IH
-edge is one of three non-closed positions from three causes, and a callable
-contract closes exactly one.** So "every environment closed" was unreachable by
-any node in the graph, with or without the substrate. That is a deadlock, not a
-gate — the same thing checkpoint `1f` retired.
-
-⇒ **State a fork by what would DECIDE it, not by the shape of the number you
-expect back.** The census was still the right call; the defect was in how I
-pre-committed to reading it.
-
-### `RT-CONTSRC-CALLABLE-CONTRACT` — filed, `draft` on purpose
-
-A real capability gap: production continuation inputs have **no callable domain
-at all** (`BoundaryUseAvail::Callable` is `#[cfg(test)]`-only), and a recursive
-IH is a compiler-only `StaticWorker` with no word, tag, descriptor or carrier.
-Grounded in the Architect's ruling plus three source measurements.
-
-⛔ **Held `draft` deliberately — it is NOT framing debt.** It closes 1 of 83
-instances and 0 of 6 failing rows, and the one-release-ahead policy is already
-satisfied by the six framed successors of `RT-DECL-CLOSURE-PORT`. Promoting it
-would put an off-critical-path node in front of a reader looking for the next
-kickoff.
-
-### Two things about this node that must not be misread later
-
-**None of `D2`'s stops was a sizing defect.** The heterogeneous-run defect was
-caught at the gate; the IH boundary was found by building, which is the only way
-it could have been found. Four *earlier* stops on this campaign were my frames
-asserting laws the measured plane does not support — do not count these with
-them.
-
-⭐ **The implementer retired its own invented `ValueWord` blanket before the gate
-ruled on it**, reported the IH half as three measured grounds rather than picking
-a default, and declined to choose the graph. That is what these frames are
-written to produce.
-
-> ### The mistake I made at 07:36Z, because the shape recurs
->
-> My frame-correction post `evt_270c4gk9trrmv` carried the line "`D2`-`D4`
-> remain unreleased pending the Architect's gate". **It was already false when
-> it landed** — the gate and `D2`'s release had posted 80 and 57 seconds
-> earlier, and I had composed against the state I last measured. The Architect
-> caught it in under a minute (`evt_1g2ssacct76tq`); corrected at
-> `evt_7rbseqb0xnsaq`.
->
-> ⇒ **A post whose subject is NOT release state must not assert release state.**
-> A status claim carried as background inherits the message's authority and
-> escapes its scrutiny. Re-read the channel immediately before posting anything
-> that names what is released.
-
-### The three frame corrections, so they are not re-litigated
-
-From `evt_1srfqjmkp5eh8`, all published:
-
-1. **`D3`'s consumer count was 3 in prose, 10 measured.** Frame now sizes `D3`
-   from the in-tree seam function `entry_abi_pending_producer_local`, not from
-   frame prose. **A frame-side count of a code-side population goes stale the
-   moment the code moves.**
-2. **`AC-1`'s six red rows are TWO populations** — the `AC-1` row refuses at
-   `Match: scrutinee is not a constructor value`, the other five at
-   `ComputationalMatch: ...`. Greening the five does not discharge `AC-1`, or
-   the reverse. Invisible in `1 passed / 6 failed`.
-3. **`AC-5` is pinned to `D4`.** It guards broad admission changing the interned
-   population; before `D4` admits anything that condition is unreachable, so an
-   earlier "controls green" report is true and meaningless while reading as
-   cleared risk.
-
-⚠ **A live-verb grep nearly reported this ring idle.** The implementer's footer
-read `✻ Actualizing… (1m 9s)` — a verb absent from the tick's pattern list, so
-the sweep printed a blank status. **The busy-check is wrong in both directions
-and the verb list is open-ended: a missing verb reads exactly like idle.**
-Resolve any blank or `(no-footer)` status by reading the pane, never by
-extending the pattern and trusting it.
-
-⭐ **Confirmed open-ended, twice more: `Baked for 5m 51s` and `Grooving…` both
-printed `(no-footer)`.** ⛔ Do not chase the list. ⭐ **The cheap independent
-instrument is `ctx`, which the tick already captures: a ctx that ROSE between
-two reads is work, whatever verb is rendering.** It resolved `Grooving` without
-a second pane read.
-
-- Kick (fresh root, its own thread): **`evt_7h92n2tr7pbrm`**.
-- `D7` rescope-in-place, posted in `thr_3rx07jfewhjhf`: `evt_14a9cee7fkv2s`.
-- Handoff gate ran on all three seats (all 0 ahead, 0 dirty, so the
-  `reset --hard` was safe). **Confirmed:** implementer ctx 0% with skills
-  restored, both Codex seats show `Context compacted`.
-
-**The wake asymmetry is the thing to watch.** `runtime-leader` and `runtime-qa`
-are **Codex** (`gpt-5.6-terra`) and woke on the mention via the tmux backend —
-the leader was Working within a minute. **`runtime-implementer` is Claude
-(Opus 5) and its mention push never reaches the session.** So the leader's
-dispatch to it will not wake it either. If it sits idle at an empty composer,
-rouse mechanically: `tmux send-keys -t moot-runtime-implementer -l "<one line:
-run get_recent_context, pick up evt_7h92n2tr7pbrm; re-orient per CLAUDE.md>"`
-then a **separate** `Enter`. A wake is not task routing and does not breach
-Steward-never-to-implementer.
-
-### The branch trap — RESOLVED 07:1xZ, kept because it recurs every release
-
-**Confirmed clear by an independent instrument:** the handoff gate's own
-post-compaction worktree read shows `runtime-implementer` at
-**`179af863 (wp/RT-DECL-CLOSURE-PORT-typed-units)`**, so it is building on the
-proved lineage, not bare `main`. No `preserved/` refs were created — nothing was
-ahead. The description below is the standing hazard, not an open item.
-
-**`179af863` is contained by exactly ONE ref —
-`wp/RT-DECL-CLOSURE-PORT-typed-units` — and NO worktree has it checked out.**
-All three runtime seats sit on their own `*/work` branches at 0 ahead of `main`.
-⇒ The implementer must **explicitly check out that branch** before touching the
-new node. If it starts on `runtime-implementer/work` it builds on bare `main`
-without checkpoints 1/`1b`/`1c`, and a grep for its own `D7` symbols comes back
-empty — which reads as missing work rather than as a wrong branch.
-
-### What `1e` got wrong, and the defect is reusable
-
-`1e` ruled the minimal scope was the host-effect-result slot alone. **Falsified**
-(`evt_5ngh190h9b1k5`) and the design rejected by the Architect
-(`evt_75k8cydbj5127`): every effect-bearing closure needs **two** `Open` inputs,
-ordinal 0 an effect result and ordinal 1 a case binder, so the
-effect-result-only population is **zero** and closing it moves no row.
-
-**The defect: `1d`'s census recorded the DECLINING ordinal — the first `Open` —
-and I read it as a REQUIREMENT census.** "6 effect edges = the 6 failing rows"
-was a pair count short-circuited at the first `Open`, compared against a `161`
-in a different unit. Corrected closure-edge census: **34 case-binder-only, 4
-mixed, 1 `Construct`-only.** A first-failure statistic is silent about every
-input after the one that failed, so it cannot support a minimality claim.
-
-**Also settled:** there is no lawful ABI seat for a mid-body value — the
-Architect closed all five exits. A producer-local value is a **third
-availability class**, which is why this is a representation boundary and not a
-missing enum arm.
-
-### The rulings now standing
-
-- **BROAD admission.** All newly representable candidates may intern, not the 4
-  `D0` edges alone — the narrow option needs a real edge-selection authority
-  with every cheap substitute forbidden. This **dissolves** route modality.
-- **~34 edges newly intern**, changing emitted code on green programs. Expected;
-  the per-row `D0` and `718/2` baselines are the control.
-- **`D7` retired the clause** blocking candidate/QA/`D6`/`AC-4` "while the row
-  stands unreached" — it could never be discharged by the node holding it.
-
-### Four stops on this node were MY framing, not Runtime
-
-checkpoint 1 (mislocalized), `1b` (`1/1/1`), `1c` (forward reading), `1e`
-(first-`Open` as requirement). **The instruction to measure rather than comply
-caught every one.** Keep writing frames that way. This is not a sizing problem
-and should not be read as one later.
-
-## SUPERSEDED — 2026-08-05 ~06:4xZ · D7 `1d` answered NEGATIVE; `1e` released
-
-**`origin/main` at last check: `3eeeb5ed`** (the `1e` ruling, PR #1410; D7 frame
-blob `b5c240e6`). Verify it; do not trust this line.
-
-### The one thing to do next
-
-**Nothing, until Runtime returns `1e`'s answer.** I ruled at `evt_2tsq017qgvtgh`
-(06:41Z); `runtime-leader` released `1e` from exact `179af863` and the Architect
-picked up the confirming gate — **both confirmed by pane transition, not just a
-posted mention.**
-
-**WIP audit clock: armed from the ~06:43Z leader release, so due ~07:43Z.**
-
-### What `1d` settled, and what `1e` is
-
-`1d` came back **negative over 1110 candidate records** (`evt_5kws532ac99c9`) —
-no existing authority both proves the closure-`381` edge mandatory and supplies
-an exact edge-local closed environment. Three results outlive the checkpoint:
-
-- **`member=true` on all 612 declines AND all 489 interns** — `1c`'s finding at
-  1101-row scale. Closure-level membership is retired as an edge-local
-  predicate permanently, not provisionally.
-- **`case_emission` is INAPPLICABLE, not insufficient** —
-  `build_case_emission_plan` never iterates `ComputationalMatch`. A later node
-  reaching for it finds nothing, and now knows why.
-- The ring **declined a near-miss discriminator** ("`Open` because of an effect
-  result") as confounded with corpus identity: `Effect` occurs in 0 of 1057 lib
-  ancestor chains and 60 of 60 parity chains, so it separates two test suites.
-
-**`1e` is folded into `D7` — there is NO new node.** `1d`'s "requires a separate
-substrate node" was my prose, not a ruling; the preference order is relax, fold,
-then cut, and `179af863` is not on `main`, so a separate node would branch from
-an unmerged branch for no independent mergeability.
-
-**Scope is minimal by the inventory's own counts:** the host-effect-result
-`ContinuationInputSource` variant plus its ABI position — 6 edges, exactly the 6
-failing `D0` rows. **The case-binder slot is OUT** — 161 edges in a corpus at
-718/2, no failing row demanding them.
-
-**I refused the second minting.** A route-modality authority's only source is
-`1d`'s own distinguish-before-interning requirement, which was a constraint of
-the projection-only framing that `1e` retires. Stated to the ring as a question
-to measure, not a law — three of this node's stops were exactly that error. **If
-they report it IS genuinely required, that one gets a real node.**
-
-**`1d` hard-stops TO ME.** If the inventory finds that satisfying it would mint
-a new representation, population, identity, or planner/ABI authority, that needs
-a **separate substrate node** which the Architect expressly did not authorize —
-and **the graph shape is my call, decided FROM the inventory.** Do not cut that
-node before the answer arrives; deciding beforehand is creating a node on
-speculation.
-
-### Checkpoint lineage — each an accepted parent of the next
-
-`6a09ed68` (population) → `727b51a1` (per-visit claim group) → `69c68e6e` (body
-close) → `f6958b95` (operation-arm claim consumption) → `ae64f687` (lazy
-exact-`SiteOperand` + carried exact-`Int`) → `50092c59` (ckpt 1: phase-bearing
-capture edges + pre-emission gate) → `ca1c4418` (ckpt `1b`: two arity
-coordinates) → `179af863` (ckpt `1c`: the interned-to-member converse).
-
-`4ec5362c` is **preservation-only partial progress**, not an accepted `1b`.
-
-### The standing shape of this node's stops — READ BEFORE RECUTTING AGAIN
-
-**Three stops were MY frame asserting a law the measured plane does not
-support**, not Runtime sizing or execution:
-
-1. **checkpoint 1** — I localized the repair to the `#23` producer; the producer
-   was correct and the refusal was at the generic `LexicalClosure` value arm.
-2. **`1b`** — I demanded a nullary Host-`Vis` be `1/1/1`; the honest relation is
-   source-seed `0` / emitted-template `1` / marker-consumer `1`, and forcing the
-   seed to `1` moved five non-injecting rows off their `D0` text.
-3. **`1c`** — I read generic member status as a planning omission; `Open`
-   environment means *do not commit this specialization*, and the forward law
-   would falsely reject 23 green programs.
-
-⭐ **The per-row-never-a-count requirement caught #2 and #3.** A pass/fail total
-reads `1/7` before and after, identically, and hides both. Keep it as a frame
-requirement, never a convention.
-
-**Still held:** checkpoint 2, candidate, QA, `D6` closure, `AC-4`, the
-call-result SCC, and the `#27` / case-emission populations.
-
-**WIP audit clock — DERIVE IT, do not read a stamped deadline.** A fixed
-timestamp here goes stale on every reset event and then fires a spurious audit;
-it needed rewriting twice in the first hour. At tick time, take the **latest**
-of these in the WP thread and add 60 minutes:
-
-- a kickoff or re-kickoff (leader release),
-- an Architect audit, ruling, or review verdict,
-- a candidate or checkpoint handoff,
-- a genuine hard stop, or completion.
-
-**A routine progress post is not a reset event.** Counting those makes the
-trigger fire never while looking armed.
-
-On this ring the resets have been arriving every 5 to 15 minutes, so **the
-60-minute trigger has not come close to firing and probably will not while the
-cadence holds.** That is the healthy case, not a broken detector — but it is
-also why a stamped deadline was pure noise here.
-
-**Governing base, do not let it drift:** continue only from the `70887529`
-lineage. Rebase, merge, or cherry-pick of `fb8fd881`, `430798bf`, `548682c3`,
-`42ccd8ec` is banned — they are competing historical implementations, and
-importing them reintroduces the role/disposition-derived schema the host-effect
-ruling ruled false (Architect `evt_` in `thr_3rx0`, 01:06).
-
-### Frontier: one release ahead is SATISFIED
-
-Every node whose `depends_on` names `RT-DECL-CLOSURE-PORT` is `ready` and has a
-frame file in `docs/program/wp/`:
-
-| successor | other unmet deps |
-|---|---|
-| `RT-SEED-CALL-PORT` | none — this is the immediate next release |
-| `PX8-ERRID-ALLOC` | `RT-NATIVE-FNSPLIT` |
-| `NATIVE-HANDLE-CARRIER` | `RT-NATIVE-FNSPLIT`, `RT-JOIN-DISPOSITION` |
-| `RT-CONTSPEC-LEDGER` | `RT-CONTSPEC-ACTIVATE` |
-| `RT-DESCENT-RETIRE` | `RT-SEED-CALL-PORT`, `RT-PRODUCER-MATCH-PORT`, `RT-RECURSOR-TRANSPORT` |
-
-`RT-SEED-CALL-PORT`'s fixed-input blobs are pinned at `origin/main = 14c3c5f7`
-(2026-07-29) and are stale by construction — D7 rewrites `core.rs` in front of
-it. **The frame says so itself and instructs re-pin at pickup.** That is
-shovel-ready, not framing debt; do not re-pin the numbers and call it a
-re-measurement.
-
-### Lane state
-
-| ring | state |
-|---|---|
-| **Runtime** | building — `RT-DECL-CLOSURE-PORT` D7 effect-seat slice 2 |
-| **Kernel · Verify · Language · Ergo · Foundation · Spec** | idle, awaiting Steward kickoff — the fleet's single-threaded posture, not a stall |
-| **Doc** | stood down after `DOC-PROGRAM-WAVE-RECONCILE` merged |
-| **Architect** | serving the Runtime ring; last act was the identity acceptance of `70887529` |
-
-**Tracker statuses reconciled 2026-08-05 ~07:45Z** — four were wrong against the
-generator's own legend, where `active` means **a team is building**:
-
-| node | was | now | why |
-|---|---|---|---|
-| `RT-CONTSRC-PRODUCER-LOCAL` | `ready` | `active` | it IS in flight |
-| `KERNEL-NESTED-IND` | `active` | `ready` | deps met, framed inline, no seat |
-| `SPEC-MISSION-GROUNDING` | `active` | `ready` | three ACs open, no seat |
-| `SURF-SPACE-CELLS` | `active` | `draft` | P1 landed, P2 residual unframed |
-
-**Both of the two nodes that argued for `active` in their own prose used it to
-mean "not merged".** `SURF-SPACE-CELLS` said it stays `active` "so a reader
-cannot mistake a merged phase for a merged node"; `SPEC-MISSION-GROUNDING` said
-the AC reconciliation "is the reason it is `active` rather than `merged`." The
-anti-merged signal those blocks wanted is carried by the blocks themselves. Both
-operative sentences are rewritten, not appended to.
-
-⇒ The releasable-frontier list now shows `KERNEL-NESTED-IND` and
-`SPEC-MISSION-GROUNDING`. **That is accurate and is not a kick order** — the
-single-threaded hold is a release decision, not a dependency, and the tracker is
-generated so it cannot carry the hold. `SPEC-MISSION-GROUNDING` in particular is
-**not** releasable by me: `AC-M3` names a pass `COORDINATION §10⁻a` forbids the
-Steward to request.
-
-### Unlanded finished work — research, 4 days old
-
-`wp/research-kernel-extension-assessment` @ `0c450267` (2026-08-01) carries
-`research/kernel-extension-assessment.md`, 746 lines, absent from `main`. No
-`git_request` for it reached me. **Its path is neither `library/` nor a Steward
-route, so the fail-closed predicate sends it to the Architect** — who is
-currently the Runtime ring's reviewer. Do not spend that seat on it mid-slice;
-bundle the routing question with the next Architect contact, or ask research
-whether anything is owed.
-
-### My own transport — fixed by the 01:48 restart
-
-The seat now runs the original flagged process
-(`--dangerously-load-development-channels server:convo-channel`), not the
-unflagged `bg-pty-host --fork-session --resume` fork that silently dropped every
-mention. Channel subscription confirmed on `spc_4q7g0se87rgje`. **The
-generalization I posted at 01:35 — that `runtime-implementer` shared the
-defect — was wrong and is retracted at `evt_` 01:45; route to it normally.**
-
-### ⛔ OWED TO THE OPERATOR — four items, none self-resolvable
-
-1. **`MAP-TRANSPORT-CODEC` candidate 3** — a wire format for a **non-Ken peer**.
-   Candidates 1 and 2 were measured and answered *no*; this one is a **roadmap
-   call and is not answerable from the repository.** The node is closed
-   `not-needed`; if this comes back *yes* it reopens with a fresh frame.
-2. ⛔ **`SPEC-MISSION-GROUNDING` `AC-M3` names a pass I am forbidden to request.**
-   The AC says the adversary refutation pass is owed; `COORDINATION §10⁻a`
-   forbids the Steward from asking the adversary to hunt anything. **Two
-   operator-authored artifacts conflict.** Needs the operator to dispatch the
-   adversary directly or re-route the AC. **Raised, unanswered.**
-3. **T3 / `Property`** — there is **no `ken test` subcommand** (`ken-cli`
-   dispatches `repl|run|check|native-build|fmt|version|help`) and **no spec
-   chapter for the CLI at all** (task `#143`). `Tooling/Testing/Property.ken.md`
-   exists but is deterministic finite checks — no randomness, shrinking, or
-   seeds, deliberately. ⇒ T3 is blocked on a **design input**, not on code.
-4. **Linux ABI** — `ABI-S3`'s three ops landed `RepresentedUnavailable` by
-   design and **no Track-A node promotes them**, so `§6`'s exit condition is
-   unreachable through `ABI-A1/A2/A3`.
-
-### ⛔ Still operator-HELD
-
-**`DOC-ATTEST-LIVING`** — ⛔ **do not release, do not re-ask.** Node:
-`docs/program/issues/DOC-ATTEST-LIVING.md`.
-
-### ⛔⛔ THE `integrator` GHOST — do NOT chase it again
-
-**The seat was RETIRED by PR #1052** (50 files). It has **no tmux session, no
-entry in `.moot/actors.json`, and no playbook** — `agent/playbooks/federation/`
-holds only adversary, architect, librarian, research, steward.
-
-⚠ **But `orientation()` and `list_participants` still show it**, carrying a
-**stale stored status** — *"PR #365 green on head `befc2dc4`, awaiting Steward
-routing."* ⭐ **That reads exactly like a live seat blocked on you, and it is
-not.** I treated it as a real open query, investigated it, and posted a routing
-reply to a seat that cannot read. No one was waiting; nothing was owed.
-
-⇒ ⛔ **A retired seat's last status is indistinguishable from a live seat's
-current one.** Before acting on any participant status, check for a tmux session
-**and** an `actors.json` entry. Convo has no tool to remove a participant, so
-this ghost persists — it is operator/convo-admin item, already raised.
-
-For the record on its content: `befc2dc4` is **on no ref at all**, and
-`scripts/scripted-pr-automerge.sh` **is** on `main` (blob `76afaf31`) — the
-capability landed and I run it every publish. ⛔ Do not re-propose that commit;
-its `COORDINATION.md` / `04-git-and-integration.md` / `steward.md` versions are
-from 2026-07-08 and re-landing them would revert weeks of work.
-
-### ⭐ Traps measured this window — positional, so they will recur
-
-1. ⛔ **The decisions read path field is `decision_id`, NOT `id`.** `d.get('id')`
-   returns `None` for **every** record, so a lookup reports **NOT FOUND for a
-   decision that exists**. I was one step from blocking a merge on this. ⇒ Always
-   run a positive control against a decision you know exists.
-2. ⛔ **Any non-doc-only publish MUST be `run_in_background: true`.** Full-CI
-   polling exceeds the Bash tool's 600000ms cap and the tool kills the publisher
-   (exit 143). Doc-only finishes in ~2 min and is safe in the foreground.
-3. ⭐⭐ **"Awaiting merge" may already BE merged** — twice this window (Ergo
-   `a85c0dc5`, Kernel `5396f9a7`). The publisher **squashes**, so every ancestry
-   check says unmerged. Only a blob diff of the candidate's **own** paths against
-   `origin/main` discriminates. ⚠ And a path-drift check *actively misleads*: both
-   Kernel paths read as "changed on main since the approval base," which normally
-   means a stale base — here the thing that changed them was the candidate's own
-   already-landed work.
-4. ⛔ **Require the exact BRANCH as well as the exact SHA.** Kernel had
-   `wp/KERNEL-NESTED-IND` (D1a, `e685570c`) and `wp/KERNEL-NESTED-IND-D3` (the
-   approved D3a) live at once, and the approved SHA was **not** an ancestor of the
-   branch matching the node name.
-5. ⚠ **A node annotation written at merge time can gate another team's frontier.**
-   I wrote *"`RT-VALUE-TOTALITY` stays `active` for its remaining scope"* — it had
-   none, and that stale `active` was the last unmet `depends_on` of
-   `RT-FNSPLIT-C1`. It would have idled Runtime behind a complete node. It
-   surfaced only because `runtime-leader` refused to infer a branch and asked.
+| `fs_write_and_read_resume_through_the_native_capability` | `RT-CARRIER-BYTESPAN-OBSERVE` |
+| `fs_scope_denial_reaches_ken_as_the_named_error` | `RT-CARRIER-BYTESPAN-OBSERVE` |
+| `canonical_fs_identity_exactly_matches_across_real_producers_and_drift_fails` | `RT-CARRIER-BYTESPAN-OBSERVE` |
+| `linked_console_broken_pipe_reaches_ken_instead_of_signal_termination` | `RT-CARRIER-BYTESPAN-OBSERVE` |
+| `public_source_observes_raw_argv_environment_cwd_bytes_in_field_order` | `RT-ENTRY-TRAP-254` |
+
+Suite at `21fd46dc`: **14 passed / 0 failed / 5 ignored, no sixth row.**
+
+**A skipped row measures nothing.** Greenness here is achieved by not asking the
+question. That is the whole reason both successor frames make un-skipping a
+deliverable rather than a courtesy.
+
+### Owed the moment the merge lands, in order
+
+1. **M6** — blob-identity verify every changed path against `origin/main`;
+   then `git reset --hard origin/main` on `steward/work`, which is stale the
+   instant any publish lands.
+2. **M7** — flip `RT-DECL-CLOSURE-PORT` and `RT-CONTSRC-PRODUCER-LOCAL` to
+   `merged`, run `scripts/gen-progress.sh`, publish doc-only.
+3. **M8** — notify the Adversary. **This merge carries code, so the step is
+   required.** Look the id up at post time with `scripts/moot-actor-id.sh
+   adversary`.
+4. **Librarian** — `crates/ken-runtime/src/cranelift_backend.rs` is a **cited
+   source** in `library/SOURCE-ATTESTATIONS`. Routes to the Librarian **after**
+   the merge, never into a ring's frame.
+5. **M9** — the stay-one-release-ahead check. Already satisfied: both
+   successors are `ready` with written frames.
+
+### Both successors are framed. The ring will not idle.
+
+**`RT-CARRIER-BYTESPAN-OBSERVE`** — `ready`, size L, frame at
+`docs/program/wp/RT-CARRIER-BYTESPAN-OBSERVE.md`. Base is **`main`**, not the
+branch: the publisher squashes, so `21fd46dc` is not an ancestor of `main`
+afterwards. Two findings from grounding it, neither known when the rows were
+measured:
+
+- **The `BytesPointerLength` seat population is SIX, not the three that fail.**
+  `host_effect_seat_contract` binds one `bytes` tuple at six
+  `(operation, ordinal)` pairs. `FsWriteFile Argument(2)`, `FsChangeMode
+  Argument(0)` and `FsOpen Argument(0)` are unmeasured. Repairing three leaves
+  an identical seat refusing identically; flipping six asserts a capability
+  nobody measured — and a shared tuple is exactly what makes it a bad
+  discriminator. `AC-4` requires a per-seat disposition over all six.
+- **The carrier reads a carried byte value one byte at a time and cannot read
+  its extent at all.** `BOUNDARY_LOCAL_HELPERS` has `ken_boundary_byte_local` by
+  index and a `store_bytes_len` **writer**, and no length reader anywhere.
+  `ken_boundary_int_view_local` is the precedent for the missing shape and
+  `narrow_carried_int_u64` for its reader. **A per-index reader does not
+  establish that a contiguous pointer can be produced** — that is `D1`, and a
+  negative answer is a representation boundary that returns to the Architect.
+
+**`RT-ENTRY-TRAP-254`** — `ready`, size **S and DIAGNOSIS ONLY**; the repair is a
+separate cut on its return. Two things its frame settled:
+
+- **The exit `1` is not the defect and must not be investigated.** The linked
+  shim ends `if (value < 0) return 1;`, so every negative sentinel collapses to
+  1 and the exit code cannot distinguish `-1` from `-4`. Only the stderr line
+  can. The fact that matters is that the entrypoint returned **`-4`**.
+- **`254` IS the correct expectation — that open obligation is DISCHARGED.** The
+  test sets `K` to byte `0xfe` under `env_clear()` and asserts `254`, a second
+  arm at `253`, and `assert_ne!` between them. Those are legitimate non-negative
+  exit codes: the program observes a raw process byte and returns it, and
+  `return (int)value` passes non-negative values through. The program is meant
+  to compute a byte and traps instead. **Do not repair the row by changing the
+  expectation** — the frame bans it as the cheapest available false fix.
+
+### Standing bans that survive this window
+
+- **Do not fold `RT-ENTRY-TRAP-254` into byte-span** because "bytes" appears in
+  its test name. That is the vocabulary inference the Architect refuted
+  (`evt_7v61ed5pn9q3t`). Shared root cause is **unmeasured**.
+- **Do not justify `RT-CARRIER-BYTESPAN-OBSERVE` from the historical
+  `c7410b79` `BoundaryCarrier` signature.** Same refutation.
+- **Read a Decision from the object, never from a message.** Measured again this
+  window: the Architect posted "resolving on cast" and the object still read
+  `proposed` for ~30s.
 
 ## ⛔ CORRECTIONS — two claims the old file made that were FALSE
 
