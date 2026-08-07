@@ -82,6 +82,26 @@
 > from this paragraph.** A moved `main` proves staleness; an unmoved `main`
 > proves nothing.
 
+### AT D2 PUBLISH TIME: run the intersection on the node file. Do NOT rebase.
+
+`wp/RT-CARRIER-BYTESPAN-OBSERVE-d2-producer-normalize` is based at `087f2343`,
+**one commit behind `main`** — and the commit it lacks (`d18da5c6`) is my
+currency banner on `docs/program/issues/RT-CARRIER-BYTESPAN-OBSERVE.md`. If
+`D2` also writes to that node file, the intersection is **non-empty** and git
+will take the union of two disjoint hunks **silently and cleanly**. That is not
+a conflict and nothing will report it.
+
+**The residual is semantic, not textual:** the implementer's checkout has the
+census **without** the banner, so the closing section reads as an open
+Architect fork there. **I did not raise this to the ring**, because the leader
+released `D2` carrying `dec_6qmstfn6tjqdt`'s guardrails explicitly, so the
+ruling reaches the work through the release rather than through the file — and
+a message here would be pre-confirming a gate that already holds (§9).
+
+⇒ **At publish: `comm -12` the candidate's paths against `main`'s.** Non-empty
+on that node file means read the merged result for a banner-plus-`D2`-section
+union, not just diff the branch. **Empty means immaterial — do not rebase.**
+
 ### OPEN, MINE: M8's doc-only discriminator contradicts the Adversary's scope
 
 **Surfaced 2026-08-07 by `evt_5r0hgy45v1r8x`** — the Adversary hunted the
