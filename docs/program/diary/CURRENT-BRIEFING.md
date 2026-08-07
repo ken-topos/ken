@@ -53,6 +53,31 @@ nine files, each row carrying its **exact signature**, **owning node**, and
 `ken-cargo test -p ken-cli --no-fail-fast` = **120 passed / 0 failed / 34
 ignored**. **`px7o` is UN-ignored and passing 3/0.**
 
+### PR BACKLOG CLEARED — 9 open to 3. Do not redo this.
+
+**`main` is `616a0b49`** — PR **#1530** landed 45 commits of Steward corpus
+(doc-only; blob-identity verified 20/20). `steward/work` reset to it.
+
+**Closed as stale or superseded, each verified individually, none merged:**
+
+| PR | evidence |
+|---|---|
+| #1455, #1449 | all commits patch-present on `main` (`git cherry` 0 missing) |
+| #1519, #1502, #1421 | differ only on `CURRENT-BRIEFING.md` / `RT-CONTSRC-PRODUCER-LOCAL.md`, both updated on `main` 2026-08-07 |
+| #1322 | its 173-line `wp/DOC-W4-LANGUAGE.md` is on `main` **byte-identically** (`87a87052` both sides); every other file has a **newer** `main` version |
+
+**NO consolidated docs branch is needed — that plan is retired.** The four docs
+PRs had **no surviving content**; merging any of them would have **reverted**
+newer work.
+
+**The instrument that mattered:** blob-difference alone is NOT evidence of novel
+content — `main` moving past a PR produces the same signal. Use `git cherry`
+(patch-equivalence) plus **which side was touched later**.
+
+**Still open: #1529 (candidate), #1528 (closes as superseded when #1529 lands),
+#1265 (OPERATOR — carries `fb8ec38`/`430798bf`/`548682c3`/`42ccd8ec`, all
+explicitly banned from import).**
+
 ### THE ONLY THING LEFT
 
 **Nine `ken-verify` LIB UNIT TESTS in `scenario.rs`** — unit tests over
