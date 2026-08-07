@@ -395,6 +395,36 @@ become `EITHER_PHASE`. **Per seat, each with its own evidence** (`AC-4`).
 **Every seat left `SPECIALIZED_ONLY` needs an explicit proof of why**, recorded
 in the disposition table, not an omission.
 
+**`D5` INHERITS FOUR ITEMS FROM `D4`. Three are one-line; the first is not.**
+Verified by the Steward against `origin/main` `076337e1`, from Adversary
+`evt_7bkx9xqp0rewa`.
+
+1. **`#[allow(dead_code)]` at `lowering/mod.rs:16992` is `D5`'s to REMOVE, not
+   to inherit.** Its own comment says so: *"`D5` wires the call sites; `D4`
+   lands the mechanism."* **An observer still carrying that attribute after
+   activation is an observer nothing calls** — so removing it is not tidying,
+   it is the evidence that `D5` actually wired something. If it must stay, that
+   is a finding.
+2. **`lowering/mod.rs:17015` — a ~22-space run inside a diagnostic format
+   string** (`"...whose need is                      {:?} rather than
+   BytesPointerLength"`), a literal-wrapping artifact that **renders into an
+   error a human reads.**
+3. **`lowering/mod.rs:16980` — a `///` at column 0** inside the `AC-11` doc
+   comment, where every neighbour is `    ///`. Nothing catches it; rustfmt
+   does not normalize doc-comment indentation.
+4. **Outcome `2` collapses THREE `D3` statuses — `ERR_TAG`, `ERR_CLASS`,
+   `ERR_ESCAPE` — and the table's label is inaccurate for one of them.**
+   *"The word never denoted a byte span at all"* is wrong for `ERR_ESCAPE`: an
+   invocation-owned byte span **is** a byte span, just one this helper may not
+   safely view. The grouping is `D3`'s and `D4` inherits it faithfully and
+   documents the collapse rather than hiding it, **so this is not a defect.**
+   The forward point is narrow: `D3` minted four distinct codes so a caller
+   could separate them, and **the lowering layer is where three stop being
+   separable.** If `D5`'s per-seat activation ever needs to diagnose an escape
+   refusal distinctly from a not-a-span refusal, the information is already
+   gone. **Decide that deliberately at `D5` and record the decision** — the
+   current collapse may be exactly right.
+
 ### `D6` — the activation-gate discharge pass
 
 **This node inherits an activation gate it did not create (section 6). `D5` is
