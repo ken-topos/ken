@@ -9113,23 +9113,44 @@ fn d4_an_observable_span_yields_pointer_length_and_outcome_zero() {
     );
 }
 
-/// ⭐⭐ **`D4` — A BOUNDS FAILURE AND A NON-SPAN ARE DIFFERENT OUTCOMES.**
+/// ⭐ **`D4` — an OBSERVABLE SPAN and a NON-SPAN are distinct outcomes.**
 ///
-/// This is the requirement the leader stated: a caller must not be able to
-/// infer one from the other.
+/// **MEASURED:** a lawful carried `Bytes` value reports outcome **0**; a
+/// carried `Bool`, which never denoted a byte span, reports outcome **2**; and
+/// `0 != 2`.
+/// **CLAIMED:** the observer does not collapse a non-span into the observable
+/// case, so a caller can tell the two apart.
+/// **THE GAP — and it is the load-bearing sentence here.** ⛔ **This says
+/// NOTHING about outcome 1.** `D4` *implements* the propagation of `D3`'s
+/// `BOUNDARY_ERR_BOUNDS` to a distinct outcome **1**, and **does not witness
+/// it**. A mutation mapping `BOUNDARY_ERR_BOUNDS` to outcome `2` would leave
+/// this test GREEN. Do not read the pair below as evidence for the three-way
+/// split; it is evidence for two of its three arms.
 ///
-/// **MEASURED:** a well-formed `Bytes` node whose extent leaves the live data
-/// reports outcome **1**; a carried `Int`, which never denoted a byte span,
-/// reports outcome **2**; and `1 != 2`.
-/// **CLAIMED:** the observer preserves `D3`'s distinction instead of collapsing
-/// both into one failure.
-/// **THE GAP:** ⚠ it says the outcomes differ. It does not say any caller
-/// branches on them — there is no production caller yet, by design.
+/// ⚠ Stated as the helper's own status, deliberately: the unwitnessed arm is
+/// *"the helper returned `BOUNDARY_ERR_BOUNDS`"*. Any stronger reading —
+/// *"a well-formed span that failed bounds"* — depends on lawful carrier
+/// provenance this rig does not establish.
 ///
-/// ⛔ **The inequality assertion is the control, not decoration.** Routing the
-/// status through `require_i64` — the obvious way to write this observer —
-/// returns a single failure for both and passes any test that only checks
-/// "it refused". Only comparing the two outcomes catches that collapse.
+/// ⛔ **THE EXACT FIXTURE BLOCKER, so the next author does not re-derive it.**
+/// `D3`'s bounds witness is real, but its `bind` / `rebind` /
+/// `poke_node_field` helpers are private to the sibling `boundary_value_clif`
+/// test module. This rig materializes, transfers and observes inside **one
+/// emitted JIT body**, so Rust never holds a carrier word between those phases
+/// and has nothing to mutate and re-observe.
+///
+/// **The required producer is a SPLIT-PHASE rig:** an emitted producer returns
+/// the carrier word; Rust mutates and rebinds while the node exists; a second
+/// emitted observer accepts that word and invokes
+/// [`Lowering::observe_carried_bytes_span`]. ⛔ **A pre-run poke is not a
+/// substitute** — the node does not exist yet, so the control silently reports
+/// outcome `0`, which is exactly the false green an earlier draft of this test
+/// produced.
+///
+/// ⚠ **This residual is NOT `AC-10`.** `AC-10` is the
+/// `Lowered::ResponseBytes` constructor-closure obligation, now assigned to
+/// `D4b`; it is a separate item and it is not the reason outcome 1 is
+/// unwitnessed here.
 #[test]
 fn d4_a_non_span_is_a_distinct_outcome_from_an_observable_span() {
     let observable = d4_observe(Some(vec![0x01, 0x02, 0x03]), 2, 0).0;
