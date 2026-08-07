@@ -96,6 +96,8 @@ pub const BOUNDARY_LOCAL_HELPERS: &[&str] = &[
     "ken_boundary_int_len_local",
     "ken_boundary_int_limb_local",
     "ken_boundary_int_view_local",
+    // `RT-CARRIER-BYTESPAN-OBSERVE` `D3` — the total byte-span observer.
+    "ken_boundary_bytes_view_local",
 ];
 
 // ⛔ There is deliberately NO `ken_boundary_store_slot_local`.
@@ -201,6 +203,9 @@ pub(crate) struct BoundaryLocalFuncs {
     /// `(arena, word, out_view) -> status` — a spilled `Int`'s canonical
     /// `{sign, len, limbs}` view.
     pub int_view: FuncId,
+    /// `(arena, word, out_view) -> status` — a lawful byte span's
+    /// `{pointer, length}` view (`RT-CARRIER-BYTESPAN-OBSERVE` `D3`).
+    pub bytes_view: FuncId,
 }
 
 #[derive(Clone, Copy)]
@@ -234,6 +239,7 @@ struct Graph {
     int_len: FuncId,
     int_limb: FuncId,
     int_view: FuncId,
+    bytes_view: FuncId,
     /// `ken_native_int_resolve_local`, declared into this module by the
     /// native-`Int` graph that is emitted before this one.
     native_int_resolve: FuncId,
@@ -279,6 +285,7 @@ pub(crate) fn emit_boundary_value_local_graph<M: Module>(
     let int_len = declare(module, "ken_boundary_int_len_local", 3)?;
     let int_limb = declare(module, "ken_boundary_int_limb_local", 4)?;
     let int_view = declare(module, "ken_boundary_int_view_local", 3)?;
+    let bytes_view = declare(module, "ken_boundary_bytes_view_local", 3)?;
     let graph = Graph {
         resolve,
         class,
@@ -309,6 +316,7 @@ pub(crate) fn emit_boundary_value_local_graph<M: Module>(
         int_len,
         int_limb,
         int_view,
+        bytes_view,
         native_int_resolve: native_int.resolve,
     };
 
@@ -341,6 +349,7 @@ pub(crate) fn emit_boundary_value_local_graph<M: Module>(
     define_int_part(module, graph, graph.int_len, IntPart::Len, plan)?;
     define_int_part(module, graph, graph.int_limb, IntPart::Limb, plan)?;
     define_int_part(module, graph, graph.int_view, IntPart::View, plan)?;
+    define_bytes_view(module, graph, plan)?;
 
     Ok(BoundaryLocalFuncs {
         class,
@@ -371,6 +380,7 @@ pub(crate) fn emit_boundary_value_local_graph<M: Module>(
         int_len,
         int_limb,
         int_view,
+        bytes_view,
     })
 }
 
@@ -2184,6 +2194,135 @@ fn region_limb_base(
     b.ins().iadd(table, byte_at)
 }
 
+/// Return early with [`BOUNDARY_ERR_ESCAPE`] unless the node's referent is
+/// owned by the persistent store.
+///
+/// ⭐ **`RT-CARRIER-BYTESPAN-OBSERVE` `D3`.** `D1` measured the sole lawful
+/// byte-span row as `PersistentGround / Bytes|String / PersistentStore /
+/// ByteSpan`, and the owner is the half of that row the class cannot speak for:
+/// a class says what a payload IS, an owner says how long it LIVES. Handing a
+/// caller a pointer into storage that dies with the invocation is the failure
+/// this refuses, so the code is the escape one rather than a shape one.
+fn persistent_owner_guard(b: &mut FunctionBuilder<'_>, node: cranelift_codegen::ir::Value) {
+    let owner = b
+        .ins()
+        .load(types::I64, MemFlags::trusted(), node, NODE_OWNER);
+    let ok = b.create_block();
+    let bad = b.create_block();
+    let persistent = b.ins().icmp_imm(
+        IntCC::Equal,
+        owner,
+        BoundaryReferentOwner::PersistentStore as i64,
+    );
+    b.ins().brif(persistent, ok, &[], bad, &[]);
+
+    b.switch_to_block(bad);
+    let err = b.ins().iconst(types::I64, BOUNDARY_ERR_ESCAPE);
+    b.ins().return_(&[err]);
+
+    b.switch_to_block(ok);
+}
+
+/// The byte-span analogue of [`region_limb_base`] — the same non-wrapping
+/// containment test, over the region's DATA table and at a stride of one.
+///
+/// ⛔ **The subtraction is what makes it non-wrapping, and it is the reason
+/// this is not written as `at + len <= live`.** That sum can wrap on a
+/// malformed node and produce a spuriously small value that passes; bounding
+/// `at` first and then comparing `len` against the remaining room cannot.
+fn region_data_base(
+    b: &mut FunctionBuilder<'_>,
+    ptr: cranelift_codegen::ir::Type,
+    region: cranelift_codegen::ir::Value,
+    at: cranelift_codegen::ir::Value,
+    len: cranelift_codegen::ir::Value,
+    live: cranelift_codegen::ir::Value,
+) -> cranelift_codegen::ir::Value {
+    let start_ok = b.ins().icmp(IntCC::UnsignedLessThanOrEqual, at, live);
+    let room = b.ins().isub(live, at);
+    let len_ok = b.ins().icmp(IntCC::UnsignedLessThanOrEqual, len, room);
+    let fits = b.ins().band(start_ok, len_ok);
+    let spanned = b.create_block();
+    let unspanned = b.create_block();
+    b.ins().brif(fits, spanned, &[], unspanned, &[]);
+
+    b.switch_to_block(unspanned);
+    let err = b.ins().iconst(types::I64, BOUNDARY_ERR_BOUNDS);
+    b.ins().return_(&[err]);
+
+    b.switch_to_block(spanned);
+    let table = b.ins().load(ptr, MemFlags::trusted(), region, ARENA_DATA);
+    b.ins().iadd(table, at)
+}
+
+/// `(arena, word, out) -> status` — **the total byte-span observer**
+/// (`RT-CARRIER-BYTESPAN-OBSERVE` `D3`).
+///
+/// Writes `{pointer, length}` to `*out` for a word denoting the sole lawful
+/// byte-span row, and returns an exact status otherwise. Shaped on
+/// [`IntPart::View`]: one out-pointer, one status, the guards inside.
+///
+/// ⭐ **The guards here ARE the authority, and a caller must not re-derive
+/// them.** That is the whole point of a view: `ken_boundary_byte_local` already
+/// bounds each index, but a caller assembling `{pointer, length}` from separate
+/// readers would be re-deriving containment at every call site, and the
+/// re-derivations are what drift apart.
+///
+/// ⛔ **THE REQUIRED BOUNDARY — two different answers, never one.**
+/// A word that never denoted a byte span is refused on its own axis
+/// ([`BOUNDARY_ERR_TAG`] for an undecodable word, [`BOUNDARY_ERR_CLASS`] for a
+/// node of another class, [`BOUNDARY_ERR_ESCAPE`] for one whose referent the
+/// invocation owns), while a WELL-FORMED byte span that fails containment is
+/// [`BOUNDARY_ERR_BOUNDS`]. A caller cannot read one off the other, which is
+/// exactly what `D4` needs in order to separate them without guessing.
+///
+/// ⚠ **It never constructs a `Lowered`, never touches `Avail`, and activates
+/// nothing.** Emitting this helper does not make any seat admit a carried word;
+/// that is `D5`, and a green body here is not evidence for it.
+fn define_bytes_view<M: Module>(
+    module: &mut M,
+    graph: Graph,
+    plan: &crate::boundary_value::BoundaryEmissionPlan,
+) -> Result<(), CraneliftBackendError> {
+    let ptr = module.target_config().pointer_type();
+    let mut func = begin(module, graph.bytes_view, 3);
+    let resolve = module.declare_func_in_func(graph.resolve, &mut func);
+    let mut fctx = FunctionBuilderContext::new();
+    {
+        let mut b = FunctionBuilder::new(&mut func, &mut fctx);
+        let entry = b.create_block();
+        b.append_block_params_for_function_params(entry);
+        b.switch_to_block(entry);
+        let p = b.block_params(entry).to_vec();
+        let (arena, word, out) = (p[0], p[1], p[2]);
+        // Tag validity and the tag x class relation are `resolve`'s, and a
+        // failure returns ITS status unchanged rather than being relabelled.
+        let Resolved { node, region } = resolve_prologue(&mut b, ptr, resolve, arena, word);
+        class_guard(&mut b, node, plan.byte_span_classes());
+        persistent_owner_guard(&mut b, node);
+
+        let len = b
+            .ins()
+            .load(types::I64, MemFlags::trusted(), node, NODE_PAYLOAD);
+        let at = b
+            .ins()
+            .load(types::I64, MemFlags::trusted(), node, NODE_EXTENT);
+        let live = b
+            .ins()
+            .load(types::I64, MemFlags::trusted(), region, ARENA_DATA_COUNT);
+        let base = region_data_base(&mut b, ptr, region, at, len, live);
+
+        b.ins().store(MemFlags::trusted(), base, out, 0);
+        b.ins().store(MemFlags::trusted(), len, out, 8);
+        let z = b.ins().iconst(types::I64, BOUNDARY_OK);
+        b.ins().return_(&[z]);
+
+        b.seal_all_blocks();
+        b.finalize();
+    }
+    finish(module, graph.bytes_view, func)
+}
+
 /// `(arena, word, sign, len, out) -> status` — claim `len` magnitude limbs in
 /// the node's own region and write the span's start to `*out`.
 ///
@@ -3638,7 +3777,7 @@ pub(crate) mod tests {
             );
             assert_eq!(
                 BOUNDARY_LOCAL_HELPERS.len(),
-                29,
+                30,
                 "the helper population must not move with the value population"
             );
         }
@@ -5204,6 +5343,7 @@ pub(crate) mod tests {
         "ken_boundary_int_len_local",
         "ken_boundary_int_limb_local",
         "ken_boundary_int_view_local",
+        "ken_boundary_bytes_view_local",
     ];
 
     #[test]
@@ -6154,6 +6294,268 @@ pub(crate) mod tests {
     /// any address was formed. The Rust oracle beside it used `checked_add` and
     /// was correct — two halves of one property written to different standards.
     ///
+    // ─── `RT-CARRIER-BYTESPAN-OBSERVE` `D3` — THE BYTE-SPAN OBSERVER ─────
+
+    /// Compile a probe that calls `ken_boundary_bytes_view_local` and returns
+    /// one field of the view, or the status on refusal.
+    ///
+    /// ⚠ A dedicated probe rather than `Probe::Unary`, because the view writes
+    /// TWO words and the shared probe's out-slot reads only the first. Reading
+    /// the length is how a caller learns the span's extent, so a control that
+    /// could not read it would leave half the contract unmeasured.
+    fn d3_view_probe(field: i32) -> (JITModule, *const u8) {
+        let mut module = jit();
+        let native = crate::native_int_clif::emit_native_int_local_graph(&mut module, false)
+            .expect("native-int graph emits");
+        let plan = crate::boundary_value::BoundaryEmissionPlan::derive();
+        let helpers =
+            emit_boundary_value_local_graph(&mut module, &native, &plan).expect("graph emits");
+        let ptr = module.target_config().pointer_type();
+        let mut sig = module.make_signature();
+        sig.params.push(AbiParam::new(ptr));
+        sig.params.push(AbiParam::new(ptr));
+        sig.returns.push(AbiParam::new(types::I64));
+        let id = module
+            .declare_function("d3_view_probe", Linkage::Local, &sig)
+            .expect("probe declares");
+        let mut ctx = module.make_context();
+        ctx.func = Function::with_name_signature(UserFuncName::user(4, id.as_u32()), sig);
+        let callee = module.declare_func_in_func(helpers.bytes_view, &mut ctx.func);
+        let mut fctx = FunctionBuilderContext::new();
+        {
+            let mut b = FunctionBuilder::new(&mut ctx.func, &mut fctx);
+            let entry = b.create_block();
+            b.append_block_params_for_function_params(entry);
+            b.switch_to_block(entry);
+            let p = b.block_params(entry).to_vec();
+            let slot = b.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
+                cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
+                16,
+                3,
+            ));
+            let out = b.ins().stack_addr(ptr, slot, 0);
+            let call = b.ins().call(callee, &[p[0], p[1], out]);
+            let status = b.inst_results(call)[0];
+            let good = b
+                .ins()
+                .icmp_imm(IntCC::Equal, status, crate::boundary_value::BOUNDARY_OK);
+            let ok = b.create_block();
+            let bad = b.create_block();
+            b.ins().brif(good, ok, &[], bad, &[]);
+            b.switch_to_block(bad);
+            b.ins().return_(&[status]);
+            b.switch_to_block(ok);
+            let value = b.ins().load(types::I64, MemFlags::trusted(), out, field);
+            b.ins().return_(&[value]);
+            b.seal_all_blocks();
+            b.finalize();
+        }
+        module.define_function(id, &mut ctx).expect("probe defines");
+        module.finalize_definitions().expect("jit finalizes");
+        let code = module.get_finalized_function(id);
+        (module, code)
+    }
+
+    /// The lawful row, materialized: a persistent `Bytes` node.
+    fn d3_lawful_bytes(store: &mut BoundaryValueStore, content: &[u8]) -> BoundaryWord {
+        materialize_ground(
+            store,
+            &crate::ir::RuntimeGroundValue::Bytes(content.to_vec()),
+        )
+        .expect("a Bytes value materializes")
+    }
+
+    /// ⭐⭐ **`D3` — the observer returns a USABLE pointer and the exact length
+    /// for the sole lawful row.**
+    ///
+    /// **MEASURED:** for a persistent `Bytes` node, the emitted view writes a
+    /// pointer whose dereference over the returned length is the original
+    /// content, byte for byte.
+    /// **CLAIMED:** the carrier can now observe a byte span's extent and
+    /// address totally, which is the capability the node exists to add.
+    /// **THE GAP:** ⚠ it says the HELPER answers. It says nothing about any
+    /// seat admitting a carried word — no `Avail` row moved, and `D5` is the
+    /// activation. ⛔ A green here is not evidence for that.
+    ///
+    /// ⛔ **The dereference is the point.** Asserting the returned length alone
+    /// would pass for a helper that never formed an address; reading the bytes
+    /// back through the returned pointer is what proves contiguity.
+    #[test]
+    fn d3_a_lawful_byte_span_yields_a_usable_pointer_and_length() {
+        // Not ASCII, not a palindrome: a reversed or truncated span is visible.
+        let content: Vec<u8> = vec![0x00, 0x7f, 0x80, 0xff, 0x01, 0x02];
+        let (_p, pointer_code) = d3_view_probe(0);
+        let (_l, length_code) = d3_view_probe(8);
+
+        let mut store = c1_d2_store();
+        let word = d3_lawful_bytes(&mut store, &content);
+        let f = bind(&mut store, BoundaryArenaBuilder::new());
+
+        let length = run2(length_code, f.base, word);
+        assert_eq!(
+            length,
+            content.len() as i64,
+            "`D3`/`AC-5`: the view reports the span's exact length"
+        );
+        let pointer = run2(pointer_code, f.base, word);
+        assert!(pointer > 0, "`D3`: the view must form a real address");
+        let seen =
+            unsafe { std::slice::from_raw_parts(pointer as *const u8, content.len()) }.to_vec();
+        assert_eq!(
+            seen, content,
+            "`D3`: ⛔ the whole content through the RETURNED pointer — a helper              that reported a length without a contiguous address fails here"
+        );
+    }
+
+    /// ⭐ **`D3`/`AC-5` — the CLASS axis, isolated.**
+    ///
+    /// **MEASURED:** a persistent node of another class is refused with exactly
+    /// `BOUNDARY_ERR_CLASS`, with zero host dispatch.
+    /// **CLAIMED:** a word that never denoted a byte span is refused on its own
+    /// axis, distinct from a bounds failure.
+    /// **THE GAP:** ⚠ it varies the class only; it says nothing about owner or
+    /// extent, which have their own rows.
+    #[test]
+    fn d3_a_wrong_class_word_is_refused_on_the_class_axis() {
+        let (_p, code) = d3_view_probe(0);
+        let mut store = c1_d2_store();
+        // A wide `Int`: persistent, `PersistentGround`, owner `PersistentStore`
+        // — every neighbour axis held fixed, only the class differs.
+        let word = materialize_ground(&mut store, &RuntimeGroundValue::Int(wide_int(0)))
+            .expect("a wide Int materializes");
+        let f = bind(&mut store, BoundaryArenaBuilder::new());
+        assert_eq!(
+            run2(code, f.base, word),
+            BOUNDARY_ERR_CLASS,
+            "`AC-5`: a non-byte-span class is refused on the class axis"
+        );
+    }
+
+    /// ⭐ **`D3`/`AC-5` — the OWNER axis, isolated.**
+    ///
+    /// **MEASURED:** with tag and class held fixed on a real `Bytes` node, an
+    /// owner of `InvocationArena` is refused with exactly
+    /// `BOUNDARY_ERR_ESCAPE`.
+    /// **CLAIMED:** the observer will not hand back a pointer into storage that
+    /// dies with the invocation.
+    /// **THE GAP:** ⚠ the corruption is injected, because the relation admits
+    /// no `(tag, class)` pair that is byte-bodied AND invocation-owned — the
+    /// `D1` census measured exactly that. So this guard has **no production
+    /// producer**; it is defence in depth, and the control says the guard
+    /// fires, not that the input is reachable.
+    ///
+    /// ⛔ **Isolated on purpose.** Only `NODE_OWNER` moves. Minting a borrowed
+    /// word instead would have changed the CLASS too, and the class guard would
+    /// have fired first — a witness that never reaches the law it names.
+    #[test]
+    fn d3_a_wrong_owner_node_is_refused_on_the_owner_axis() {
+        let content: Vec<u8> = vec![0x10, 0x20, 0x30];
+        let (_p, code) = d3_view_probe(0);
+        let mut store = c1_d2_store();
+        let word = d3_lawful_bytes(&mut store, &content);
+        let index = word.payload();
+
+        // POSITIVE CONTROL first, on the intact node: the observer answers, so
+        // the refusal below is about the owner and not about the fixture.
+        let f = bind(&mut store, BoundaryArenaBuilder::new());
+        let persistent = f.persistent;
+        assert!(
+            run2(code, f.base, word) > 0,
+            "the intact lawful node must be observable"
+        );
+        drop(f);
+
+        store.image_mut().0.poke_node_field(
+            index,
+            NODE_OWNER,
+            BoundaryReferentOwner::InvocationArena as u64,
+        );
+        let f = rebind(persistent);
+        assert_eq!(
+            run2(code, f.base, word),
+            BOUNDARY_ERR_ESCAPE,
+            "`AC-5`: an invocation-owned referent is refused on the owner axis"
+        );
+    }
+
+    /// ⭐⭐ **`D3`/`AC-5` — the EXTENT axis, and it is the REQUIRED BOUNDARY.**
+    ///
+    /// **MEASURED:** a well-formed `Bytes` node whose extent points past the
+    /// region's live data is refused with exactly `BOUNDARY_ERR_BOUNDS` —
+    /// a DIFFERENT code from the class and owner rows above.
+    /// **CLAIMED:** a well-formed byte span failing a bounds rule and a word
+    /// that never denoted a byte span are two different answers, and a caller
+    /// cannot read one off the other.
+    /// **THE GAP:** ⚠ injected corruption again; no production path mints a
+    /// span outside its own region.
+    ///
+    /// ⛔ **The start is poked to a wrapping value deliberately.** Under an
+    /// `at + len <= live` formulation the sum wraps to a small number and the
+    /// check passes; the non-wrapping form in `region_data_base` is what this
+    /// row exists to hold.
+    #[test]
+    fn d3_a_span_past_the_live_data_is_refused_on_the_bounds_axis() {
+        let content: Vec<u8> = vec![0x10, 0x20, 0x30];
+        let (_p, code) = d3_view_probe(0);
+        let mut store = c1_d2_store();
+        let word = d3_lawful_bytes(&mut store, &content);
+        let index = word.payload();
+
+        let f = bind(&mut store, BoundaryArenaBuilder::new());
+        let persistent = f.persistent;
+        assert!(
+            run2(code, f.base, word) > 0,
+            "the intact lawful node must be observable"
+        );
+        drop(f);
+
+        store
+            .image_mut()
+            .0
+            .poke_node_field(index, NODE_EXTENT, u64::MAX - 1);
+        let f = rebind(persistent);
+        assert_eq!(
+            run2(code, f.base, word),
+            BOUNDARY_ERR_BOUNDS,
+            "`AC-5`: a span outside the region's live data fails closed before              an address is formed, and does so on its OWN code"
+        );
+    }
+
+    /// ⭐ **`D3`/`AC-5` — the TAG axis: a word that denotes no node at all.**
+    ///
+    /// **MEASURED:** an immediate word is refused with `BOUNDARY_ERR_SHAPE`,
+    /// `resolve`'s own status, passed through unrelabelled.
+    /// **CLAIMED:** the observer refuses a word that never denoted a byte span
+    /// before it reads any node field.
+    /// **THE GAP:** ⚠ this is the UNDECODABLE-as-a-handle case. It does not
+    /// exercise a *handle* tag outside the lawful row — see the residual below.
+    ///
+    /// ⛔ **NO WITNESS for a wrong HANDLE tag, and it is reported rather than
+    /// counted.** Isolating that axis needs a word whose tag is a handle other
+    /// than `PersistentGround` while its class stays byte-bodied, and
+    /// `BOUNDARY_TAG_CLASS_RELATION` admits no such pair — `InvocationBorrowed`
+    /// carries only `BorrowedOpaque` and `InvocationAggregate` only
+    /// `Constructor`/`Record`. Routes attempted: `materialize_borrowed` (class
+    /// moves to `BorrowedOpaque`, so the CLASS guard fires first and the
+    /// witness measures a different law) and poking `NODE_CLASS` on a borrowed
+    /// node (which makes the node's own class disagree with its tag, so it is
+    /// the class axis again wearing a tag's clothes). The tag is therefore
+    /// covered only through `resolve`, and the handle-tag arm is **defence in
+    /// depth with no reaching witness**.
+    #[test]
+    fn d3_an_undecodable_word_is_refused_before_any_node_is_read() {
+        let (_p, code) = d3_view_probe(0);
+        let mut store = c1_d2_store();
+        let _anchor = d3_lawful_bytes(&mut store, &[0x01]);
+        let f = bind(&mut store, BoundaryArenaBuilder::new());
+        let immediate = BoundaryWord::immediate(BoundaryTag::ImmediateBool, 1);
+        assert_eq!(
+            run2(code, f.base, immediate),
+            crate::boundary_value::BOUNDARY_ERR_SHAPE,
+            "`AC-5`: an immediate denotes no node, and `resolve`'s status is              returned unrelabelled"
+        );
+    }
+
     /// ⚠ **No production path can produce a malformed span**, so this control
     /// injects the corruption directly. A control that cannot construct the
     /// violating input is not evidence about the guard.

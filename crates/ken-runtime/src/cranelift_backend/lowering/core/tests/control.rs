@@ -8682,8 +8682,8 @@ fn rt_scale_b_governed_n3_through_n7_collect_every_d2_metric() {
         "the closed native-Int graph must contribute all seven definitions"
     );
     assert_eq!(
-        metrics.boundary_value_functions, 29,
-        "the closed boundary-value graph must contribute all twenty-nine \
+        metrics.boundary_value_functions, 30,
+        "the closed boundary-value graph must contribute all thirty \
          definitions"
     );
     for (name, value) in [
