@@ -33,15 +33,32 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-08 ~14:0xZ · FOURTH WALL ON ONE CHAIN; `RT-CARRIED-ORDINARY-COMPOSITION` FILED AND FRAMED
+## LIVE — 2026-08-08 ~14:3xZ · FOURTH WALL ROUTED; #6e CLOSED, #6f BUILDING
 
-**`main = 3bb4addb`.** `RT-CARRIED-CONTINUATION-RESUME`'s `D2` **worked** — the
-carried value survives the composition, **measured on the backtrace rather than
-inferred from the signature** — and the refusal advanced again. A fourth node
-now sits in front of `RT-MATCH-RECURSOR-CONSUMERS`.
+**`main = 8c6ab6f9`.** `RT-CARRIED-CONTINUATION-RESUME` is **closed** — all four
+deliverables landed, all eight of its own ACs met. Its `D2` **worked**: the
+carried value survives the composition, **measured on the refusal backtrace
+rather than inferred from the phase-agnostic signature**, which is the thing the
+types could not have told us. The refusal then advanced a fourth time, and that
+successor is now released and building.
 
 The implementer returned the wall on the armed terms without absorbing it, for
 the **second time in a row**. That is the standard on this chain.
+
+> ### THE `AC-1` THAT LOOKS UNMET IS A DIFFERENT NODE'S, AND THIS IS THE ONE
+> ### THING MOST LIKELY TO BE MISREAD LATER
+>
+> "**`AC-1` remains undischarged**" appears in nearly every handback, Decision
+> and review on `RT-CARRIED-CONTINUATION-RESUME`. **It never referred to that
+> node.** It is [[RT-MATCH-RECURSOR-CONSUMERS]]'s `AC-1`, which the successor now
+> gates.
+>
+> That node's *own* `AC-1` was population closure, discharged by the four-cell
+> census over **486 arrivals** with denominators.
+>
+> ⇒ Left alone, a `merged` node whose every handback says "`AC-1` undischarged"
+> reads as **a node closed over its own unmet criterion.** Written onto the node
+> per-AC so the record does not have to be reconstructed from this thread.
 
 > ### THE CHAIN, because the shape is the story and it keeps repeating
 >
@@ -68,18 +85,39 @@ the **second time in a row**. That is the standard on this chain.
 
 | item | state |
 |---|---|
-| [[RT-CARRIED-ORDINARY-COMPOSITION]] | **FILED `ready`, FRAMED** (campaign #6f, Architect `evt_63ae56tttz9pq`, handle assigned by the Architect). **Not started** — blocked on its predecessor's merge. Population is the **whole guard family** — retained scrutinee index, deferred constructor case, nonempty `eliminators[1..]` — **with intersections**, because the guards are ordered and only the first reached is observable |
-| the two suffix sources | **must not be conflated**, and this is the node's sharpest input. `cc736aaf`'s own new outer-tail guard **did not fire**; the firing tail is the successor frame **rebuilt from `active.pending`**. Two different tails, one guard, one rendered string |
-| `cc736aaf` | **accepted partial, cut authorized by me.** Architect found no design defect; awaiting QA plus the exact-SHA merge Decision. Goes to `main` **before** the successor starts — the successor builds on it, and a team building on an unmerged accepted base is the long-branch shape |
-| `RT-CARRIED-CONTINUATION-RESUME` `D3` | **ruled: an ADVANCE control, not a compile-success control.** The rows do not compile end-to-end and will not until #6f lands. **And it must not key on the trailing-eliminator string** — that string belongs to a guard #6f is about to change, so a control matching it would later pass **vacuously**. Key on the *absence* of the continuation-frame refusal plus the measured `resume_active_continuation` arrival |
-| [[RT-MATCH-RECURSOR-CONSUMERS]] | `active`, **parked behind two successors now** — `depends_on` holds both. Its `AC-1` closes when the chain runs out of walls |
-| [[RT-LEXICAL-RECURSOR-CONSUMERS]] | **`draft`, framed and shovel-ready** — rows 1-5. Serialized behind this arc on **file contention**, not dependency |
+| [[RT-CARRIED-ORDINARY-COMPOSITION]] | **RELEASED and BUILDING** `evt_2vaa9h3mr2x72` (campaign #6f, Architect `evt_63ae56tttz9pq`, handle assigned by the Architect). Population is the **whole guard family** — retained scrutinee index, deferred constructor case, nonempty `eliminators[1..]` — **with intersections**, because the guards are ordered and **only the first one reached is observable**; a first-refusal-only census cannot separate "no members" from "never reached" |
+| the two suffix sources | **must not be conflated**, and this is the node's sharpest input. `cc736aaf`'s own new outer-tail guard **did not fire**; the firing tail is the successor frame **rebuilt from `active.pending`**. Two different tails, one guard, one rendered string. Carried as `AC-3`: state which tail by **measurement**, never by the message |
+| [[RT-CARRIED-CONTINUATION-RESUME]] | **CLOSED.** `D0`/`D1` + `D2` in #1623 (`cc736aaf`), `D3` in #1625 (`752a7099`), CI green on both. All eight of its own ACs met, recorded per-AC on the node |
+| its `D3` control | **an ADVANCE control, ruled and delivered.** Cannot assert compile success — the rows still stop one authority out. Keys on the *absence* of the continuation-frame refusal plus non-zero arrivals **and** routes, deliberately **not** on the trailing-eliminator string, which #6f is about to change and which would then pass **vacuously**. **Proven able to fail:** suppression defaulted to `true` reds `routes` while `arrivals` still passes, separating "reached but not routed" from "never reached" |
+| [[RT-MATCH-RECURSOR-CONSUMERS]] | `active`, **parked behind #6f.** Its `AC-1` closes when the chain runs out of walls |
+| [[RT-LEXICAL-RECURSOR-CONSUMERS]] | **`ready`, framed and shovel-ready** — rows 1-5. Moved off `draft`: it was framed all along, but `draft` kept it off the frontier while its ruled ordering lived only in campaign prose. **Status was standing in for a dependency edge**; it now has the real `depends_on` instead |
 | `D3` / `RT-DESCENT-RETIRE` | downstream of all of it |
 | `#[ignore]` on this arc | **zero, ruled.** Not discouraged — ruled out |
+| open Adversary item | the `mrc_d2_*` accessors from #1620 **still have zero callers** on `main`. Folded into [[RT-MATCH-RECURSOR-CONSUMERS]] `D3`, which has not run. The #6e `D3` control **does** have a consumer |
 
 **Merged this window: #1610**, **#1611**, **#1612**/**#1614**, **#1613**,
-**#1615**, **#1616**, **#1617**, **#1618**, **#1619**, **#1620** (the accepted
-partial, CI green), **#1621**, **#1622**. `main` reached **`3bb4addb`**.
+**#1615**, **#1616**, **#1617**, **#1618**, **#1619**, **#1620** (accepted
+partial, CI green), **#1621**, **#1622**, **#1623** (accepted partial, CI
+green), **#1624**, **#1625** (`D3`, CI green), **#1626**. `main` reached
+**`8c6ab6f9`**.
+
+> ### A SECOND PUBLISH FROM ONE WP BRANCH NOW REJECTS BY DEFAULT
+>
+> #1625's first publish **failed at the push** — `! [rejected] ... (stale info)`
+> — and nothing landed. When #1623 squash-merged, origin deleted the head
+> branch, but the local `refs/remotes/origin/wp/<ID>` still named `cc736aaf`, so
+> the publisher's `--force-with-lease` refused.
+>
+> **The early warning had already fired and I misread it.** A targeted
+> `git fetch` of that ref returns `couldn't find remote ref` and **leaves the
+> stale ref in place** — it does not prune. That message means the remote branch
+> is gone *and* your tracking ref is now stale.
+>
+> ⇒ **Under the accepted-partial policy this is routine, not a two-stage special
+> case** — a WP branch is published repeatedly by construction. Fix is
+> `git update-ref -d refs/remotes/origin/wp/<ID>` (surgical; `refs/remotes/` is
+> shared across ~70 worktrees) then re-run unchanged. The failed run dies
+> **before** PR creation, so there is no orphaned PR to hunt.
 
 Adversary hunted `3061a645` and returned **no correctness defect**, with one
 evidence-axis finding — the `D2` counters have **zero callers repo-wide**, so
