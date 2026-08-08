@@ -237,6 +237,27 @@ general, little or nothing remains here.
 - **`AC-5`.** Emitted function count and per-function code-size distribution
   recorded for the affected programs, as at `RT-DECL-CLOSURE-PORT.AC-6`.
   **Report; do not tune, do not pin a threshold.**
+
+  **`AC-5` IS `D3`'s** (Steward ruling `evt_7y8qz0raz6x0k`). It quantifies over
+  each authority — `RecursiveDescent` root before, `FunctionizedUnits` after —
+  and **production is inert until `D3`**, so the "after" side is not measurable
+  at `D2`. Measuring it there reports the before-state twice.
+
+  **MOST OF THE INSTRUMENTATION ALREADY EXISTS. Do not build a second one.**
+  `RT-SCALE-B` landed `scale_b_record_function` (`lowering/mod.rs:213`),
+  recording per attempt: `production_functions` (the emitted count),
+  `clif_instructions` / `clif_bytes` / `total_blocks` (size), and a
+  **per-emitter breakdown including `RecursiveDescentRoot` and
+  `FunctionizedUnitBody`** — the exact two authorities this AC contrasts. The
+  `define_function` at `units.rs:4262` is already wired: `:4258` calls
+  `scale_b_record_unit_body`.
+
+  ⇒ **What is genuinely missing is narrower: the existing metrics are SUMS, not
+  a per-function DISTRIBUTION.** Read them for the table; if the distribution
+  needs more, **report the gap rather than adding a parallel recorder.** Two
+  counters on one emitting path is the failure `units.rs:4264` already
+  documents — an increment at the call site proved the loop ran and only
+  *claimed* bodies were defined.
 - **`AC-6` — `D2`/`D3` evidence, set by the Architect's ruling
   (`evt_7p8dmg1rez02c`). Three controls, and the third is not optional.**
   1. The **canonical explicit-seed-env positive**.
