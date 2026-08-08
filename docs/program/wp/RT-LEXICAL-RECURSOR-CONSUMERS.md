@@ -193,8 +193,15 @@ node.
 ## 8. Contention
 
 `lowering/core.rs` and `core/tests/control.rs` — the same two files as
-[[RT-MATCH-RECURSOR-CONSUMERS]] and [[RT-RECURSOR-TRANSPORT]] `D3`. **All three
-contend; they are serialized deliberately.** This node is second of the three.
+[[RT-MATCH-RECURSOR-CONSUMERS]], [[RT-CARRIED-CONTINUATION-RESUME]],
+[[RT-CARRIED-ORDINARY-COMPOSITION]] and [[RT-RECURSOR-TRANSPORT]] `D3`. **All
+contend; they are serialized deliberately.**
+
+**This node is last of the carried chain and ahead only of
+[[RT-RECURSOR-TRANSPORT]] `D3`.** The chain grew by two nodes on 2026-08-08 as
+the refusal walked outward, so if you are reading a Steward artifact that still
+calls this node "second of three", that figure predates
+[[RT-CARRIED-CONTINUATION-RESUME]] and [[RT-CARRIED-ORDINARY-COMPOSITION]].
 
 ## 9. Sizing
 

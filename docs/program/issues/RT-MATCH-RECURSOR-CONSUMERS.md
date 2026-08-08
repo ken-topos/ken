@@ -5,7 +5,7 @@ status: active
 owner: runtime
 size: M
 gate: none
-depends_on: [RT-CARRIED-CONTINUATION-RESUME]
+depends_on: [RT-CARRIED-CONTINUATION-RESUME, RT-CARRIED-ORDINARY-COMPOSITION]
 blocks: [RT-RECURSOR-TRANSPORT]
 github: null
 origin: Architect re-rule evt_3r4j14fv1jtj2 (2026-08-08) on the nine-expression census evt_16cmej481q7ns, partitioning RT-RECURSOR-TRANSPORT hard stop 4 by measured residual population. Row 6 (d8d) is a D2 completeness defect in Position A, not a lexical-successor row. Campaign docs/program/16-recursive-descent-retirement.md node #6d. Steward-filed (agents cannot create tracked work per COORDINATION §2).
@@ -118,12 +118,25 @@ Both successor nodes block `D3`. [[RT-DESCENT-RETIRE]] remains downstream.
 
 ## The edges, and the one that is deliberately absent
 
-`depends_on: [RT-CARRIED-CONTINUATION-RESUME]` — **added 2026-08-08** on the
-Architect's sibling-authority ruling `evt_2pt95vbja6447`. This node's `D2`
-repair at `carried_join_arm` is built and correct, and it advanced both A rows
-to a **new** owner, `lower_computational_match_value_composed`. That is a
-sibling authority, so **`AC-1` cannot close here** until
-[[RT-CARRIED-CONTINUATION-RESUME]] lands.
+`depends_on: [RT-CARRIED-CONTINUATION-RESUME, RT-CARRIED-ORDINARY-COMPOSITION]`
+— **two successors, added 2026-08-08 in that order** as each was measured.
+
+The first was added on the Architect's sibling-authority ruling
+`evt_2pt95vbja6447`. This node's `D2` repair at `carried_join_arm` is built and
+correct, and it advanced both A rows to a **new** owner,
+`lower_computational_match_value_composed`.
+
+The second was added on the Architect's fourth-wall ruling `evt_63ae56tttz9pq`.
+[[RT-CARRIED-CONTINUATION-RESUME]]'s `D2` was **also** correct and advanced both
+rows **again**, to the `Carried x Ordinary` pre-delegation guard family left
+unported by [[RT-PRODUCER-MATCH-PORT]].
+
+⇒ **`AC-1` cannot close here until both successors land.** Each addition
+followed a repair that worked, not one that failed — the refusal is walking
+outward through a fail-closed chain, and this node's `AC-1` is the thing that
+closes when it runs out of walls. **Expect the possibility of a third
+successor**; if one appears, it joins this list rather than reopening anything
+above it.
 
 **[[RT-RECURSOR-TRANSPORT]] is still not in `depends_on`, and that is
 deliberate.** This node's base is post-`D2`-correction `main`, and that
