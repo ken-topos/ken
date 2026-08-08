@@ -11382,6 +11382,209 @@ fn d2_ac6_3_the_ported_unit_receives_parameters_before_captures() {
     assert!(report.verifier_passed);
 }
 
+// ─── RT-PRODUCER-MATCH-PORT D1 — the population, and what this class masks ──
+
+/// A single `Match` that fires `ProducerMatchCall` at its own node and carries
+/// one later-firing class in each of the two places the selector never reaches.
+///
+/// The frame's section 3 says this class short-circuits "before
+/// `MatchScrutineeRecursor`, before the recursion into the scrutinee, and before
+/// the case bodies". That is a claim about the mechanism, and this witness is
+/// built so `D1` can measure it instead of restating it: the scrutinee `Call`
+/// carries an active-recursor `Match` among its arguments, and the one case body
+/// carries a lexical call whose argument is an active recursor.
+///
+/// Both hidden classes sit strictly below the `.then_some(ProducerMatchCall)`
+/// arm. That is why a program firing only the outer class cannot distinguish
+/// "the later checks did not fire" from "the later checks never ran" -- the
+/// distinction this node has to measure before it retires anything.
+fn d1_producer_match_call_masking_witness() -> RuntimeExpr {
+    RuntimeExpr::Match {
+        scrutinee: Box::new(RuntimeExpr::Call {
+            callee: Box::new(RuntimeExpr::DeclarationRef {
+                symbol: "decl:fixture::pmp::callee".to_string(),
+            }),
+            args: vec![d1_match_scrutinee_recursor_witness()],
+        }),
+        cases: vec![RuntimeMatchCase {
+            constructor: "ctor:fixture::pmp::Wrap".to_string(),
+            binders: 1,
+            body: d1_lexical_call_argument_recursor_witness(),
+        }],
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "RT-PRODUCER-MATCH-PORT d1 masking witness".to_string(),
+        },
+    }
+}
+
+/// **`D1` -- the masking is MEASURED, at the two positions the mechanism names.**
+///
+/// The frame asserts this class hides later ones; the campaign doc's Trap 1 makes
+/// acting on that assertion mandatory rather than optional. This row is the
+/// measurement, and it is what `D4` hands to `RT-RECURSOR-TRANSPORT` as the
+/// size of the population that was invisible while this class fired.
+///
+/// Three statements, and the third is the deliverable:
+///
+/// 1. the selector reports `ProducerMatchCall` and stops -- the answer the
+///    authority is actually chosen on;
+/// 2. the program in fact carries all three surviving classes;
+/// 3. therefore the masked set is exactly the other two, computed as a set
+///    difference rather than written out a second time.
+///
+/// Point 3 is derived from points 1 and 2 in the code. Restating the expected
+/// masked set as its own literal would let the two drift apart, and the whole
+/// defect this node inherits is a claim about a population that stopped being
+/// true when the population moved.
+///
+/// **Promise class: durable invariant.** It pins that the selector's answer is a
+/// strict subset of what the program carries whenever this class fires. It stays
+/// true until the class is retired, and `RT-DESCENT-RETIRE` removes the enum
+/// that gives it a subject.
+#[test]
+fn d1_producer_match_call_masks_every_later_check_in_its_own_arm() {
+    set_residual_enumeration_mutation(ResidualEnumerationMutation::None);
+    let empty: BTreeMap<&str, &RuntimeDeclaration> = BTreeMap::new();
+    let witness = d1_producer_match_call_masking_witness();
+
+    let selector_reported = recursive_descent_residual(&witness);
+    assert_eq!(
+        selector_reported,
+        Some(RecursiveDescentResidual::ProducerMatchCall),
+        "D1: the selector must report this class and stop -- if it reports anything else the \
+         masking measurement below is about a different mechanism"
+    );
+
+    let carried = enumerate_recursive_descent_residuals(&witness, &empty);
+    assert_eq!(
+        carried,
+        BTreeSet::from([
+            RecursiveDescentResidual::ProducerMatchCall,
+            RecursiveDescentResidual::MatchScrutineeRecursor,
+            RecursiveDescentResidual::LexicalCallArgumentRecursor,
+        ]),
+        "D1: the program carries all three surviving classes -- one at the Match node, one \
+         inside the scrutinee Call, one in a case body"
+    );
+
+    let masked: BTreeSet<RecursiveDescentResidual> = carried
+        .iter()
+        .copied()
+        .filter(|residual| Some(*residual) != selector_reported)
+        .collect();
+    assert_eq!(
+        masked,
+        BTreeSet::from([
+            RecursiveDescentResidual::MatchScrutineeRecursor,
+            RecursiveDescentResidual::LexicalCallArgumentRecursor,
+        ]),
+        "D1: both later classes are invisible to the selector while this one fires. This set is \
+         RT-RECURSOR-TRANSPORT's population growing when this node retires -- a measurement \
+         improving, not a regression"
+    );
+}
+
+/// **`D1` / `AC-2` -- the measured population, enumerated at its gates.**
+///
+/// Two production gates plus the one in-tree program that genuinely compiles
+/// while firing this class. Each is enumerated with the non-short-circuiting
+/// walk, so a member firing a second class is reported rather than hidden.
+///
+/// **What this population is, and what it is not.** `nc5_seed_examples()` is a
+/// production function and is enumerated whole, so it is a population rather than
+/// a sample. The compiling witness is the single program the predecessor node
+/// left behind after `RT-SEED-CALL-PORT` `D3` retired its own class from it, and
+/// its doc there already names it as this node's population. **Nothing here
+/// claims to enumerate every program that could fire `ProducerMatchCall`** -- the
+/// class is reachable from ordinary Ken source (`match (f x) with ..`), and the
+/// rows that motivated this node live in `rt_parity_native`, where they are
+/// quarantined by other owners and cannot be executed at this base. That gap is
+/// reported in `D1`'s handoff rather than papered over here.
+///
+/// **Promise class: transition sentinel.** It reds when any member of these gates
+/// starts or stops firing a class, which is exactly when this node's scope
+/// changed. `D3` is the event that rewrites it.
+#[test]
+fn d1_the_measured_population_and_the_classes_each_member_fires() {
+    set_residual_enumeration_mutation(ResidualEnumerationMutation::None);
+    let empty: BTreeMap<&str, &RuntimeDeclaration> = BTreeMap::new();
+
+    let mut census: BTreeMap<String, BTreeSet<RecursiveDescentResidual>> = nc5_seed_examples()
+        .into_iter()
+        .map(|example| {
+            let residuals = enumerate_recursive_descent_residuals(&example.ir, &empty);
+            (example.name, residuals)
+        })
+        .collect();
+
+    let compiling = seed_call_port_producer_match_example();
+    census.insert(
+        compiling.name.clone(),
+        enumerate_recursive_descent_residuals(&compiling.ir, &empty),
+    );
+
+    let firing: BTreeMap<String, BTreeSet<RecursiveDescentResidual>> = census
+        .into_iter()
+        .filter(|(_, residuals)| !residuals.is_empty())
+        .collect();
+
+    assert_eq!(
+        firing,
+        BTreeMap::from([(
+            "seed-call-port-producer-match".to_string(),
+            BTreeSet::from([RecursiveDescentResidual::ProducerMatchCall]),
+        )]),
+        "D1: across both gates exactly one program fires anything, and what it fires is this \
+         node's class alone. A new member here is a program nobody has attributed to a \
+         residual-class owner -- report it rather than widening this expectation"
+    );
+}
+
+/// **`D1` -- the production-site hook distinguishes NEVER-RAN from RAN-AND-FOUND-NOTHING.**
+///
+/// The inherited hook stores `Option<BTreeSet<_>>` at the selector site, and the
+/// two empty-looking answers mean opposite things: `None` is "no program reached
+/// the selector", `Some(empty)` is "a program reached it and carried no residual".
+/// Nothing in the tree pinned that distinction, and it is the one property that
+/// makes a zero reading from this instrument mean anything at all.
+///
+/// It matters most at `RT-DESCENT-RETIRE`, whose whole authorization is a zero
+/// reading. A hook that silently reported `Some(empty)` when nothing had compiled
+/// would hand that node a vacuous proof, which is the campaign doc's Trap 3
+/// exactly.
+///
+/// **Promise class: durable invariant.** The distinction is the instrument's
+/// contract, not a fact about any particular program.
+#[test]
+fn d1_the_production_hook_separates_never_ran_from_ran_and_found_nothing() {
+    set_residual_enumeration_mutation(ResidualEnumerationMutation::None);
+
+    reset_observed_recursive_descent_residuals();
+    assert_eq!(
+        observed_recursive_descent_residuals(),
+        None,
+        "D1: after a reset and before any compilation the hook must report None -- a Some(empty) \
+         here would make 'nothing fired' indistinguishable from 'nothing ran'"
+    );
+
+    let example = nc5_seed_examples()
+        .into_iter()
+        .find(|example| example.name == "closed-scalar-primitive")
+        .expect("seed exists");
+    let report = run_example_with_seed_observation(&example, &NativeSeedEnvironment::empty())
+        .expect("the closed scalar seed compiles and runs");
+    assert_eq!(report.observation, example.observation);
+
+    assert_eq!(
+        observed_recursive_descent_residuals(),
+        Some(BTreeSet::new()),
+        "D1: a program that reached the selector and carried no residual must read Some(empty), \
+         not None -- this is the positive half of the distinction and the reason the reset above \
+         is not vacuous"
+    );
+}
+
 // ─── RT-DECL-CLOSURE-PORT D5 — the split-domain validator's control group ──
 //
 // ⭐ Every control below runs the SAME program. What varies is one mutation,
