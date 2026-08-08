@@ -173,3 +173,226 @@ No semantic inference is drawn from the census's original failures for these
 two rows, in either direction. They were host failures then and they are
 passing rows now; the first fact does not make the second one evidence about
 anything the campaign was measuring.
+
+---
+
+## D4 - the 761 witness gate: fixed, not moved, and a third state the question did not have
+
+The gate asks whether
+`fs_read_at_malformed_offset_narrows_to_invalid_offset` produces
+`InvalidOffset` because the defect was fixed or because the assertion moved.
+It is settled: **the defect was fixed.** The argument is below, and so is a
+fact about the lawful base that the question's binary form cannot express.
+
+### Which test is the sibling
+
+The frame names the sibling by a line coordinate. That coordinate does not
+resolve on the lawful base - the line it names sits inside a skip-annotation
+comment block. It **does** resolve at `b66dea6a`, the tree the frame measured
+it on, where it lands inside
+`fs_read_at_malformed_offset_without_read_right_narrows_to_invalid_offset`.
+That is the sibling, identified by resolving the coordinate against its own
+base rather than against mine.
+
+### The commit, and why it is a fix
+
+**`e892777c` - "RT-PARITY: interpreter/native checked buffer-IO narrowing
+parity".** It created `crates/ken-cli/tests/rt_parity_native.rs` (720 added, 0
+deleted; confirmed the file's addition commit) and both tests were born in it,
+green.
+
+The discrimination does not rest on reading that commit's message. It rests on
+two measured facts:
+
+1. **The production change is in the interpreter alone.** The commit's paths
+   are `ken-interp/src/eval.rs`, `ken-cli/tests/rt_parity_native.rs`,
+   `ken-interp/tests/px8p_checked_buffer.rs`, and a conformance seed. A filter
+   of its path list for `ken-runtime` or `ken-host` returns **nothing**.
+2. **The test is a differential, and its expected value is the side that did
+   not change.** `assert_narrowed_alike` compares interpreter against native:
+   both must exit 0, both must have no terminal error, their terminal exit
+   classes must agree, and their canonical operation event lists must agree and
+   be empty. The test's own doc records the pre-repair state: the interpreter
+   surfaced `RightNotHeld` while **native already synthesised
+   `InvalidOffset`**.
+
+⇒ The expectation was pinned to native's pre-existing answer, and the commit
+moved the interpreter to meet it. An assertion-move is the opposite shape - the
+expectation is rewritten to match a producer that changed. Here the producer of
+the expected value was never touched.
+
+**One thing this argument does not establish, stated because it would otherwise
+be read as established.** The `"InvalidOffset"` string passed to
+`assert_narrowed_alike` is used only in assertion *messages*; the discrimination
+is carried by the fixture, which exits 0 only on that constructor and non-zero
+on any other. So the oracle is the fixture, not the Rust literal - and the
+fixture and the repair were authored in the same commit. There is therefore no
+pre-commit run of this test to appeal to, and the conclusion rests on the two
+facts above rather than on a before/after execution.
+
+**And the native side was the reference, not a verified output.** The gate
+establishes that the interpreter was brought to native's answer. It does not
+independently establish that native's `InvalidOffset` is correct, because
+native is the unchanged side of the differential. That is a real limit on what
+the 761 gate witnesses, and it is a property of the gate's construction rather
+than a defect introduced by anything in this campaign.
+
+### The third state: neither test runs on the lawful base
+
+Both tests, and four others in that file, are `#[ignore]`d at `47ef28b1`.
+
+- `7ca5cfc0` (`RT-SRCBODY-BIND-ORDER`) first quarantined them, as a closed
+  base-debt quarantine, with the reason recording that they fail at base
+  `21fd46dc`.
+- `e0fc15c3` (`RT-CARRIER-BYTESPAN-OBSERVE` `D5`) **rewrote the skip reason
+  only.** Its diff on that file changes nothing but `#[ignore = ...]` strings;
+  no assertion, expectation or body moved. The current reason states that `D5`
+  landed byte-span observation and is *not* the blocker, and that the row awaits
+  a Steward recut.
+
+⇒ The frame's observation that both passed on `b66dea6a` was correct there -
+both carried a bare `#[test]` at that tree, verified. It is not correct now,
+and the reason is not that they fail: **they do not run.** A gate whose
+evidence is a green observation cannot be re-established by running it here.
+
+This is routed, not repaired. The owner is named in the skip reason itself, and
+un-skipping is explicitly stated there to not be the repair.
+
+---
+
+## D5 - the campaign closeout record
+
+### What the census is, stated so `superseded` is not misread
+
+The 138 rows are a **first-refusal record of the held `1aef3192` lineage** - a
+branch that was never merged and may never be. They are not a worklist, and
+they were not carried through the seams: seam 2 was recut off the census
+entirely and seam 3's landed frame states in its own operative text that the
+census is not an input to any of its deliverables.
+
+**No seam cleared any row's cause, and none was ever going to.** A row marked
+`superseded` below therefore means *the assertion belonged to a mechanism that
+does not exist on the lawful base* - it does **not** mean work was silently
+dropped, and it does not mean a seam resolved it.
+
+### The disposition table
+
+Every one of the 138 rows carries exactly one terminal disposition. The
+partition was computed by intersecting the census row names against the lawful
+base's actual test list, not by inferring coverage from the aggregate pass
+count.
+
+| disposition | rows | basis |
+|---|---:|---|
+| **live**, verdict **pass** | **130** | present in the binary's test list and passing in the `D1` run at `47ef28b1` |
+| **open**, with named owner | **2** | present but `#[ignore]`d, so they carry no verdict |
+| **superseded** | **5** | absent from the lawful base; the assertion belongs to a mechanism that is not here |
+| **live**, verdict **pass**, under a new name | **1** | renamed by a landed node, and it passes |
+| total | **138** | |
+
+**The 2 `open` rows**, each with the owner named in its own skip reason:
+
+| row | owner |
+|---|---|
+| `cranelift_backend::artifact::api::tests::nc22_cranelift_agrees_with_runtime_ir_report_for_broad_starter_shapes` | `RT-FNUNIT-RESULT-TOKEN` |
+| `cranelift_backend::lowering::core::tests::constructors::c2_ac4_runtime_host_result_selects_a_separately_generated_nested_payload` | `RT-CARRIER-PRODUCER-OCCURRENCE` |
+
+These two are the reason the table does not read "130 pass and 8 exceptions".
+They are present, they carry their assertion, and they produce no verdict. A
+reader who took `809 passed` as covering the census would have recorded both as
+passing.
+
+**The 5 `superseded` rows.** Four are the worker-environment rows:
+
+- `cranelift_backend::planning::static_transition::tests::forced_persistent_worker_environment_reaches_escape_defense`
+- `cranelift_backend::planning::static_transition::tests::static_recursor_worker_environment_meets_ordered_capture_owners`
+- `cranelift_backend::planning::static_transition::tests::static_recursor_worker_environment_population_mutations_reject_before_allocation`
+- `cranelift_backend::planning::static_transition::tests::static_recursor_worker_environment_token_is_exact_once_and_preallocation`
+
+All four are present in the held lineage at `1aef3192` and, searched across
+**every ref** in the repository, appear only on held-lineage commits
+(`bde28ff0` "preserve contspec integration audit seam" and `7b9b913d` "plan
+static recursor worker environments"). **They never existed on a merged
+mainline.** That is the textbook case: their refusal was a property of the held
+mechanism.
+
+The fifth is `recursive_declaration_shape_change_hits_typed_boundary`, whose
+assertion was inverted by `RT-DECL-CLOSURE-PORT` `D6` - see `D2` row 6 above.
+
+**The 1 renamed row.**
+`cranelift_backend::lowering::core::tests::control::recursive_descent_root_translates_a_runtime_reached_trap_exactly`
+was renamed to `the_generated_root_translates_a_runtime_reached_trap_exactly`
+by `080f3bb2` (`RT-PRODUCER-MATCH-PORT` `D3`). It passes.
+
+That commit disclosed a coverage change in the fixture's own comment rather
+than leaving it to be discovered: the program still reaches its trap, but its
+producer-`Call` scrutinee is ported, so the trap now translates through the
+**functionized** root instead of the retained one. Runtime-reached trap
+translation on the *retained* root consequently has no witness, and the gap is
+bounded by `RT-DESCENT-RETIRE`, which deletes that root. That residual is
+carried here rather than restated as new.
+
+### What the four seams established
+
+- **Seam 1, `RT-CONTSPEC-ASSEMBLY`** - built the assembly and produced the
+  corrected 138-row census as its `D4`. The census is this campaign's only
+  record of what the held lineage actually refused on, and its value turned out
+  to be historical rather than operational.
+- **Seam 2, `RT-CONTSPEC-ACTIVATE`** - the continuation emission seam, with the
+  planner-issued target proved equal to the emitted direct-call target, and
+  three executable `cfg(test)` controls sitting on the exact production
+  branches they perturb. Recut off the census.
+- **Seam 3, `RT-CONTSPEC-LEDGER`** - recut mid-flight from populating the
+  boundary-use ledger to **deleting** it, after the ring declined to produce a
+  mapping and the Architect sustained the stop. The four `BoundaryUse*` axes
+  were an unowned schema fragment with one production variant each and no
+  semantic consumer.
+- **Seam 4, this node** - the integrated measurement and the closeout.
+
+**A pattern worth recording, because it is the campaign's main methodological
+result.** Two of the four seams were recut after execution began, and in both
+cases the recut was triggered by an implementer declining to satisfy a
+deliverable whose premise did not hold - the census-as-worklist in seam 2, and
+the ledger mapping in seam 3. Neither recut was discovered by review of the
+frame. Both were discovered by trying to execute it.
+
+### What remains open
+
+| item | owner |
+|---|---|
+| `nc22_cranelift_agrees_with_runtime_ir_report_for_broad_starter_shapes` un-skipped and green on the functionized lane | `RT-FNUNIT-RESULT-TOKEN` |
+| `c2_ac4_runtime_host_result_selects_a_separately_generated_nested_payload` un-skipped | `RT-CARRIER-PRODUCER-OCCURRENCE` |
+| the six `rt_parity_native.rs` rows, including both 761 tests, un-skipped | `RT-CARRIER-BYTESPAN-OBSERVE`, awaiting a Steward recut per its own skip reason |
+| `two_same_shape_workers_are_distinguished` executable | `RT-WORKER-FIXTURE-DECODE` |
+| runtime-reached trap translation on the retained root | `RT-DESCENT-RETIRE`, which deletes that root |
+| whether any live row still exercises the ported shape | `RT-DESCENT-RETIRE` `D6b`, bound into its `AC-5` |
+
+---
+
+## D6 - the tracker closure
+
+**The set was measured at `47ef28b1`, not inherited.** Reading `status:` from
+every node in the closure set at that base:
+
+| node | status at base | action |
+|---|---|---|
+| `RT-CONTSPEC-WITNESS` | `ready` | flipped |
+| `RT-RECURSOR-TRANSPORT` | `ready` | flipped to `closed` |
+| `RT-DECL-CLOSURE-PORT` | `merged` | **not touched** - already terminal |
+| `RT-CONTSPEC-ASSEMBLY` / `-ACTIVATE` / `-LEDGER` | `merged` | not touched |
+
+**The set is two**, which matches the frame's 2026-08-08 correction. No third
+flip was invented, and `RT-DECL-CLOSURE-PORT` was not re-closed.
+
+`RT-RECURSOR-TRANSPORT` names this seam as what closed it, and records that its
+residual coverage question lives in `RT-DESCENT-RETIRE` `D6b` rather than being
+carried as an unowned gap.
+
+**One flip to check against convention rather than accept.** This node's own
+`status` is set to `merged` here because `AC-7` asks `D6` to close every node in
+the measured set, and this node is in it. The landed practice is different: the
+Steward flipped `RT-CONTSPEC-LEDGER` to `merged` in a separate post-merge commit
+(`43e5903f`), not in the candidate. Until this candidate merges, that line
+asserts something untrue of the tree it sits in. **It is a single frontmatter
+line and it is the one to drop** if the convention should win over the AC's
+literal reading; the rest of `D6` does not depend on it.
