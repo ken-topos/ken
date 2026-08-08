@@ -48,36 +48,6 @@ thread_local! {
         const { std::cell::Cell::new(ResidualEnumerationMutation::None) };
 }
 
-/// **`RT-SEED-CALL-PORT` `D2` — the selector witness that breaks the `D2`/`D3`
-/// circularity, and it is `D3`'s job to delete it.**
-///
-/// `D2` builds the callee-position seed unit on the `FunctionizedUnits` lane.
-/// But `SeedClosureCall` fires for exactly the programs that reach it, so the
-/// selector routes every one of them to `RecursiveDescent` and the new arm is
-/// unreachable until `D3` retires the variant. Without a witness, `D2` could
-/// land with no executed evidence at all -- which is the shape the campaign
-/// keeps paying for.
-///
-/// This masks the classification in the SELECTOR only. The `D1` enumerator is
-/// deliberately left alone, so the census keeps reporting `SeedClosureCall`
-/// truthfully while the port is exercised. A witness that also blinded the
-/// instrument would make `D1a` measure the witness rather than the tree.
-///
-/// The identical device sat at `declaration_recursive_descent_residual` for
-/// `RT-DECL-CLOSURE-PORT`'s `D5`, for the same measured reason, and its `D6`
-/// removed it on activation. `D3` does the same here: retiring the variant
-/// makes every control below run unhooked, and that is the evidence `D3` owes.
-#[cfg(test)]
-thread_local! {
-    static SEED_CLOSURE_CALL_SELECTOR_WITNESS: std::cell::Cell<bool> =
-        const { std::cell::Cell::new(false) };
-}
-
-#[cfg(test)]
-pub(in crate::cranelift_backend) fn set_seed_closure_call_selector_witness(armed: bool) {
-    SEED_CLOSURE_CALL_SELECTOR_WITNESS.with(|cell| cell.set(armed));
-}
-
 /// **`D2` reachability — how many times the ported seed-callee arm reached its
 /// HANDOFF POINT: arity checked, every capture resolved, inputs handed to the
 /// existing typed call path.**
@@ -112,18 +82,6 @@ pub(in crate::cranelift_backend) fn reset_seed_callee_unit_ports() {
 #[cfg(test)]
 pub(in crate::cranelift_backend) fn seed_callee_unit_ports() -> usize {
     SEED_CALLEE_UNIT_PORTS.with(std::cell::Cell::get)
-}
-
-#[cfg(test)]
-fn seed_closure_call_selector_witness() -> bool {
-    SEED_CLOSURE_CALL_SELECTOR_WITNESS.with(std::cell::Cell::get)
-}
-
-/// In production the witness does not exist and the classification is
-/// unconditional.
-#[cfg(not(test))]
-fn seed_closure_call_selector_witness() -> bool {
-    false
 }
 
 /// The mutation `D1a` proves its exact-set control against.
@@ -613,8 +571,6 @@ enum RecursiveDescentResidual {
     /// of the completed functionized ports, so the established recursive
     /// descent lane retains the whole call.
     LexicalCallArgumentRecursor,
-    /// A call whose callee is the retained non-lexical closure form.
-    SeedClosureCall,
     // ⭐⭐ **`RT-DECL-CLOSURE-PORT` `D6` RETIRED `TransparentDeclarationClosure`.**
     //
     // A transparent declaration whose body is a closure seed is now reached as a
@@ -624,10 +580,35 @@ enum RecursiveDescentResidual {
     // `DeclarationRef` calls and the complete owner/phase validation the ruling
     // required **before** this variant could be removed.
     //
-    // ⛔ The four variants above are untouched and the classifier below is still
+    // ⛔ The variants above are untouched and the classifier below is still
     // exhaustive and fail-closed. This is a retirement, not a relaxation: the
     // selector is unchanged in kind and still refuses to select
     // `FunctionizedUnits` while any remaining variant fires.
+    //
+    // (That sentence read "the four variants above" until `RT-SEED-CALL-PORT`
+    // `D3` removed one. A count in prose next to the thing it counts goes stale
+    // the first time the population moves, which is why it is now stated as a
+    // relation instead.)
+
+    // **`RT-SEED-CALL-PORT` `D3` RETIRED `SeedClosureCall`.**
+    //
+    // A `Call` whose callee is the retained non-lexical closure form is now
+    // lowered as that callee's planner-owned body unit, reached through the
+    // existing typed `call_declared_unit` transport with exactly
+    // `Parameter ++ Capture` inputs. `D2` built that port; this is its
+    // activation, and the port arm stops being dead code at the moment this
+    // variant disappears.
+    //
+    // The capability is PORTED, not deleted: `RuntimeExpr::Closure` remains a
+    // live member of the public backend-neutral IR with its own evaluator
+    // semantics, and a call to one is now handled rather than made unreachable.
+    // Deleting the shape instead would have made the same closure value callable
+    // after a `DeclarationRef` but unlawful written directly, purely by source
+    // position (Architect `evt_7p8dmg1rez02c`).
+    //
+    // The `D2` selector witness is gone with the variant. It existed only to
+    // make the port arm reachable while this classification still fired, so it
+    // has no remaining purpose and every `D2` control now runs unhooked.
 }
 
 /// Produce the retained reason, if any, from the exhaustive source walk.
@@ -693,24 +674,19 @@ fn recursive_descent_residual(expr: &RuntimeExpr) -> Option<RecursiveDescentResi
             .find_map(|(_, value)| recursive_descent_residual(value)),
         RuntimeExpr::Project { record, .. } => recursive_descent_residual(record),
         RuntimeExpr::Call { callee, args } => {
-            (matches!(callee.as_ref(), RuntimeExpr::Closure { .. })
-                && !seed_closure_call_selector_witness())
-                .then_some(RecursiveDescentResidual::SeedClosureCall)
-                .or_else(|| {
-                    (matches!(callee.as_ref(), RuntimeExpr::LexicalClosure { .. })
-                        && args.iter().any(|argument| {
-                            matches!(
-                                argument,
-                                RuntimeExpr::ComputationalMatch { cases, .. }
-                                    if cases
-                                        .iter()
-                                        .any(|case| !case.recursive_positions.is_empty())
-                            )
-                        }))
-                    .then_some(RecursiveDescentResidual::LexicalCallArgumentRecursor)
-                })
-                .or_else(|| recursive_descent_residual(callee))
-                .or_else(|| args.iter().find_map(recursive_descent_residual))
+            (matches!(callee.as_ref(), RuntimeExpr::LexicalClosure { .. })
+                && args.iter().any(|argument| {
+                    matches!(
+                        argument,
+                        RuntimeExpr::ComputationalMatch { cases, .. }
+                            if cases
+                                .iter()
+                                .any(|case| !case.recursive_positions.is_empty())
+                    )
+                }))
+            .then_some(RecursiveDescentResidual::LexicalCallArgumentRecursor)
+            .or_else(|| recursive_descent_residual(callee))
+            .or_else(|| args.iter().find_map(recursive_descent_residual))
         }
         RuntimeExpr::Effect {
             capability, args, ..
@@ -855,9 +831,6 @@ fn collect_recursive_descent_residuals(
             collect_recursive_descent_residuals(record, found);
         }
         RuntimeExpr::Call { callee, args } => {
-            if matches!(callee.as_ref(), RuntimeExpr::Closure { .. }) {
-                found.insert(RecursiveDescentResidual::SeedClosureCall);
-            }
             if matches!(callee.as_ref(), RuntimeExpr::LexicalClosure { .. })
                 && args.iter().any(|argument| {
                     matches!(
