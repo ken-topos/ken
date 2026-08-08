@@ -169,15 +169,64 @@ first frame `Ordinary` — outside the repair cell on **both** axes. That holds
 measured; any widening re-measures `AC-5` in the same candidate and is never
 carried forward.
 
-**Owed before `D2`: the cross-crate census.** The `D0` instrument is env-gated
-rather than `cfg(test)` precisely so it can run inside `ken-cli` and
-`ken-verify` integration binaries, where a `cfg(test)` instrument is structurally
-blind. **That run has not been performed**, so the closed perimeter is the lib
-corpus, and both independent members are hand-built `RuntimeExpr` values —
-**Campaign Trap 1, unclosed across five nodes because the capability did not
-exist until now.** Bounded, with an exit: if the harness cannot carry the
-instrument, that is the answer, and `D2` proceeds on the lib-corpus perimeter
-with the limitation recorded here.
+## The cross-crate census: TAKEN, and Campaign Trap 1 is RETIRED AS A QUESTION
+
+Steward, 2026-08-08, `evt_27jwdbz9h2t4c`, on the `D2`/`D3` handback.
+
+**The harness does carry the instrument** into `ken-cli` and `ken-verify` —
+proven rather than assumed, with a positive control at
+`select_body_emission_authority` so that "no census file" and "no arrivals"
+cannot be confused. All three binaries emit `COMPILE` rows and **zero arrivals**
+at the boundary.
+
+> ### THE ZERO IS STRUCTURAL, SO NO CENSUS CAN EVER CLOSE TRAP 1 HERE
+>
+> `SELECTOR_VARIANT_EXCLUSION` and the whole activation seam are `#[cfg(test)]`,
+> and those binaries build `ken-runtime` **without** it. ⇒ **A cross-crate
+> census can only ever witness the RETAINED lane.** This node's population
+> exists solely under A-only exclusion.
+>
+> **Trap 1 stays open for the activated population, and it is not closable by
+> measurement.** Closing it would mean moving a test-only seam into production
+> gating — banned, and out of scope for any node in this campaign.
+>
+> **This retires the question, not the trap.** Five nodes carried Trap 1 as an
+> unexamined gap; it is now a named structural reason. Do not re-run this
+> census expecting a different answer.
+
+**The `--include-ignored` run splits a question that was being carried as one.**
+The sole failure is [[RT-COMPMATCH-TREE-SCRUTINEE]] — *"a tree-producing match
+scrutinee is neither Bool nor a constructor"* — **a real-program non-constructor
+scrutinee in this wall's class, failing at a different consumer.**
+
+⇒ *Do real programs exhibit this shape?* **Yes** — the class occurs in real
+programs. *Is this specific cell reachable in production?* **No**, and that is a
+property of the exclusion seam, **not of the language.** The two were previously
+one worry, and only the first is what Trap 1 was really about.
+
+## The sixth wall, and the disposition of this cut
+
+`D2` clears the fifth refusal and the program reaches `lowering/units.rs`
+`close()` — the continuation-call discharge ledger, whose law is
+`planned = direct-emitted ⊎ composed-consumed`, **sets not counts**. One planned
+token is neither directly emitted nor compositionally consumed. Every member has
+`pending_len=0`, where the resume discharges nothing, so resolving it means
+**assigning discharge ownership** — planner, resume, or a third party.
+
+**A distinct planner-population authority: Trap 2, not a defect in `D2`.** Under
+the fifth wall this program aborted before `close()` ever ran, so `D2` made the
+ledger reachable for this shape for the first time. Routed, not absorbed; no
+ownership assigned.
+
+**The lane-pair control is what found it, and it is held, not committed**, at
+`65639a13` on `runtime-implementer/sar-lane-pair-evidence`. Divergence is the
+premise failing, so it is a stop-and-route: committing it red is impermissible
+and weakening it to pass would absorb the stop it exists to detect. **Evidence,
+never a candidate — do not publish it.**
+
+`D2`/`D3` at exact `d9175d05` is **accepted partial work** by the same pattern
+that governed #6f's `D2`. It does **not** close this node and does **not**
+discharge [[RT-MATCH-RECURSOR-CONSUMERS]] `AC-1`.
 
 No hard stop fired. Interface widening in particular did **not** fire:
 `resume_active_continuation` (`core.rs:2059`) already takes a `LoweringOperand`.

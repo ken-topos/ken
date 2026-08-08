@@ -33,27 +33,55 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-08 ~16:4xZ · #6f CLOSED; #6g RUNNING at `S`
+## LIVE — 2026-08-08 ~17:1xZ · #6g `D2`/`D3` ACCEPTED PARTIAL; #6h RELEASED
 
-> ### MY ADDRESS: the CROSS-CRATE CENSUS for #6g, then `D2` at `S`
+> ### MY ADDRESS: #6g's documentation-only scope child, then its merge
 >
-> `D0`/`D1` returned at `f3be6476` (base `dcd6d84c`, one path `+257/-0`,
-> `crates/` byte-identical) and I ruled on it at `evt_64f8gm80y2w0y` in
-> `thr_yyq1h7mxt5aw`. **Re-sized `M` to `S`. `D2` authorized, key held narrow.**
+> `D2`/`D3` returned at exact `d9175d05` and is **accepted partial work** —
+> Architect `evt_vxqa83y4z3nt`, Steward `evt_27jwdbz9h2t4c`. **It is not yet a
+> merge candidate.** The handback stated `+417/-16`, which is true against the
+> `D0`/`D1` checkpoint `f3be6476`; the cut from base `dcd6d84c` is `+664/-6`.
+> **I verified both against the objects.** A doc-only child stating both
+> anchored ranges is owed, then a fresh SHA with fresh QA.
 >
-> **Owed first: the cross-crate census.** The instrument is env-gated rather than
-> `cfg(test)` so it can run in `ken-cli`/`ken-verify` integration binaries where
-> `cfg(test)` is structurally blind. It was built and not run. **That is Trap 1,
-> unclosed across five nodes because the capability did not exist until now.**
-> Bounded with an exit — if the harness cannot carry it, that is the answer and
-> `D2` proceeds on the lib-corpus perimeter with the limitation on the node.
+> **The number was not wrong — it was anchored to a tree the reader does not
+> hold.** That is the third coordinate-anchoring miss on this chain in two days,
+> and the first one where the artifact was internally consistent throughout.
 >
-> **Three constraints on `D2`, all recorded on the node — do not re-derive:**
-> the resume is the **identity** for the whole measured population, so `D3` must
-> assert the **route**, not the vanished refusal; **`AC-5` is discharged by
-> disjointness and that discharge is conditional on the narrow key**; and the
-> **retained lane is a free positive control** — the same programs, accepted in
-> one lane and refused in the other, which tests the campaign's thesis directly.
+> **#6g does not close, and #6c's `AC-1` stays open.**
+
+> ### THE CROSS-CRATE CENSUS IS DONE, AND IT RETIRES A FIVE-NODE QUESTION
+>
+> I bounded it with "if the harness cannot carry the instrument, that is the
+> answer." **The harness does carry it** — proven, with a positive control at
+> `select_body_emission_authority` so "no census file" and "no arrivals" cannot
+> be confused. That control is why the zero is worth anything.
+>
+> **The zero is structural.** `SELECTOR_VARIANT_EXCLUSION` and the activation
+> seam are `#[cfg(test)]`, and those binaries build `ken-runtime` without them.
+> ⇒ **a cross-crate census can only ever witness the RETAINED lane.** Trap 1 is
+> **not closable by measurement here**; closing it would mean moving a test-only
+> seam into production gating. **Do not re-run this census.**
+>
+> **The `--include-ignored` finding splits a question carried as one.** The sole
+> failure is [[RT-COMPMATCH-TREE-SCRUTINEE]] — a **real-program** non-constructor
+> scrutinee in this wall's class, failing at a *different* consumer. So *do real
+> programs exhibit this shape?* **yes**; *is this cell reachable in production?*
+> **no**, and that is a property of the exclusion seam, not of the language.
+
+> ### THE SIXTH WALL IS #6h, AND IT IS AN ATTRIBUTION NODE
+>
+> `RT-CONTINUATION-CALL-DISCHARGE`, framed and `ready`.
+> `ContinuationClaimLedger::close` refuses: one planned causal token is neither
+> directly emitted nor compositionally consumed. Every member has
+> `pending_len=0`, so the resume discharges nothing — **a planner/lowering
+> obligation mismatch that does not say which side is wrong.**
+>
+> **`D1` classifies exactly one of three and refutes the other two.** The frame
+> deliberately **does not name a repair**; the Architect ruled the planner
+> implicated but not convicted. **Runtime must not begin #6h until I release
+> it.** Held lane-pair evidence `65639a13` is its end-state control and is
+> **never published**.
 
 
 
