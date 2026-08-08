@@ -7,6 +7,10 @@ use crate::cranelift_backend::lowering::units::{
     continuation_case_binder_run, ContinuationCaseBinderSource,
 };
 use crate::RuntimeSymbolMetadata;
+// `RT-SEED-CALL-PORT` `D1` — the class's population is measured on the real
+// seed corpus, not on hand-built witnesses. `values.rs` and `constructors.rs`
+// reach it the same way.
+use crate::nc5_seed_examples;
 // `RT-SRCBODY-BIND-ORDER` `D3` — the whole-process run harness lives beside
 // the effect controls that first needed it; the binding-order controls below
 // run the same shape.
@@ -10882,6 +10886,238 @@ fn d1_the_enumerator_reports_every_variant_not_the_first() {
         recursive_descent_residual(&compound).is_some(),
         "the selector still answers its own question on this program"
     );
+}
+
+// ─── RT-SEED-CALL-PORT D1 / D1a — the class's real population ──────────────
+
+/// The constructor both `D1a` fixtures match on. `nc5`'s `adt-constructor-match`
+/// seed uses the same one, so it is known to lower with an empty seed
+/// environment; a fresh name would make a refusal ambiguous between the
+/// fixture's shape and its metadata.
+#[cfg(test)]
+const SEED_CALL_PORT_SOME: &str = "ctor:fixture::Core::Option::Some";
+
+/// A program firing EXACTLY TWO residual variants: the `Match` scrutinee is
+/// directly a `Call` (`ProducerMatchCall`) and that `Call`'s callee is the
+/// retained non-lexical closure form (`SeedClosureCall`).
+///
+/// Two variants is the whole point. A one-variant program cannot separate the
+/// enumerator from its short-circuiting twin, because both answer identically on
+/// it -- which is why `D1a` cannot be discharged by a reachability control.
+#[cfg(test)]
+fn seed_call_port_two_variant_example() -> RuntimeExample {
+    RuntimeExample {
+        name: "seed-call-port-d1a-two-variant".to_string(),
+        checked_core_shape: "match ((\\x . Some x) 4) with Some y => y".to_string(),
+        ir: RuntimeExpr::Match {
+            scrutinee: Box::new(RuntimeExpr::Call {
+                callee: Box::new(RuntimeExpr::Closure {
+                    captures: Vec::new(),
+                    params: vec!["x".to_string()],
+                    body: Box::new(RuntimeExpr::Construct {
+                        constructor: SEED_CALL_PORT_SOME.to_string(),
+                        args: vec![RuntimeExpr::Var(0)],
+                    }),
+                }),
+                args: vec![RuntimeExpr::Value(RuntimeValue::Int((4).into()))],
+            }),
+            cases: vec![RuntimeMatchCase {
+                constructor: SEED_CALL_PORT_SOME.to_string(),
+                binders: 1,
+                body: RuntimeExpr::Var(0),
+            }],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "seed-call-port d1a fixture".to_string(),
+            },
+        },
+        observation: RuntimeObservation::Returned(RuntimeGroundValue::Int((4).into())),
+    }
+}
+
+/// **`RT-SEED-CALL-PORT` `D1` — the grounding result. The class FIRES.**
+///
+/// The frame predicted this node might close for free, on the ground that
+/// `RT-DECL-CLOSURE-PORT` subsumes the class. It does not: `nc5`'s
+/// `closure-capture-application` seed is a `Call` whose callee is a
+/// `RuntimeExpr::Closure`, it is compiled natively by
+/// `cranelift_runs_closure_seed_with_explicit_runtime_capture_environment`, and
+/// it is green on `main` today.
+///
+/// **MEASURED:** compiling that seed through the production entry records the
+/// residual set `{SeedClosureCall}` at the selector site.
+/// **CLAIMED:** `SeedClosureCall`'s population on this tree is non-empty, so a
+/// close-on-absence is not available.
+/// **THE GAP:** this measures `ken-runtime`'s own test-profile compilations
+/// only. That bounds the population from BELOW, which is the direction the claim
+/// needs -- a wider domain can add members but cannot empty this one.
+///
+/// **Promise class: transition sentinel.** It goes red when `D3` retires the
+/// variant, which is exactly the event that should force a reader back here.
+/// Named for the boundary rather than the count, and the retiring event is `D3`.
+#[test]
+fn seed_call_port_d1_seed_closure_call_fires_on_a_program_this_repository_compiles() {
+    set_residual_enumeration_mutation(ResidualEnumerationMutation::None);
+    reset_observed_recursive_descent_residuals();
+
+    let example = nc5_seed_examples()
+        .into_iter()
+        .find(|example| example.name == "closure-capture-application")
+        .expect("seed exists");
+    let report = run_example_with_seed_observation(&example, &NativeSeedEnvironment::nc5_seed())
+        .expect("the seed compiles and runs natively on main");
+    assert_eq!(
+        report.observation, example.observation,
+        "the fixture must reach its expected observation, or the residual set below describes a \
+         program that never really compiled"
+    );
+
+    assert_eq!(
+        observed_recursive_descent_residuals(),
+        Some(BTreeSet::from([RecursiveDescentResidual::SeedClosureCall])),
+        "D1: SeedClosureCall fires on a real compiled program. This node does NOT close for free"
+    );
+}
+
+/// **`RT-SEED-CALL-PORT` `D1` / `AC-2` — the class's population, named in the
+/// tree and closed over the corpus that feeds the native backend.**
+///
+/// `nc5_seed_examples()` is the gate, not a sample: it is the single production
+/// function that produces the seed corpus, and `values.rs`, `constructors.rs`,
+/// `artifact/api/tests.rs` and `ken-interp`'s differentials all select from it
+/// by name. Enumerating at the gate and applying the classifier to each member
+/// is what makes this a population rather than a list of examples someone
+/// remembered.
+///
+/// The assertion is over NAMES, not a count, and it is deliberately EXACT in
+/// both directions. A new seed example that fires a residual reds this row and
+/// forces the population to be re-stated -- which is the paired obligation the
+/// campaign doc's Trap 3 demands of any proof quantified over a population.
+///
+/// **Promise class: transition sentinel.** Named for the boundary (which seeds
+/// fire) rather than a count. `D3` retires `SeedClosureCall` and is the event
+/// that rewrites this row.
+#[test]
+fn seed_call_port_d1_the_seed_corpus_population_that_fires_a_residual_is_exactly_one_example() {
+    set_residual_enumeration_mutation(ResidualEnumerationMutation::None);
+    let empty: BTreeMap<&str, &RuntimeDeclaration> = BTreeMap::new();
+
+    let firing: BTreeMap<String, BTreeSet<RecursiveDescentResidual>> = nc5_seed_examples()
+        .into_iter()
+        .map(|example| {
+            let residuals = enumerate_recursive_descent_residuals(&example.ir, &empty);
+            (example.name, residuals)
+        })
+        .filter(|(_, residuals)| !residuals.is_empty())
+        .collect();
+
+    let expected = BTreeMap::from([(
+        "closure-capture-application".to_string(),
+        BTreeSet::from([RecursiveDescentResidual::SeedClosureCall]),
+    )]);
+    assert_eq!(
+        firing, expected,
+        "D1: the seed corpus's firing population. A new member here is a program nobody has \
+         attributed to a residual-class owner -- report it rather than widening this expectation"
+    );
+}
+
+/// **`RT-SEED-CALL-PORT` `D1a` — THE FREE-CLOSE GATE, discharged as an
+/// exact-set control on a real compiled program.**
+///
+/// The gate exists because an empty result is this node's *predicted* outcome,
+/// so a broken instrument produces the anticipated answer and nobody looks
+/// twice. It therefore has to discriminate the specific break that would produce
+/// it: an enumerator that silently short-circuits like the selector.
+///
+/// **The three rows are one argument, and the third is the load-bearing one.**
+///
+/// 1. The two-variant program reports the EXACT set it fires.
+/// 2. Under `ShortCircuitLikeTheSelector` that same program reports strictly
+///    less, so this control reds on the defect it exists to catch.
+/// 3. The one-variant program reports the SAME set mutated and unmutated. That
+///    is the measured reason a reachability control cannot discharge this gate:
+///    every single-variant witness is blind to short-circuiting by construction,
+///    and every `d1_*_witness` already in the tree is single-variant.
+///
+/// Row 3 is a positive control in the strict sense -- it proves the mutation
+/// switch is not simply breaking everything it touches, which a red-only proof
+/// cannot distinguish from a discriminating one.
+///
+/// **Promise class: durable invariant.** It pins that the reported set equals
+/// the set the program exhibits. Retiring `SeedClosureCall` at `D3` changes the
+/// expected sets here, which is a deliberate, reviewed edit rather than drift.
+#[test]
+fn seed_call_port_d1a_the_exact_set_control_reds_under_short_circuiting() {
+    let two_variant = seed_call_port_two_variant_example();
+    let exact = BTreeSet::from([
+        RecursiveDescentResidual::ProducerMatchCall,
+        RecursiveDescentResidual::SeedClosureCall,
+    ]);
+
+    // Row 1 -- the exact set, and the fixture genuinely compiles. A refusal here
+    // would leave every assertion below describing a program that never lowered.
+    set_residual_enumeration_mutation(ResidualEnumerationMutation::None);
+    reset_observed_recursive_descent_residuals();
+    let report =
+        run_example_with_seed_observation(&two_variant, &NativeSeedEnvironment::empty())
+            .expect("the two-variant fixture compiles and runs natively");
+    assert_eq!(
+        report.observation, two_variant.observation,
+        "the two-variant fixture must reach its expected observation"
+    );
+    assert_eq!(
+        observed_recursive_descent_residuals(),
+        Some(exact.clone()),
+        "D1a: the enumeration must report the EXACT set this program fires, not the first variant"
+    );
+
+    // Row 2 -- the same program under the one regression that would manufacture
+    // this node's predicted answer.
+    set_residual_enumeration_mutation(ResidualEnumerationMutation::ShortCircuitLikeTheSelector);
+    reset_observed_recursive_descent_residuals();
+    let _ = run_example_with_seed_observation(&two_variant, &NativeSeedEnvironment::empty());
+    let short_circuited =
+        observed_recursive_descent_residuals().expect("the instrument still ran");
+    assert_ne!(
+        short_circuited, exact,
+        "D1a: a short-circuiting enumerator MUST red this control -- that is the entire reason \
+         the gate is exact-set rather than reachability"
+    );
+    assert_eq!(
+        short_circuited.len(),
+        1,
+        "the short-circuiting twin reports exactly one reason; got {short_circuited:?}"
+    );
+
+    // Row 3 -- the positive control. On a ONE-variant program the mutation is
+    // undetectable, which is the measured fact that makes rows 1 and 2 necessary.
+    let single_variant = nc5_seed_examples()
+        .into_iter()
+        .find(|example| example.name == "closure-capture-application")
+        .expect("seed exists");
+    let single_expected = BTreeSet::from([RecursiveDescentResidual::SeedClosureCall]);
+
+    set_residual_enumeration_mutation(ResidualEnumerationMutation::None);
+    reset_observed_recursive_descent_residuals();
+    let _ = run_example_with_seed_observation(&single_variant, &NativeSeedEnvironment::nc5_seed());
+    assert_eq!(
+        observed_recursive_descent_residuals(),
+        Some(single_expected.clone()),
+        "row 3 baseline"
+    );
+
+    set_residual_enumeration_mutation(ResidualEnumerationMutation::ShortCircuitLikeTheSelector);
+    reset_observed_recursive_descent_residuals();
+    let _ = run_example_with_seed_observation(&single_variant, &NativeSeedEnvironment::nc5_seed());
+    assert_eq!(
+        observed_recursive_descent_residuals(),
+        Some(single_expected),
+        "D1a: a single-variant witness reports the SAME set short-circuited or not. Any control \
+         built only on such witnesses is structurally blind to the defect row 2 catches"
+    );
+
+    set_residual_enumeration_mutation(ResidualEnumerationMutation::None);
 }
 
 // ─── RT-DECL-CLOSURE-PORT D5 — the split-domain validator's control group ──
