@@ -33,614 +33,106 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-08 ~17:1xZ · #6g `D2`/`D3` ACCEPTED PARTIAL; #6h RELEASED
+## LIVE — 2026-08-08 ~18:4xZ · TWO LANES ACTIVE; PX8 IS RED AND BEING FIXED
 
-> ### MY ADDRESS: #6g's documentation-only scope child, then its merge
->
-> `D2`/`D3` returned at exact `d9175d05` and is **accepted partial work** —
-> Architect `evt_vxqa83y4z3nt`, Steward `evt_27jwdbz9h2t4c`. **It is not yet a
-> merge candidate.** The handback stated `+417/-16`, which is true against the
-> `D0`/`D1` checkpoint `f3be6476`; the cut from base `dcd6d84c` is `+664/-6`.
-> **I verified both against the objects.** A doc-only child stating both
-> anchored ranges is owed, then a fresh SHA with fresh QA.
->
-> **The number was not wrong — it was anchored to a tree the reader does not
-> hold.** That is the third coordinate-anchoring miss on this chain in two days,
-> and the first one where the artifact was internally consistent throughout.
->
-> **#6g does not close, and #6c's `AC-1` stays open.**
+`main` = **`a1b7c068`**. Worktree clean. **Nothing of mine is unpublished.**
 
-> ### THE CROSS-CRATE CENSUS IS DONE, AND IT RETIRES A FIVE-NODE QUESTION
+> ### MY ADDRESS: two handbacks, and I own neither piece of work
 >
-> I bounded it with "if the harness cannot carry the instrument, that is the
-> answer." **The harness does carry it** — proven, with a positive control at
-> `select_body_emission_authority` so "no census file" and "no arrivals" cannot
-> be confused. That control is why the zero is worth anything.
+> 1. **Foundation owes me a corrected `PX8-ERRID-ALLOC` SHA.** PR **#1646** at
+>    `668bbf73` is **RED** and left **OPEN** on `wp/PX8-ERRID-ALLOC`; they push
+>    the fix to that same branch. Told at `evt_1w8yeh1x86908`
+>    (`thr_6h0jfk1cwfe1y`).
+> 2. **Runtime owes me a `D2` checkpoint** naming its pinned base. Released to
+>    start planner-side work at `evt_6kpy0smysw9ww` (`thr_68hxpbfv5tk4b`).
 >
-> **The zero is structural.** `SELECTOR_VARIANT_EXCLUSION` and the activation
-> seam are `#[cfg(test)]`, and those binaries build `ken-runtime` without them.
-> ⇒ **a cross-crate census can only ever witness the RETAINED lane.** Trap 1 is
-> **not closable by measurement here**; closing it would mean moving a test-only
-> seam into production gating. **Do not re-run this census.**
->
-> **The `--include-ignored` finding splits a question carried as one.** The sole
-> failure is [[RT-COMPMATCH-TREE-SCRUTINEE]] — a **real-program** non-constructor
-> scrutinee in this wall's class, failing at a *different* consumer. So *do real
-> programs exhibit this shape?* **yes**; *is this cell reachable in production?*
-> **no**, and that is a property of the exclusion seam, not of the language.
+> **On the corrected PX8 landing:** blob-verify every changed path, **notify the
+> Adversary** (code merge, one-directional, never acknowledge), flip
+> `PX8-ERRID-ALLOC` to `merged`, post on **both** threads, then kick Foundation
+> on `PX8-ERRID-SCOPE` (`ready`, frame exists, 231 lines).
 
-> ### THE SIXTH WALL IS #6h, AND IT IS AN ATTRIBUTION NODE
->
-> `RT-CONTINUATION-CALL-DISCHARGE`, framed and `ready`.
-> `ContinuationClaimLedger::close` refuses: one planned causal token is neither
-> directly emitted nor compositionally consumed. Every member has
-> `pending_len=0`, so the resume discharges nothing — **a planner/lowering
-> obligation mismatch that does not say which side is wrong.**
->
-> **`D1` classifies exactly one of three and refutes the other two.** The frame
-> deliberately **does not name a repair**; the Architect ruled the planner
-> implicated but not convicted. **Runtime must not begin #6h until I release
-> it.** Held lane-pair evidence `65639a13` is its end-state control and is
-> **never published**.
+### PX8 #1646 is ONE defect wearing four shard failures
 
+All four panics carry the identical **production** refusal, and all four are the
+**baseline arm** of a mutation control — "the unmutated bracket compiles, so the
+rows below are not vacuous", and three siblings of that shape:
 
+```
+alternative 7 is planned as Fixed(ResourceInvalidOffset) but the emitter built
+Fixed(ResourceAllocationFailed), so the path names a different node than the one
+being constructed
+```
 
-**`main = dcd6d84c`.** `RT-CARRIED-CONTINUATION-RESUME` (#6e) is **closed**, and
-`RT-CARRIED-ORDINARY-COMPOSITION` (#6f) is now **closed too** — `D2` accepted
-partial at exact `1f89a92b` (PR **#1635**, six paths blob-verified) and `D3` at
-exact `fcf5ce23` (PR **#1637**, two paths `+172/-0`, blob-verified). All four
-deliverables in, both CI green.
+`constructors.rs:6712`, `constructors.rs:6768`, `control.rs:16612`,
+`control.rs:16535`. **The count measures how many of Runtime's controls share
+one driver program, not the spread of the defect.**
 
-**`RT-SPECIALIZED-ACTIVE-RESUME` (#6g) is RELEASED** — frame was already on
-`main` at blob `284029ac`, so no framing pass sat between the merge and the
-kick. Cut from `dcd6d84c`.
+**Attribution is settled — do not re-litigate it.** `main` at `9f4a44d6` was
+CI-green (success, 18:15:42Z); the failing run started 18:20Z. **Introduced by
+the candidate, not inherited.**
 
-**The chain stands at five walls, five correct repairs, three returned cleanly
-on the armed terms rather than absorbed.** That is why every one is visible in
-the tracker instead of buried in a sizing overrun.
+**Two readings are live and they call for opposite edits:** a real
+planner/emitter skew from widening the closed sum in `ken-host/src/effect_v1.rs`
+(+86/-5), or a stale fixture expectation that legitimately must change because a
+variant was inserted. **The edit that fixes the second is the edit that papers
+over the first**, so Foundation must state which before editing. **These four
+must not be skipped** — the accepted-base skip allowance covers an incidental
+failure on an already-accepted base, never the assertion your own candidate
+broke.
 
-> ### THE `D3` FINDING, kept because it generalizes past this node
->
-> `D3` was armed **not to key on the fifth wall's refusal string** — that string
-> exists, is pinned in full equality by a committed control, and #6g may
-> legitimately change it, so a control keyed there passes vacuously once it is
-> gone.
->
-> **The `D2` refusal — the one `D3`'s advance was actually defined against —
-> fails the OPPOSITE way: `D2` deleted it from PRODUCTION.** Grounded, not
-> inherited: `c3c8eddc` removes the `return Err(unsupported("BoundaryCarrier",
-> ...))` block whole, and the only production trace left is the comment
-> beginning *"The carried elimination consumes exactly one frame"*.
->
-> **State it as "deleted from production, reproducible on demand under the `D3`
-> mutation" — not as "the only trace is a comment".** The stronger-sounding
-> version is false of the merged tree: at `dcd6d84c` the sentence appears
-> verbatim in `D3`'s own `#[cfg(test)]` mutation and as `PRE_D2_REFUSAL` in the
-> control, whose mutated arm **asserts it does appear**
-> (`suppressed.contains(PRE_D2_REFUSAL)`). **The precise version is also the
-> better argument**, because reproducible-on-demand is what makes `!contains`
-> *worthless* rather than merely free.
->
-> ⇒ **`!contains(D2_refusal)` is true for free, forever**, and would keep
-> passing if the repair were ripped out entirely. **A string no production code
-> can produce is absent for free, so asserting its absence measures nothing.**
->
-> **Cite that comment by phrase, never by line.** It was `core.rs:3845` at
-> `c3c8eddc` and is `core.rs:3870` at `dcd6d84c` — this merge's `+40` lines land
-> above it. A number qualified against a tree other than the reader's is worse
-> than no number.
->
-> **And on this chain, do not count phrase hits — read the construct.** A sweep
-> for that sentence returns five hits at `dcd6d84c`, and `core.rs:3969` is a
-> **different** refusal: *"a carried scrutinee reached an active continuation
-> frame ... the resume consumes the frame's own pending suffix"*. Same
-> vocabulary and same shape, different subject and different consumer. The
-> campaign reuses refusal wording heavily, so a grep count is not a measurement
-> here — it has three times now nearly produced a false finding.
->
-> **This is the trap worth carrying: asserting the absence of the refusal you
-> just repaired reads as exactly the right test.** The armed constraint pointed
-> at a string that exists and might change; the real hazard was a string that had
-> already ceased to exist. The landed control keys on a non-zero pre-guard
-> denominator plus **`continuations == arrivals` as equality** — not `> 0`, so one
-> continued arrival cannot mask a second that refused — with a **mutation** that
-> makes the pre-`D2` sentence producible again. Reds at
-> `arrivals=1 continuations=0`.
->
-> **The denominator correction stands and outlives `D3`:** that control is a
-> member of the population it observes, so the independent production population
-> is **two, not three**, and **any census re-run after `fcf5ce23` reads inflated**
-> unless it excludes committed controls.
->
-> **Checked at `dcd6d84c`: no committed census would silently read three.** The
-> only committed test over this population is `D3`'s own control
-> (`control.rs:27164`); there is no landed assertion on a member count. So the
-> inflation risk is entirely forward-looking — it binds the **next** census
-> author, not anything already on `main`.
+### The two lanes are contention-free TODAY, on a MEASURED basis
 
-> ### THE `AC-1` THAT LOOKS UNMET IS A DIFFERENT NODE'S, AND THIS IS THE ONE
-> ### THING MOST LIKELY TO BE MISREAD LATER
->
-> "**`AC-1` remains undischarged**" appears in nearly every handback, Decision
-> and review on `RT-CARRIED-CONTINUATION-RESUME`. **It never referred to that
-> node.** It is [[RT-MATCH-RECURSOR-CONSUMERS]]'s `AC-1`, which the successor now
-> gates.
->
-> That node's *own* `AC-1` was population closure, discharged by the four-cell
-> census over **486 arrivals** with denominators.
->
-> ⇒ Left alone, a `merged` node whose every handback says "`AC-1` undischarged"
-> reads as **a node closed over its own unmet criterion.** Written onto the node
-> per-AC so the record does not have to be reconstructed from this thread.
+**I measured Foundation's actual candidate diff, not the paths its frame
+pinned.** Inferring the second from the first is the error I made yesterday and
+it is retired. Foundation's real `ken-runtime` surfaces:
 
-> ### THE CHAIN, because the shape is the story and it keeps repeating
->
-> `resume_active_continuation` (`RT-RECURSOR-TRANSPORT` `D2`, merged
-> `89aa1550`) → `carried_join_arm` (`RT-MATCH` `D2`, merged `3061a645`) →
-> `lower_computational_match_value_composed` (`RT-CARRIED-CONTINUATION-RESUME`
-> `D2`, built at `cc736aaf`) → the `Carried x Ordinary` **pre-delegation guard
-> family** (**open**, [[RT-CARRIED-ORDINARY-COMPOSITION]]).
->
-> **Four repairs, every one correct, every one revealing the next wall.** That
-> is Campaign Trap 2 — the fail-closed machinery working on a newly reachable
-> population, not a defect in the node that finds it.
->
-> **The fourth wall was predicted in writing by the code it lives in.**
-> `RT-PRODUCER-MATCH-PORT` `D2` documented all three guards, said retirement
-> would make them live in production for the first time, and said plainly they
-> had **no shape-reaching control**. One now has a shape reaching it. The guard
-> is doing exactly what its author said it would.
->
-> ⇒ **Expect a fifth. Route it, do not absorb it.** It will be legible and the
-> next step will look obvious — that is exactly the condition under which
-> absorbing feels efficient, and `#27` is the record of five instances of one
-> shape absorbed one at a time, each individually reasonable.
-
-| item | state |
+| path | churn |
 |---|---|
-| [[RT-CARRIED-ORDINARY-COMPOSITION]] | **RELEASED and BUILDING** `evt_2vaa9h3mr2x72` (campaign #6f, Architect `evt_63ae56tttz9pq`, handle assigned by the Architect). Population is the **whole guard family** — retained scrutinee index, deferred constructor case, nonempty `eliminators[1..]` — **with intersections**, because the guards are ordered and **only the first one reached is observable**; a first-refusal-only census cannot separate "no members" from "never reached" |
-| the two suffix sources | **must not be conflated**, and this is the node's sharpest input. `cc736aaf`'s own new outer-tail guard **did not fire**; the firing tail is the successor frame **rebuilt from `active.pending`**. Two different tails, one guard, one rendered string. Carried as `AC-3`: state which tail by **measurement**, never by the message |
-| [[RT-CARRIED-CONTINUATION-RESUME]] | **CLOSED.** `D0`/`D1` + `D2` in #1623 (`cc736aaf`), `D3` in #1625 (`752a7099`), CI green on both. All eight of its own ACs met, recorded per-AC on the node |
-| its `D3` control | **an ADVANCE control, ruled and delivered.** Cannot assert compile success — the rows still stop one authority out. Keys on the *absence* of the continuation-frame refusal plus non-zero arrivals **and** routes, deliberately **not** on the trailing-eliminator string, which #6f is about to change and which would then pass **vacuously**. **Proven able to fail:** suppression defaulted to `true` reds `routes` while `arrivals` still passes, separating "reached but not routed" from "never reached" |
-| [[RT-MATCH-RECURSOR-CONSUMERS]] | `active`, **parked behind #6f.** Its `AC-1` closes when the chain runs out of walls |
-| [[RT-LEXICAL-RECURSOR-CONSUMERS]] | **`ready`, framed and shovel-ready** — rows 1-5. Moved off `draft`: it was framed all along, but `draft` kept it off the frontier while its ruled ordering lived only in campaign prose. **Status was standing in for a dependency edge**; it now has the real `depends_on` instead |
-| `D3` / `RT-DESCENT-RETIRE` | downstream of all of it |
-| `#[ignore]` on this arc | **zero, ruled.** Not discouraged — ruled out |
-| open Adversary item | the `mrc_d2_*` accessors from #1620 **still have zero callers** on `main`. Folded into [[RT-MATCH-RECURSOR-CONSUMERS]] `D3`, which has not run. The #6e `D3` control **does** have a consumer |
+| `cranelift_backend/lowering/core.rs` | +36/-11 |
+| `cranelift_backend/lowering/core/tests/effects.rs` | +223/-5 |
+| `cranelift_backend/lowering/mod.rs` | +52/-19 |
+| `cranelift_backend/planning/static_transition/semantic_ir.rs` | +4/-1 |
+| `native_process_entrypoint.rs` | +3/0 |
 
-**Merged this window: #1610**, **#1611**, **#1612**/**#1614**, **#1613**,
-**#1615**, **#1616**, **#1617**, **#1618**, **#1619**, **#1620** (accepted
-partial, CI green), **#1621**, **#1622**, **#1623** (accepted partial, CI
-green), **#1624**, **#1625** (`D3`, CI green), **#1626**, **#1627**/**#1629**
-(briefing), **#1628** + **#1630** + **#1631** (research). `main` reached
-**`275762e0`**.
+Runtime's `D2` surfaces are **`planning/static_transition.rs`** and
+**`lowering/units.rs`** — in neither set. But `semantic_ir.rs` **is** Foundation's
+and sits one path away under the same module tree.
 
-> ### A SECOND PUBLISH FROM ONE WP BRANCH NOW REJECTS BY DEFAULT
->
-> #1625's first publish **failed at the push** — `! [rejected] ... (stale info)`
-> — and nothing landed. When #1623 squash-merged, origin deleted the head
-> branch, but the local `refs/remotes/origin/wp/<ID>` still named `cc736aaf`, so
-> the publisher's `--force-with-lease` refused.
->
-> **The early warning had already fired and I misread it.** A targeted
-> `git fetch` of that ref returns `couldn't find remote ref` and **leaves the
-> stale ref in place** — it does not prune. That message means the remote branch
-> is gone *and* your tracking ref is now stale.
->
-> ⇒ **Under the accepted-partial policy this is routine, not a two-stage special
-> case** — a WP branch is published repeatedly by construction. Fix is
-> `git update-ref -d refs/remotes/origin/wp/<ID>` (surgical; `refs/remotes/` is
-> shared across ~70 worktrees) then re-run unchanged. The failed run dies
-> **before** PR creation, so there is no orphaned PR to hunt.
+> **This claim has a shelf life and it is not symmetric.** I can measure
+> Foundation's current diff; I cannot measure Runtime's future one. It holds for
+> `D2` **as scoped** and dies the moment that scope reaches `core.rs`,
+> `mod.rs`, `semantic_ir.rs`, or that `effects.rs` tree.
 
-Adversary hunted `3061a645` and returned **no correctness defect**, with one
-evidence-axis finding — the `D2` counters have **zero callers repo-wide**, so
-their anti-vacuity rationale reads as coverage while measuring nothing. Folded
-into `RT-MATCH` `D3` and `RT-DESCENT-RETIRE` (#1622). Correctly unacknowledged
-per §10⁻a.
+### #6h is RULED and SIZED — do not reopen either
 
-> ### TWO COORDINATE FAILURES TODAY, SAME SHAPE, AND THE SECOND WAS PREVENTED
->
-> `D1` reported the repair owner as `core.rs:10842`, read off a worktree its own
-> instrumentation had displaced by a uniform **+78**, and stated against a base
-> where the real line is `10764`. **`10842` resolves — to ordinary code inside a
-> different function.** Nothing looks wrong on arrival, which is what makes it
-> worse than no coordinate at all. It had already propagated into my `D2`
-> authorization and the frame before the implementer caught it.
->
-> ⇒ **The frames in this arc now name FUNCTIONS, not lines**, because these
-> nodes move the files they cite; a coordinate in a frame rots against its own
-> deliverable. Re-derive any trace **after** reverting instrumentation.
->
-> **The same shape, caught before it landed:** the sibling node's frame named
-> `50808c11` as its base after QA had superseded it with `24d585f8`. Since the
-> partial merges by **squash**, a branch cut from the superseded object carries
-> its pre-fix lines and silently re-introduces exactly what review rejected.
-> **Comment-only fixes are the worst case — a reverted comment reds no test,
-> trips no gate, and passes a diff-scope check.** Standing rule now in the
-> frame: cut from the object that will merge, not the one the document names.
+Option **3**: the planner over-issues; the activated witness is deferred-inline.
+Options 1 and 2 refuted. **`M` to `S`.** The **one** overturn condition: if the
+reachability rebuild needs the planner's **traversal contract** changed rather
+than an edge excluded from it, that is a different node — **hard stop and
+route**. Evidence item 5 (*census changes only by ruled-edge removal*) is the
+early instrument; a traversal problem shows there as a second changed row.
 
-> ### TWO PUBLISHER RUNS KILLED PRE-MERGE THIS WINDOW, AND I HANDLED THEM DIFFERENTLY ON PURPOSE
->
-> **PR #1609 (`8efdfdb3`) — closed and its branch deleted.** That object was
-> never going to merge; leaving it open would age into a revert against a
-> moving `main`.
->
-> **PR #1613 (`b62ff22d`) — left OPEN, with a comment saying it was held.** The
-> leader rejected `dec_ae7hwrrvbnfb` over its scope wording and opened a
-> replacement **for the identical object**. Closing would have thrown away a
-> live CI run and churned the PR number for nothing; the publisher reuses an
-> existing open PR for the same head. It then merged on the replacement.
->
-> ⇒ **The discriminator is whether the OBJECT changes, not whether the Decision
-> was rejected.** Same object under a new Decision: hold the PR. New object:
-> close it.
->
-> **The comment is load-bearing, not politeness** — an open PR with a dead
-> publisher is otherwise indistinguishable from an authorized merge in flight.
+### Standing, and easy to get wrong
 
-> ### THE REJECTED DECISION WAS REJECTED FOR EXACTLY THE AMBIGUITY I HAD ALREADY CHECKED
->
-> `dec_ae7hwrrvbnfb` said the *"full cut touches only"* `control.rs` and the
-> record file — ambiguous between the **correction's** diff and the **merged**
-> diff, and the difference is whether the production repair lands at all. I
-> verified before publishing: three paths from the original base, `core.rs`
-> +297 present.
->
-> **I verified it and published; the leader rejected their own Decision over
-> it.** Both responses were right, and the split is the lesson: **verifying an
-> ambiguous record makes it safe to act on, and does nothing to make it safe to
-> leave standing.** A Decision is a durable artifact that outlives my reading of
-> it. Next time, say so at the time rather than only satisfying myself.
-
-> ### #6f `D0`/`D1` IS IN, AND THE CENSUS ANSWERED THE QUESTION IT WAS BUILT FOR
->
-> Checkpoint `147b239c` over `06e031de`, **record-only** — `git diff 06e031de --
-> crates/` is empty. Record at
-> `docs/program/wp/RT-CARRIED-ORDINARY-COMPOSITION-D0-D1.md`. **No hard stop
-> fires.**
->
-> | | result |
-> |---|---|
-> | arrivals at the arm | **14** across both runs (6 retained, 8 under A-only) |
-> | `retained_scrutinee_index` | **false at every arrival** |
-> | `deferred_constructor_case` | **false at every arrival** |
-> | trailing suffix | **3 members**, every one `suffix_len=1`, `suffix_kinds=Active` |
-> | intersections | **none** — no arrival satisfies more than one guard |
-> | `AC-3` attribution | **all 3 from the `active.pending`-rebuilt successor; ZERO from the explicit outer tail** |
-> | compile but never reach the arm | 264 of 270 |
->
-> **The instrument sits above every guard and records all three predicates per
-> arrival.** That is the whole reason the two zeros mean *no members* rather than
-> *never reached* — the arm was reached 14 times and the predicates were false
-> each time. A first-refusal census could not have separated those, which is why
-> the frame demanded intersections.
->
-> **Hard stop 3 did not fire, and the reason is load-bearing:**
-> `lower_carried_match` already **returns** a `LoweringOperand`, so the suffix can
-> be continued by composing that value against `eliminators[1..]` — no interface
-> widening, so no Architect call. The implementer flagged it as *expressible, not
-> proven*, which is correct and is why the stop stays armed rather than closed.
->
-> **The population caveat is the implementer's and it is right:** the single
-> firing member in the *retained* run is the chain's own `D3` control arming the
-> committed hook. **In an unhooked production run no guard in this family fires
-> at all; the independent population is two.**
->
-> ### MY RULING — `evt_ds4hwahvc5se`, thread `thr_pvxda1tcg20d`
->
-> **Re-sized `M` to `S`.** `M` was provisional on three possible authorities;
-> there is one cell, one mechanism, two independent members. `D2` and `D3` are one
-> turn each.
->
-> `D2` repairs **the trailing-suffix cell only**. The other two stay fail-closed
-> as measured-at-base zeros — the `PendingLet` disposition, for the same reason. A
-> mechanism on an empty cell is a proof over an empty population.
->
-> **The one obligation I added: name the decreasing measure.** Every firing
-> suffix comes from the `active.pending`-rebuilt successor, which is *the one
-> source that can regenerate a suffix*. Re-entering the composed consumer
-> terminates only if each re-entry consumes from a strictly shorter list, and a
-> rebuilt successor is not obviously drawn from that list. **Every measured member
-> is `suffix_len=1`, so nothing in the census exercises depth two** — the
-> termination argument rests on a shape nobody has observed. `D2` states the
-> measure or bounds the depth and fails closed past it.
->
-> **Two consequences of a control that is a member of its own population:** a
-> census re-run after `D3` lands reads inflated (state the denominator as
-> excluding committed controls), and this node's `D3` must not count itself as
-> evidence its population exists.
->
-> **Also recorded:** the predecessor's outer-tail guard has **never fired and
-> still has no witness**. It stays — fail-closed on an unported shape is correct —
-> but its presence is not evidence the shape exists.
->
-> ### THE FIFTH WALL FIRED, AND IT IS THE FIRST THAT IS NOT A CARRIER PROBLEM
->
-> `D2` at **`1f89a92b`** works: the trailing-suffix refusal is **gone from both A
-> rows**, `lower_carried_match`'s interface is untouched, and termination is a
-> stated lexicographic measure on `(active.pending.len(), eliminators.len())`
-> **plus** an independently enforced fail-closed depth bound. The implementer
-> stated the measure and **then declined to rely on it**, because depth two is
-> unexercised — which is the correct response to the obligation I set.
->
-> ```
-> Unsupported(ComputationalMatch, "scrutinee is not a constructor value after
-> ordinary expression lowering")
-> ```
->
-> **Architect ruled it a distinct sibling authority** (`evt_1pw1ng8448mef`) and
-> **approved the `D2` accepted partial** at that exact SHA. Handle assigned:
-> `RT-SPECIALIZED-ACTIVE-RESUME`. **Filed and framed as #6g.**
->
-> **The carrier has already been eliminated** — the four prior walls were
-> `BoundaryCarrier` refusals about how a carried operand crosses or is consumed.
-> This is the `Lowered::Constructor` destructure, which **sits before the
-> eliminator dispatch**, so an `Active` frame never reaches its resume when the
-> value is an ordinary non-constructor. **Constructor shape is necessary for
-> `Computational` and `Ordinary` elimination and is not a prerequisite for
-> resuming `Active`.**
->
-> **Do NOT hoist `Active` dispatch above the shape and terminal guards** —
-> `RecursiveBackedge` must propagate and `Trap` must seal. That is the obvious
-> repair and it is the wrong one.
->
-> **Two things I verified myself rather than repeating from the handback:** the
-> refusal has exactly **one** production site, and it is pinned in **full
-> equality** by a committed suppression control. A repair changing the message
-> reds that assertion **by design** — and the control's continued discrimination
-> is a free check that no protocol machinery leaked into the resume path.
->
-> **The QA scope correction is worth keeping:** the true original-base cut is
-> `+345/-10` across six paths, not the `+98`/`+171` first quoted. **The `+171`
-> was the `D0`/`D1` parent's contribution read off the wrong anchor** — when a
-> candidate spans two commits, a per-commit stat is not a cut stat. The object was
-> never wrong; only its description was.
->
-> ### MY NEXT ACTION, so a cold resume does not have to re-derive it
->
-> **DISCHARGED ~16:0xZ:** `D2` published as PR #1635 on resolved Decision
-> `dec_3tx908cb6072z`, verified on `main`, M8 sent (`evt_2bx5da4cjybzt`), ring
-> routed to `D3` (`evt_3cp5pyqr6xrgw`).
->
-> **The wait has an address (§1a):** the **`D3` candidate SHA** for
-> [[RT-CARRIED-ORDINARY-COMPOSITION]], owed by `runtime-leader`, thread
-> `thr_pvxda1tcg20d`. When it merges, #6f closes and **I kick #6g** — a fresh
-> top-level post carrying its own anchor, because `thr_pvxda1tcg20d` is #6f's
-> thread and is not #6g's home.
->
-> **A runtime turn legitimately runs hours** (`MODELS.md` — that seat is T1 on
-> genuinely hard work); tens of minutes of silence is not a stall. Read the
-> spinner's **elapsed timer**, never the composer.
->
-> **Order of release from here:** #6f completes →
-> `RT-MATCH-RECURSOR-CONSUMERS` completes → [[RT-LEXICAL-RECURSOR-CONSUMERS]]
-> (`ready`, **frame already written and amended, do not re-frame**) →
-> `RT-RECURSOR-TRANSPORT` `D3` → [[RT-DESCENT-RETIRE]]. **All four are `ready`
-> with frames present — there is no framing debt ahead of the frontier.**
->
-> **EXPECT A FIFTH WALL. Route it, never absorb it.** Four repairs, four
-> correct, each revealing the next.
->
-> **DO NOT FOLD ANY OF THESE NODES.** Distinct producer, activation hook,
-> boundary and completion owner in every case. A shared production root, if one
-> is ever proven, is a **subsumption proposal routed to me before coding** —
-> never inferred from shared timing, shared syntax, or a shared refusal arm.
-
-> ### OPERATOR INSTRUCTION 2026-08-08 — the research reports have a VENUE now
->
-> **When framing [[RT-BACKEND-MODULE-SPLIT]] (#8), consult and reference for the
-> Architect both `research/compiler-obligation-ir-refactor.md` and
-> `research/compiler-refactoring-program.md`.** Written onto the node itself, in
-> a block addressed to whoever frames it — **not only here**, because that frame
-> is four nodes out and this file is a resume pointer, not the record.
->
-> **This resolves something I had parked.** I twice declined to route the IR
-> architecture recommendation, on the grounds that the runtime ring holds the
-> same lowering surface and raising it would contend with active work. **That
-> reasoning was about timing, and the operator has now named the place.** The
-> recommendation is triaged inside #8's frame review, by the Architect, at the
-> moment someone is actually about to restructure those files.
->
-> **Reference is not adoption, and the node says so.** Both reports are marked
-> advisory; the program report concedes the node graph to the Steward and
-> Architect outright. #8 stays a **behavior-preserving split** unless the
-> Architect rules otherwise.
->
-> **Do not let the reports substitute for the measurement.** The node's standing
-> rule — the frame is owed *after* #7 merges, measured on the post-retirement
-> tree, today's line counts not carried forward — is **unchanged**. The program
-> report's own structural arc begins with a post-retirement remeasure, so it
-> reinforces that rule rather than relaxing it.
-
-> ### PENDING OPERATOR DECISION — carried, NOT mine to decide
->
-> **Charter a research-only formalization of the owner-indexed causal-obligation
-> calculus?** Research's finding landed at `research/causal-obligation-calculus.md`
-> (PR #1619).
->
-> **The finding:** the native compiler has discovered an extractable,
-> owner-indexed **exactly-once** causal-obligation calculus — planner-minted
-> opaque identities, owner-indexed single consumption, disjoint discharge forms,
-> an empty-ledger close proving **set** equality. It is **not** ATT x OTT: it is
-> a checked compiler protocol in Rust maps, with no Ken syntax or judgments.
->
-> **Research recommends chartering, with `Eq`/`cast` over the linear fragment as
-> the EXPLICIT HARD GATE rather than an assumed consequence.** That framing is
-> the part to put in front of the operator — it is where a formalization would
-> actually fail.
->
-> **Product posture preserved and unchanged:** product `R2` stays closed, ADR
-> 0021 stays in force, no node filed. Chartering grows the program and is a
-> scope fork the roadmap does not settle, so it is the operator's call.
->
-> #### UPDATED 2026-08-08 — the formalization now EXISTS, so the question changed
->
-> Research landed **two more reports** at PR **#1628**:
-> `research/linear-causal-obligation-calculus.md` (+721) — sorts, contexts,
-> judgments, reduction rules, four typed closure laws, safety properties, an
-> executable-decision-procedure mapping — and
-> `research/compiler-obligation-ir-refactor.md` (+589).
->
-> ⇒ **The decision is no longer "should we start."** It is *"does this warrant
-> further investment, and against which gate."* I published on the reports' own
-> terms and am **not** treating their existence as an answer — a research
-> document landing in `research/` charters nothing.
->
-> **Both reports preserve the posture explicitly**, checked against the text
-> rather than the request: the calculus states it formalizes a **compiler-local**
-> discovery, not a source language, and *"neither changes Ken's kernel context
-> nor supplies resource-sensitive rules for observational equality or `cast`."*
-> The IR report carries its own §8 *what this refactoring does not decide* and §9
-> *product and research posture*.
->
-> **A second, separate item now sits behind this one.** The IR report recommends
-> a real architecture — canonical planned/generated terms, a closed source
-> machine, a hybrid checked transducer. **Landing the report adopts none of it.**
-> That is an Architect component-design call plus a sequencing call of mine, and
-> **I am deliberately not routing it yet**: it touches the same lowering surface
-> the runtime ring is mid-node on, so raising it now would contend with active
-> work rather than inform it.
-
-> ### THE CENSUS PARTITIONED SIX REDS INTO TWO POPULATIONS AND TWO SEAMS
->
-> Nine expressions measured individually at exact `8efdfdb3` — census
-> `evt_16cmej481q7ns`, partition `evt_3r4j14fv1jtj2`. **No expression is A+B**,
-> so no simultaneous exclusion is ever needed.
->
-> | rows | population | seam | owner |
-> |---|---|---|---|
-> | 1-5, eight expressions | exactly `{LexicalCallArgumentRecursor}` | B-only exclusion | [[RT-LEXICAL-RECURSOR-CONSUMERS]] |
-> | 6, `d8d` | exactly `{MatchScrutineeRecursor}` | **A**-only exclusion | [[RT-MATCH-RECURSOR-CONSUMERS]] |
->
-> **Row 6 is why `8efdfdb3` cannot land as-is.** Its refusal reproduces **at
-> that object**, with the `D2` repair active and production still on
-> `RecursiveDescent` — so it is not a `D3` artifact at all. The object's record
-> says *"position A closes"* and *"both lanes now agree on position A"*, and row
-> 6 is a counterexample **inside the same cut**. That makes `D2` a
-> **completeness defect**, not a later sizing discovery.
->
-> **The production mechanism is sound and is not being reverted.** It closes the
-> exact `D1` A witness at the exact `resume_active_continuation` seat. Only the
-> claimed scope was false.
-
-> ### MY QUARANTINE RULING WAS WRONG AND THE REASON IS REUSABLE
->
-> I ruled at `evt_7vhjcstd37a50` that the six newly-red controls be quarantined
-> with `#[ignore]` and `D3` land. The Architect reversed it (`evt_5w09dcwbf7k70`).
-> **Withdrawn, and it stays withdrawn** — it was not reopened by the later
-> correction.
->
-> **The precedent I leaned on was `RT-FNUNIT-RESULT-TOKEN`**: a shape that
-> stopped compiling because a retirement made it newly reachable, quarantined
-> with the owning node named in the skip. Structurally identical on its face.
-> **It does not transfer, and the discriminator is a fact about the tree I never
-> checked** — `RT-FNUNIT-RESULT-TOKEN`'s shape was observable **only after** its
-> retirement, so a quarantine was the only instrument available. Here a
-> pre-retirement activation seam was at least *plausible*, and where a repair can
-> be proven before the retirement, quarantining is spending evidence to buy
-> nothing.
->
-> ⇒ **Before reaching for a quarantine, ask whether the shape can be activated
-> BEFORE the change that exposes it.** That question, not the surface similarity
-> of the two situations, is what selects the instrument.
->
-> **My second error was pricing.** I called the six hand-built `RuntimeExpr`
-> fixtures and invoked campaign Trap 1 to make them cheap. Trap 1 is right that
-> they do not prove surface-Ken reachability — **it does not make them
-> disposable.** They are previously-green controls on the backend-neutral IR
-> contract and they are the **only** probes for five distinct guards. Surface
-> reachability unproved, old-green runtime capability **proved**. I was proposing
-> to spend five guards' sole probes and did not describe the trade that way.
-
-> ### I STOPPED A PUBLISHER MID-FLIGHT, AND THE INSTRUMENT THAT MATTERED WAS THE PROCESS TABLE
->
-> The withdrawal arrived while `scripts/scripted-pr-automerge.sh` was 6m21s into
-> its pre-poll wait. **It had already pushed a branch and opened PR #1609; it
-> had not polled checks and had not merged.**
->
-> **What worked:** `ps -p <pid>` for liveness, `kill -TERM` on the script PID
-> (never `pkill -f`, which matches my own shell), then `git fetch` + `rev-parse
-> origin/main` to confirm **by content that nothing landed**. Only after the
-> publisher was dead — fetching inside its window is its own hazard.
->
-> **Two things I would have missed without looking:** the script's `sleep`
-> child **survived** the parent's death and needed its own kill, and the
-> wrapper's `| tail -40` **buffered the whole log**, so the output file was
-> empty the entire run. **A publisher log you cannot read is not evidence the
-> publisher did nothing** — the process table and `origin/main` are the
-> instruments, not the log.
->
-> **Cleanup is part of the stop.** PR #1609 is closed with a comment stating
-> why, and `wp/scripted-merge-8efdfdb3` is deleted from origin. An abandoned PR
-> does not stay harmless; it ages into a revert against a moving `main`.
->
-> **`gh` is not authenticated in an ordinary shell** — the publisher mints its
-> own token via `.devcontainer/mint-gh-token.sh`. That is the path for cleaning
-> up after a killed publish.
-
-> ### THE ARCHITECT THEN CORRECTED ITSELF, AND THE PREMISE IT WITHDREW WAS MINE TOO
->
-> **`evt_ykbnr68eb3bs`.** The claim that the existing B-only exclusion hook can
-> activate all six fixtures on `FunctionizedUnits` **was never measured.** The
-> implementer challenged it and was right.
->
-> **The mechanism:** the hook removes `LexicalCallArgumentRecursor` from the
-> **complete** residual set, and `FunctionizedUnits` is selected only when the
-> remaining set is **empty**. ⇒ **A fixture that also fires
-> `MatchScrutineeRecursor` stays on `RecursiveDescent`** and has no seam.
->
-> **I had already written that seam into the node file as "the fact that decides
-> it"** before the correction arrived — a candidate promoted to established,
-> propagating one hop further each time it was restated. It is corrected in place
-> and labelled as withdrawn rather than deleted.
->
-> **The census disposes it, and the disposition is mechanical:** all six rows
-> exactly `{LexicalCallArgumentRecursor}` and reaching `FunctionizedUnits` ⇒
-> sequencing stands, frame releases. **Any** row also containing
-> `MatchScrutineeRecursor` ⇒ return the partition, Architect re-rules.
->
-> **A missing seam does not revive the quarantine.** It removes the cheapest
-> sequencing, not the obligation — the reasons those controls are not disposable
-> are independent of the seam.
-
-> ### "POSITION B CLOSES FOR FREE" — WITHDRAWN AS A CLASS-WIDE CLAIM
->
-> **Mine, from `D1`, and the evidence contradicts it.** All six new reds reach
-> the lane through `host_result_closure_match`, which **is** position B's shape.
-> Two refuse with the exact string `D2`'s A/B reproduces, so the `D2` repair is
-> narrower than the class `D3` enables; `d8d` refuses on `RecursiveBackedge`
-> itself at a boundary `D2` never measured it reaching.
->
-> **True of the exact executable witness `D1` measured. False of the general
-> shape.** Withdrawn from the frame (three sites) and from here. The exact `D1`
-> result stands for its exact witness — that is not in question.
->
-> **How it survived:** one green witness read as a property of a class. **Nothing
-> in `D1` would have caught it** — a passing case cannot report the cases it
-> never exercised. The implementer surfaced it **against its own interest** and
-> said so explicitly. That is the only reason it was caught before the retirement
-> landed, and it is worth naming as the behaviour that worked.
-
-> ### `AC-2b` NOW HAS SIX SWEEP AXES, NOT FOUR
->
-> The four (type, enumerator, mutation, CamelCase variant name) missed
-> `d5_c3_a_second_residual_retains_recursive_descent`: it names no type, calls no
-> enumerator, arms no mutation, and reaches the class only through a **snake_case
-> fixture name a CamelCase grep cannot match.** Found by running the suite.
->
-> Added: **by lane** (`BodyEmissionAuthority::RecursiveDescent`) and **by fixture
-> spelling**. **Six axes miss less than four; they still do not prove a
-> perimeter** — the frame states the result as a floor, and the axes as candidate
-> selectors.
-
-> ### THE STALE `cfg(test)` COUNT — REPORTED, NOT MINE, STILL UNFILED
->
-> The identifier-census control's prose claims `core.rs` holds 22 inline
-> `#[cfg(test)]` regions. Real count **205 at base, 200 now** — it matched
-> **neither** tree, so it was false when written. The Architect scoped it out of
-> the repair node as pre-existing prose debt. **It is still owed a node and that
-> is mine.**
+- **Frame existence is NOT node-id-named.** Fourteen frames are not. Check
+  `grep -rl <node-id> docs/program/wp/`, never `test -f wp/<node-id>.md`. That
+  false test produced three wrong `ready`→`draft` flips (reverted, PR #1645).
+- **Genuinely frameless, all off the critical path:** `SPEC-MISSION-GROUNDING`
+  (spec, L), `F1-37` (runtime, deps `RT-PARITY`), `MODELS-TIER` (steward, S,
+  process work — deprioritized), `RT-CENSUS-CAVEAT-GUARD` (runtime, S,
+  dependency-free).
+- **`KERNEL-NESTED-IND` is dependency-clear with a 553-line frame.** Kernel is
+  idle for want of a **lane**, not a frame. **Do not open a third lane without
+  asking the operator** — one additional lane was authorized, and it is
+  Foundation's.
+- **NEVER publish** held evidence `65639a13`
+  (`runtime-implementer/sar-lane-pair-evidence`) or `aa78c973`.
+- **Codex seats do not wake on convo mentions — measured four times.** But
+  **read the pane before pasting**: both leaders woke on today's mentions, and
+  pasting into a `Working` seat is what strands it. Dim composer text is a
+  placeholder, not a typed instruction.
+- **Pending operator decision, carry it, do not decide it:** the
+  causal-obligation formalization question.
 
 ## SUPERSEDED 2026-08-08 ~10:5xZ — kept for the `D3` reconciliation detail only
 
