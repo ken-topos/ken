@@ -1,7 +1,7 @@
 ---
 id: RT-CARRIED-ORDINARY-COMPOSITION
 title: "Carried ordinary elimination consumes exactly one frame — a composed suffix behind an ordinary carried eliminator is refused rather than continued"
-status: ready
+status: active
 owner: runtime
 size: M
 gate: none
@@ -113,5 +113,51 @@ Gates completion of [[RT-MATCH-RECURSOR-CONSUMERS]] and its `AC-1`. Does **not**
 reopen [[RT-PRODUCER-MATCH-PORT]], [[RT-RECURSOR-TRANSPORT]] `D2`, or either
 landed carried repair. Does not touch rows 1-5 or the
 `LexicalCallArgumentRecursor` population ([[RT-LEXICAL-RECURSOR-CONSUMERS]]).
+
+## `D0`/`D1` MEASURED 2026-08-08 — re-sized `M` to `S`, `D2` authorized
+
+Checkpoint `147b239c` over `06e031de`, record-only. Steward ruling
+`evt_ds4hwahvc5se`, thread `thr_pvxda1tcg20d`.
+
+**14 arrivals, instrument above every guard, all three predicates per arrival.**
+`retained_scrutinee_index` and `deferred_constructor_case` were false at every
+arrival, and no arrival satisfied more than one guard — so the two zeros are
+**no members**, not *never reached*. Only the trailing-suffix cell has members:
+**3 under A-only exclusion, each `suffix_len=1`, `suffix_kinds=Active`.**
+
+`AC-3` is discharged by measurement: **all three firing suffixes come from the
+`active.pending`-rebuilt successor; zero from the explicit outer tail.**
+Attribution is a take-and-clear flag set immediately before the composing call,
+not read off the guard message.
+
+**Re-sized to `S`** — one cell, one mechanism, two independent members (the
+third firing member in the retained run is this chain's own `D3` control arming
+the committed hook). `D2` repairs the trailing-suffix cell only; the other two
+stay fail-closed as measured-at-base zeros.
+
+**Hard stop 3 did not fire and is NOT discharged.** `lower_carried_match`
+already returns a `LoweringOperand`, so the suffix is continuable without
+widening the interface — **expressible, not proven**. It fires if `D2` finds the
+re-entry needs more than cases / default / origin / env.
+
+> ### `D2` OWES A DECREASING MEASURE, AND THE CENSUS CANNOT SUPPLY IT
+>
+> Every firing suffix comes from the `active.pending`-rebuilt successor — **the
+> one source that can regenerate a suffix.** Composing the returned operand
+> against `eliminators[1..]` and re-entering the composed consumer terminates
+> only if each re-entry consumes from a strictly shorter list, and a rebuilt
+> successor is not obviously drawn from that list.
+>
+> **Every measured member is `suffix_len=1`, so nothing exercises depth two.**
+> State the measure and what guarantees it, or bound the re-entry depth and fail
+> closed past the bound.
+
+**Two notes on counting.** A census re-run after `D3` lands reads inflated —
+state the denominator as excluding committed controls. And this node's `D3` must
+not count itself as evidence its population exists.
+
+**The predecessor's outer-tail guard has never fired and still has no witness.**
+It stays, because fail-closed on an unported shape is correct, but its presence
+is not evidence the shape exists.
 
 Frame: `docs/program/wp/RT-CARRIED-ORDINARY-COMPOSITION.md`.

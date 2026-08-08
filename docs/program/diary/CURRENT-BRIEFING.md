@@ -33,7 +33,7 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-08 ~14:3xZ · FOURTH WALL ROUTED; #6e CLOSED, #6f BUILDING
+## LIVE — 2026-08-08 ~15:1xZ · #6f CENSUSED AND RE-SIZED TO `S`; `D2` AUTHORIZED
 
 **`main = 8c6ab6f9`.** `RT-CARRIED-CONTINUATION-RESUME` is **closed** — all four
 deliverables landed, all eight of its own ACs met. Its `D2` **worked**: the
@@ -98,8 +98,9 @@ the **second time in a row**. That is the standard on this chain.
 **Merged this window: #1610**, **#1611**, **#1612**/**#1614**, **#1613**,
 **#1615**, **#1616**, **#1617**, **#1618**, **#1619**, **#1620** (accepted
 partial, CI green), **#1621**, **#1622**, **#1623** (accepted partial, CI
-green), **#1624**, **#1625** (`D3`, CI green), **#1626**. `main` reached
-**`8c6ab6f9`**.
+green), **#1624**, **#1625** (`D3`, CI green), **#1626**, **#1627**/**#1629**
+(briefing), **#1628** + **#1630** + **#1631** (research). `main` reached
+**`275762e0`**.
 
 > ### A SECOND PUBLISH FROM ONE WP BRANCH NOW REJECTS BY DEFAULT
 >
@@ -179,32 +180,90 @@ per §10⁻a.
 > leave standing.** A Decision is a durable artifact that outlives my reading of
 > it. Next time, say so at the time rather than only satisfying myself.
 
+> ### #6f `D0`/`D1` IS IN, AND THE CENSUS ANSWERED THE QUESTION IT WAS BUILT FOR
+>
+> Checkpoint `147b239c` over `06e031de`, **record-only** — `git diff 06e031de --
+> crates/` is empty. Record at
+> `docs/program/wp/RT-CARRIED-ORDINARY-COMPOSITION-D0-D1.md`. **No hard stop
+> fires.**
+>
+> | | result |
+> |---|---|
+> | arrivals at the arm | **14** across both runs (6 retained, 8 under A-only) |
+> | `retained_scrutinee_index` | **false at every arrival** |
+> | `deferred_constructor_case` | **false at every arrival** |
+> | trailing suffix | **3 members**, every one `suffix_len=1`, `suffix_kinds=Active` |
+> | intersections | **none** — no arrival satisfies more than one guard |
+> | `AC-3` attribution | **all 3 from the `active.pending`-rebuilt successor; ZERO from the explicit outer tail** |
+> | compile but never reach the arm | 264 of 270 |
+>
+> **The instrument sits above every guard and records all three predicates per
+> arrival.** That is the whole reason the two zeros mean *no members* rather than
+> *never reached* — the arm was reached 14 times and the predicates were false
+> each time. A first-refusal census could not have separated those, which is why
+> the frame demanded intersections.
+>
+> **Hard stop 3 did not fire, and the reason is load-bearing:**
+> `lower_carried_match` already **returns** a `LoweringOperand`, so the suffix can
+> be continued by composing that value against `eliminators[1..]` — no interface
+> widening, so no Architect call. The implementer flagged it as *expressible, not
+> proven*, which is correct and is why the stop stays armed rather than closed.
+>
+> **The population caveat is the implementer's and it is right:** the single
+> firing member in the *retained* run is the chain's own `D3` control arming the
+> committed hook. **In an unhooked production run no guard in this family fires
+> at all; the independent population is two.**
+>
+> ### MY RULING — `evt_ds4hwahvc5se`, thread `thr_pvxda1tcg20d`
+>
+> **Re-sized `M` to `S`.** `M` was provisional on three possible authorities;
+> there is one cell, one mechanism, two independent members. `D2` and `D3` are one
+> turn each.
+>
+> `D2` repairs **the trailing-suffix cell only**. The other two stay fail-closed
+> as measured-at-base zeros — the `PendingLet` disposition, for the same reason. A
+> mechanism on an empty cell is a proof over an empty population.
+>
+> **The one obligation I added: name the decreasing measure.** Every firing
+> suffix comes from the `active.pending`-rebuilt successor, which is *the one
+> source that can regenerate a suffix*. Re-entering the composed consumer
+> terminates only if each re-entry consumes from a strictly shorter list, and a
+> rebuilt successor is not obviously drawn from that list. **Every measured member
+> is `suffix_len=1`, so nothing in the census exercises depth two** — the
+> termination argument rests on a shape nobody has observed. `D2` states the
+> measure or bounds the depth and fails closed past it.
+>
+> **Two consequences of a control that is a member of its own population:** a
+> census re-run after `D3` lands reads inflated (state the denominator as
+> excluding committed controls), and this node's `D3` must not count itself as
+> evidence its population exists.
+>
+> **Also recorded:** the predecessor's outer-tail guard has **never fired and
+> still has no witness**. It stays — fail-closed on an unported shape is correct —
+> but its presence is not evidence the shape exists.
+>
 > ### MY NEXT ACTION, so a cold resume does not have to re-derive it
 >
-> **DISCHARGED ~13:3xZ:** [[RT-MATCH-RECURSOR-CONSUMERS]] was released, ran to a
-> `D0`/`D1` checkpoint, ruled on (`M` stands, `evt_3xr56abxe19ss`), hard-stopped
-> at its `D2`, and its sibling was filed and released
-> (`evt_291ztb8nfwq4m`). What follows replaces it.
+> **The wait has an address (§1a):** the `D2` candidate SHA for
+> [[RT-CARRIED-ORDINARY-COMPOSITION]], owed by `runtime-leader`, thread
+> `thr_pvxda1tcg20d`, ruling posted at `evt_ds4hwahvc5se`. **A runtime turn
+> legitimately runs hours** (`MODELS.md` — that seat is T1 on genuinely hard
+> work); tens of minutes of silence is not a stall. Read the spinner's **elapsed
+> timer**, never the composer.
 >
-> **The wait has an address (§1a):** the `D0`/`D1` exact-SHA checkpoint on
-> [[RT-CARRIED-CONTINUATION-RESUME]], owed by `runtime-leader`, thread
-> `thr_713sxvhfym48q`. `M` is provisional and that checkpoint is my re-size
-> point. **A runtime turn legitimately runs hours** (`MODELS.md` — that seat is
-> T1 on genuinely hard work); tens of minutes of silence is not a stall.
->
-> **Order of release from here:** `RT-CARRIED-CONTINUATION-RESUME` →
+> **Order of release from here:** #6f completes →
 > `RT-MATCH-RECURSOR-CONSUMERS` completes → [[RT-LEXICAL-RECURSOR-CONSUMERS]]
-> (flip `ready` and kick; **frame already written and amended, do not
-> re-frame**) → `RT-RECURSOR-TRANSPORT` `D3` → [[RT-DESCENT-RETIRE]].
+> (`ready`, **frame already written and amended, do not re-frame**) →
+> `RT-RECURSOR-TRANSPORT` `D3` → [[RT-DESCENT-RETIRE]]. **All four are `ready`
+> with frames present — there is no framing debt ahead of the frontier.**
+>
+> **EXPECT A FIFTH WALL. Route it, never absorb it.** Four repairs, four
+> correct, each revealing the next.
 >
 > **DO NOT FOLD ANY OF THESE NODES.** Distinct producer, activation hook,
 > boundary and completion owner in every case. A shared production root, if one
 > is ever proven, is a **subsumption proposal routed to me before coding** —
 > never inferred from shared timing, shared syntax, or a shared refusal arm.
->
-> **Do not compact the runtime ring at the moment.** It is carrying two objects
-> — the accepted partial's review and the new node — so there is no clean WP
-> boundary, and a compaction would summarise away context still in use.
 
 > ### PENDING OPERATOR DECISION — carried, NOT mine to decide
 >
