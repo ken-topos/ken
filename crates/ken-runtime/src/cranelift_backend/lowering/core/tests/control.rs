@@ -11125,7 +11125,14 @@ fn rt_closed_active_recursor() -> RuntimeExpr {
     }
 }
 
-/// `D1` position A: an ordinary `Match` consuming an active recursor. Closed.
+/// **The exact `D1` position-A witness** — an ordinary `Match` consuming an
+/// active recursor, built as a **closed, executable expression**.
+///
+/// ⚠ "Closed" describes this **expression**: it scrutinises a real constructor
+/// rather than a free `Var`, so it can be compiled and run. It says nothing
+/// about the `MatchScrutineeRecursor` class. The bare word stood alone here
+/// until 2026-08-08, next to a withdrawn claim that *"position A closes"*, where
+/// it read as the class closing.
 #[cfg(test)]
 fn rt_match_scrutinee_recursor_executable() -> RuntimeExpr {
     RuntimeExpr::Match {
@@ -11192,13 +11199,22 @@ fn rt_run_functionized(expr: &RuntimeExpr, excluded: RecursiveDescentResidual) -
     rt_run(expr)
 }
 
-/// Control for `D1` position A: the SAME ordinary-`Match`-over-
-/// `ComputationalMatch` shape with **no recursive position**, so it is not a
-/// residual at all and takes the functionized lane with no exclusion set.
+/// **The control for THAT EXACT WITNESS** — the SAME
+/// ordinary-`Match`-over-`ComputationalMatch` shape with **no recursive
+/// position**, so it is not a residual at all and takes the functionized lane
+/// with no exclusion set.
 ///
-/// If this also refuses, position A's red is about consuming a computational
-/// match at all and my fixture is the wrong instrument. If it compiles, the
-/// recursive position is the discriminator and the red is the position's.
+/// If this also refuses, **this witness's red** is about consuming a
+/// computational match at all and my fixture is the wrong instrument. If it
+/// compiles, **the recursive-position axis in this program is the
+/// discriminator**.
+///
+/// ⛔ **This pair separates two axes of ONE program; it establishes nothing
+/// about the `MatchScrutineeRecursor` class.** The last sentence read *"the red
+/// is the position's"* and the one above it *"position A's red"* — the withdrawn
+/// class-wide attribution, surviving in a helper's doc after the controls
+/// themselves were corrected. `d8d` is an A-population program on this same
+/// object whose refusal this pair says nothing about.
 #[cfg(test)]
 fn rt_match_over_nonrecursive_computational_match() -> RuntimeExpr {
     let inert = RuntimeExpr::ComputationalMatch {
