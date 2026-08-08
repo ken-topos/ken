@@ -40,6 +40,38 @@ returns `Ok`** — so each row's red is produced by the lane change, not by a
 fixture that was already broken. **None of the nine measured expressions is
 A+B**, so no simultaneous exclusion is ever needed.
 
+> ### THE TABLE IS THE NARROWER OF TWO REAL DENOMINATORS — SIZE AGAINST THE WIDER
+>
+> [[RT-MATCH-RECURSOR-CONSUMERS]]'s `D0` census at `bcf3218b` measured the
+> **whole `ken-runtime` lib suite** and puts B at **16 compiles across 10
+> tests** — against the eight expressions across five families above.
+>
+> **Neither figure refutes the other, and that is the point.** They are
+> different denominators: the table is the six named fixtures under B-only
+> exclusion; the census is every compilation in the lib suite that reaches the
+> production predicate. **The wider one is what a sizing decision must see**,
+> and it is why this node's `M` is provisional in the same way its sibling's
+> was.
+>
+> ⇒ **`D0` closes the population from the production predicate at your own
+> base. Neither number above is closure** — the table is a floor and the census
+> is a differently-scoped floor. If `D0` lands materially above 16 compiles,
+> **that is a re-size signal: post it and stop**, exactly as the sibling did.
+>
+> **Two bounds the sibling's census carried, which apply here unchanged:**
+>
+> 1. **It covers the `ken-runtime` lib suite only.** It is `#[cfg(test)]`, so
+>    `rt_parity_native`, `px8f_buffer_native` and `px8f_write_partition` are
+>    **not** covered — and those compile real Ken programs.
+> 2. **The selector has TWO populations and a compile-keyed census sees one.**
+>    Programs that compile through `select_body_emission_authority`, and
+>    controls that **call it directly without compiling**. Three artifact rows
+>    in the sibling's `D1` reacted to the probe while appearing nowhere in its
+>    census. Production reaches the selector only from the compile path, so the
+>    compile-keyed closure is the right one **for a repair** — but any claim
+>    about *everything that consults the selector* needs both, and `AC-1` must
+>    not be read as the wider claim.
+
 ## 2. What is owed
 
 **A repair of the `LexicalCallArgumentRecursor` consumer population on the
