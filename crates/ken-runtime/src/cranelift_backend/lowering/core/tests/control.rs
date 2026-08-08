@@ -26092,6 +26092,42 @@ fn d3_generated_context_arity_sentinel_edge_is_reached() {
 }
 
 // ─── RT-PRODUCER-MATCH-PORT D2 — the producer-call scrutinee unit ───────────
+//
+// COVERAGE OF THE THREE PRE-DELEGATION REFUSALS, STATED BECAUSE IT IS PARTIAL.
+//
+// The ported arm refuses three frame states before it delegates: a retained
+// scrutinee index, a deferred constructor case, and any trailing composed
+// eliminator. NONE of the three has a shape-reaching control in `D2`. What was
+// established is weaker and is stated as what it is:
+//
+//   ESTABLISHED, by structural inspection of the source only -- each guard is
+//   written above the delegation in the same block, so no frame carrying one of
+//   these states can reach `lower_carried_match` or the port counter.
+//
+//   NOT ESTABLISHED -- no test drives a frame carrying any of the three. Nothing
+//   below executes these paths, and no claim here rests on their having run.
+//
+// THE ACTUAL REASON THE D2 FIXTURE CANNOT REACH THEM, which is a property of
+// where its frame is built rather than of the fixture's syntax.
+//
+// `OrdinaryEliminatorFrame` has five production construction sites. The `D2`
+// fixture enters through exactly one of them: the direct `RuntimeExpr::Match`
+// arm's deforestation branch, which hard-codes BOTH `retained_scrutinee_index`
+// and `deferred_constructor_case` to `None` and passes a ONE-element eliminator
+// slice. All three guard conditions are therefore constant-false on that path --
+// not merely absent from this fixture's shape.
+//
+// The states exist elsewhere and are reached by other entry paths this fixture
+// does not take: `retained_scrutinee_index: Some(0)` and
+// `deferred_constructor_case: Some(&deferred)` are each set at their own sites,
+// and a multi-element eliminator slice is built by the composition sites that
+// push onto `composed`. Measured by enumerating every `OrdinaryEliminatorFrame {`
+// construction in `crates/` and reading the two fields at each -- so this is a
+// claim about the construction sites, not about the ones a grep happened to hit.
+//
+// The three refusals are conservative, so the failure direction is over-strict
+// rather than unsound. That bounds the risk; it does not discharge the coverage,
+// and it is not offered as if it did.
 
 /// **`D2` positive — the producer-call scrutinee crosses into the match through
 /// the EXISTING transport.**
