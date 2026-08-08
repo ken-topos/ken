@@ -11126,7 +11126,14 @@ fn seed_call_port_d1a_the_exact_set_control_reds_under_short_circuiting() {
 // ─── RT-SEED-CALL-PORT D2 / AC-6 — the callee-position seed unit ───────────
 
 /// Run `example` with the `D2` selector witness armed, and report both the
-/// outcome and how many callee-position seed units the compilation emitted.
+/// outcome and how many times the ported seed-callee arm reached its handoff
+/// point -- arity checked, captures resolved, inputs passed to the typed call
+/// path.
+///
+/// **The count is not an emission oracle.** It is taken before
+/// `call_declared_unit`, which can still refuse, so the pair matters: a
+/// successful outcome WITH count 1 is the evidence for a completed typed unit
+/// call, and count 0 is the evidence for a refusal that preceded the handoff.
 ///
 /// The witness is armed and disarmed around a single run so a panic inside one
 /// control cannot leak the masked selector into the next test on this thread.
@@ -11178,9 +11185,15 @@ fn d2_order_sensitive_example() -> RuntimeExample {
 /// The reachability count is what makes this a control rather than a
 /// restatement that the seed still works. `closure-capture-application` returns
 /// `7` on the `RecursiveDescent` lane too, so the observation alone cannot tell
-/// the two lanes apart. The paired zero -- same program, witness disarmed,
-/// **no** seed unit emitted -- is the half that proves the count is measuring
-/// the port and not merely counting compilations.
+/// the two lanes apart. The paired zero -- same program, witness disarmed, the
+/// arm never reaching its handoff -- is the half that proves the count is
+/// measuring the port and not merely counting compilations.
+///
+/// **What the two assertions prove TOGETHER, and neither alone.** The count is
+/// taken before `call_declared_unit`, which can still refuse, so a count of 1
+/// on its own would not establish that a call instruction exists. Paired with a
+/// successful run that returns the seed's declared observation, it does: the
+/// program went through this arm AND the typed call path completed.
 ///
 /// **Promise class: durable invariant.** The ported call must produce the seed's
 /// declared observation. `D3` removes the witness, not the property.
@@ -11200,8 +11213,9 @@ fn d2_ac6_1_the_canonical_seed_runs_through_the_ported_callee_unit() {
     assert!(report.verifier_passed);
     assert_eq!(
         ports, 1,
-        "AC-6.1: exactly one callee-position seed unit must be emitted -- a zero here means the \
-         assertion above passed on the RecursiveDescent lane and says nothing about D2"
+        "AC-6.1: the ported arm must reach its handoff exactly once -- a zero here means the \
+         assertion above passed on the RecursiveDescent lane and says nothing about D2. With the \
+         successful run asserted above, this pair is the evidence for a completed typed unit call"
     );
 
     // The discriminating half: without the witness the selector still routes
@@ -11225,14 +11239,15 @@ fn d2_ac6_1_the_canonical_seed_runs_through_the_ported_callee_unit() {
 ///
 /// With the witness armed the refusal now comes from `D2`'s arm resolving a seed
 /// symbol through `lower_seed_capture`, not from the retained lane. The port
-/// count must be **zero**: the arm counts at its commit point, after arity and
-/// every capture have resolved, so a refusal cannot be recorded as an emitted
-/// unit.
+/// count must be **zero**: the arm counts at its handoff point, after arity and
+/// every capture have resolved, so a capture refusal lands strictly before the
+/// count. That zero is evidence of refusal BEFORE the handoff -- a distinct and
+/// weaker claim than "nothing was emitted", which this counter cannot make.
 ///
 /// **Promise class: durable invariant.** An unresolvable seed capture must fail
 /// closed and loudly, whichever lane reaches it.
 #[test]
-fn d2_ac6_2_a_missing_seed_capture_refuses_loudly_without_emitting_a_unit() {
+fn d2_ac6_2_a_missing_seed_capture_refuses_loudly_before_the_ported_handoff() {
     let example = nc5_seed_examples()
         .into_iter()
         .find(|example| example.name == "closure-capture-application")
@@ -11253,8 +11268,8 @@ fn d2_ac6_2_a_missing_seed_capture_refuses_loudly_without_emitting_a_unit() {
     );
     assert_eq!(
         ports, 0,
-        "AC-6.2: the refusal must precede emission -- a nonzero count means a unit was emitted \
-         for a closure whose captures never resolved"
+        "AC-6.2: the refusal must precede the handoff -- a nonzero count means this arm passed \
+         inputs to the typed call path for a closure whose captures never resolved"
     );
 }
 
@@ -11281,7 +11296,8 @@ fn d2_ac6_3_the_ported_unit_receives_parameters_before_captures() {
     let report = outcome.expect("the order-sensitive fixture compiles and runs");
     assert_eq!(
         ports, 1,
-        "AC-6.3: the fixture must reach the port, or the value below is about the retained lane"
+        "AC-6.3: the fixture must reach the ported arm's handoff, or the value below is about \
+         the retained lane"
     );
     assert_eq!(
         report.observation,

@@ -78,14 +78,27 @@ pub(in crate::cranelift_backend) fn set_seed_closure_call_selector_witness(armed
     SEED_CLOSURE_CALL_SELECTOR_WITNESS.with(|cell| cell.set(armed));
 }
 
-/// **`D2` reachability — how many callee-position seed units this compilation
-/// actually emitted.**
+/// **`D2` reachability — how many times the ported seed-callee arm reached its
+/// HANDOFF POINT: arity checked, every capture resolved, inputs handed to the
+/// existing typed call path.**
 ///
 /// Without this the `AC-6` controls cannot discriminate. The canonical seed
 /// returns `7` on the `RecursiveDescent` lane and `7` through the new port, so
 /// a green observation is consistent with the port never running. Counting the
-/// arm's own commit point is what separates "the program still works" from
-/// "the program went through the mechanism `D2` built".
+/// arm's own handoff is what separates "the program still works" from "the
+/// program went through the mechanism `D2` built".
+///
+/// **This is NOT an emission oracle, and the distinction is load-bearing.** The
+/// increment precedes `call_declared_unit`, and the actual call instruction is
+/// emitted later in the unchanged transport (`lowering/mod.rs`, at the
+/// `builder.ins().call`). Between the two, target lookup, descriptor and input
+/// checks, carrier transfer and host-context resolution can all still refuse.
+/// So `(Err(_), count == 1)` is reachable **without any unit call existing**.
+///
+/// ⇒ The count alone proves the **handoff**. Evidence for a *completed* typed
+/// unit call is the pair **successful outcome AND count 1**, which is how every
+/// positive row below reads it. A count of **0** proves refusal *before* the
+/// handoff, which is the distinct thing `AC-6.2` asserts.
 #[cfg(test)]
 thread_local! {
     static SEED_CALLEE_UNIT_PORTS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
@@ -13040,10 +13053,15 @@ impl<'a> Lowering<'a> {
                         let body = self
                             .child_occurrence(closure_origin, 0, body)?
                             .static_origin;
-                        // Counted at the commit point, AFTER arity and every
-                        // capture have resolved: a refusal must leave this at
-                        // zero, so the count means "a seed unit was emitted"
-                        // rather than "the arm was entered".
+                        // Counted at the HANDOFF point, AFTER arity and every
+                        // capture have resolved: an arity or capture refusal
+                        // leaves this at zero, so the count means "this arm
+                        // resolved its inputs and handed them to the typed call
+                        // path" rather than "the arm was entered".
+                        //
+                        // It does NOT mean a call instruction exists. The
+                        // transport below can still refuse, so pair the count
+                        // with the run's outcome before claiming emission.
                         #[cfg(test)]
                         SEED_CALLEE_UNIT_PORTS.with(|calls| calls.set(calls.get() + 1));
                         return self.call_declared_unit(
