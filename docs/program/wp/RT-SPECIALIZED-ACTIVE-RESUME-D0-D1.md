@@ -8,6 +8,43 @@ This document is the `D0`/`D1` checkpoint. **No production code changed.** The
 census instrument was reverted before this record was written, and every
 coordinate below was re-derived by name at the clean tree.
 
+## 0. Candidate scope, stated against both anchors
+
+A scope claim is only meaningful against a named anchor, so both are given.
+**The merge-base range is the one a reviewer of the cut holds**; the
+checkpoint-relative range is what a reader following the node's own sequence
+holds.
+
+**`D2`/`D3` code object `d9175d05`, before this documentation child:**
+
+| range | anchor | `core.rs` | `control.rs` | this record | total |
+|---|---|---|---|---|---|
+| merge base to `D2`/`D3` | `dcd6d84c` to `d9175d05` | +136/-0 | +140/-6 | +388/-0 | **+664/-6** |
+| `D0`/`D1` checkpoint to `D2`/`D3` | `f3be6476` to `d9175d05` | +136/-0 | +140/-6 | +141/-10 | **+417/-16** |
+
+**Including this documentation-only child**, which touches this file and nothing
+else — `crates/` is byte-identical to `d9175d05`:
+
+| range | anchor | `core.rs` | `control.rs` | this record | total |
+|---|---|---|---|---|---|
+| merge base to the child | `dcd6d84c` to the child | +136/-0 | +140/-6 | +453/-0 | **+729/-6** |
+| `D0`/`D1` checkpoint to the child | `f3be6476` to the child | +136/-0 | +140/-6 | +205/-9 | **+481/-15** |
+
+Both anchors are ancestors; `f3be6476` is the `D0`/`D1` checkpoint and is itself
+a child of `dcd6d84c`. The code figures are identical across all four rows
+because the child changes no code.
+
+**Recorded because the handback got it wrong, in two independent ways.** It
+quoted `+417/-16` against the merge base, which is the **checkpoint-relative**
+figure — the same wrong-anchor error this chain made one node ago, where a
+per-commit statistic was quoted as a cut statistic. And it read `git diff
+--stat`'s per-file column as insertions when that column is **insertions plus
+deletions**, which is how `control.rs +140/-6` was reported as "+146".
+
+⇒ **Quote `--numstat`, and name the anchor in the same sentence as the number.**
+The `--stat` summary line is safe for a total; its per-file column is not a
+count of additions.
+
 ## 1. Method, and why it is placed where it is
 
 One instrument at the **entry** of `lower_computational_match_value_composed`
@@ -364,6 +401,34 @@ surfaces.
 re-blessing rather than quiet acceptance.** Its discriminating clauses —
 `mutated_continuations == 0`, and the pre-`D2` refusal becoming producible again
 — are untouched.
+
+### The denominator model, stated once so nothing has to be inferred
+
+Architect-authorized, and this is the whole of it. Any earlier phrasing that
+described a mutated denominator as *unchanged*, *preserved*, or *equal to the
+unmutated count* is **retired** — it is recorded here only as the thing that was
+replaced, and it must not be quoted forward as a property of either control.
+
+| clause | holds on |
+|---|---|
+| normal arrivals **non-zero** | both controls |
+| normal continuations **equal** arrivals | `coc_d3` |
+| normal routes **equal** arrivals | `sar_d3` |
+| **mutated arrivals non-zero** — not equal to the normal count | both controls |
+| mutated continuations **zero** | `coc_d3` |
+| mutated routes **zero** | `sar_d3` |
+| the pre-`D2` refusal **producible** under the mutation | `coc_d3` |
+| the fifth refusal **producible** under the mutation | `sar_d3` |
+
+**Why the mutated denominator is `> 0` and not an equality.** The equality would
+assert that the repair has no downstream effect, which is the opposite of what a
+repair is for: a successful continuation or route lets lowering proceed and
+reach the same arm again, while the suppressed run aborts at the first refusal.
+The denominator's only job is to rule out *"the arm was never entered"* as an
+explanation for a zero, and `> 0` discharges exactly that. Both controls carry
+this reasoning **at the site**, in the form the Architect authorized, and the
+site text is the governing statement — this table is a summary of it, not a
+substitute.
 
 ## 13. Held, not committed: the lane-pair control
 
