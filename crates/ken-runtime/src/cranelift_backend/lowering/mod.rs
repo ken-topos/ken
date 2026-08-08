@@ -1365,9 +1365,8 @@ enum ContinuationEmissionMutation {
     /// integrated fixture must supply two distinct same-shaped targets in one
     /// lawful callable population.
     SubstituteEmittedFuncRef,
-    /// **`RT-CONTSPEC-WITNESS` `D7`/`AC-9` — the two-target same-shaped
-    /// redirect, and the one control in this enum whose oracle is an executed
-    /// RESULT rather than a compile-time rejection.**
+    /// **`RT-CONTSPEC-WITNESS` `D7` — the two-target same-shaped call-site
+    /// redirect.**
     ///
     /// Selects a **distinct** target whose **declared arity and capture count**
     /// equal the exact target's, per `RT-WORKER-BIND`'s definition of
