@@ -1,7 +1,7 @@
 ---
 id: MODELS-TIER
 title: "agent/MODELS.md — the Runtime seating is the fleet-wide norm, not an exception"
-status: ready
+status: draft
 owner: steward
 size: S
 gate: none
@@ -10,6 +10,18 @@ blocks: []
 github: null
 origin: operator correction, 2026-07-21 (agent/MODELS.md commentary)
 ---
+
+> ## STATUS CORRECTED `ready` TO `draft` — 2026-08-08, Steward
+>
+> **`ready` means shovel-ready: a written frame, dependencies merged.**
+> This node was not, because
+> no frame exists. Steward-owned process work, deprioritized under
+> playbook §1 while build teams are running.
+>
+> **The correction is not a downgrade of the work.** A node advertising
+> startable work it does not have makes the backlog read deeper than it
+> is, and that depth is exactly what a Steward reads to decide whether a
+> team is idle for want of work or for want of a lane.
 
 **The original erratum has LANDED** — `agent/MODELS.md` on `origin/main`
 now carries "★ The Roles column is a DEFAULT, not the landed seating

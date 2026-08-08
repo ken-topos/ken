@@ -1,7 +1,7 @@
 ---
 id: RT-CENSUS-CAVEAT-GUARD
 title: "The identifier-census caveat's staleness guard is an existence check standing in for a count check, so it cannot detect the drift it was written to catch"
-status: ready
+status: draft
 owner: runtime
 size: S
 gate: none
@@ -10,6 +10,17 @@ blocks: []
 github: null
 origin: Reported by runtime-implementer during RT-RECURSOR-TRANSPORT D3 (evt_16cmej481q7ns family) as an incidental finding; Architect scoped it OUT of the hard-stop-4 repair nodes at evt_3r4j14fv1jtj2 as pre-existing prose debt. Steward-filed (agents cannot create tracked work per COORDINATION §2), and re-derived by the Steward at main 5d4c623e rather than inherited.
 ---
+
+> ## STATUS CORRECTED `ready` TO `draft` — 2026-08-08, Steward
+>
+> **`ready` means shovel-ready: a written frame, dependencies merged.**
+> This node was not, because
+> no frame exists.
+>
+> **The correction is not a downgrade of the work.** A node advertising
+> startable work it does not have makes the backlog read deeper than it
+> is, and that depth is exactly what a Steward reads to decide whether a
+> team is idle for want of work or for want of a lane.
 
 ## What it is
 

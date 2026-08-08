@@ -1,7 +1,7 @@
 ---
 id: RT-EFFECT-DIFF
 title: "One reusable rich differential boundary over EffectObservation — interpreter vs native, first-divergence reporting, so backend-local tests can observe what only the CLI suites currently can"
-status: ready
+status: draft
 owner: runtime
 size: L
 gate: none
@@ -10,6 +10,17 @@ blocks: []
 github: null
 origin: Architect ruling `dec_3tawbngh6k761` (2026-07-29), the "separate row-3 obligation" clause, on the RT-FNSPLIT-RECUR-PORT hard-stop #18 evidence; research advisory `evt_6980s92jgvf4h` row 3; Runtime Leader registration request `evt_3dxjc38x8w1sa`. Steward-filed (agents cannot create tracked work per COORDINATION §2).
 ---
+
+> ## STATUS CORRECTED `ready` TO `draft` — 2026-08-08, Steward
+>
+> **`ready` means shovel-ready: a written frame, dependencies merged.**
+> This node was not, because
+> no frame exists.
+>
+> **The correction is not a downgrade of the work.** A node advertising
+> startable work it does not have makes the backlog read deeper than it
+> is, and that depth is exactly what a Steward reads to decide whether a
+> team is idle for want of work or for want of a lane.
 
 > ## ▶ THE FRAME IS WRITTEN — read it, not this file
 >

@@ -1,7 +1,7 @@
 ---
 id: SPEC-MISSION-GROUNDING
 title: "Ground the spec as a whole against the mission — audit every retained constraint for which mission property fails without it, and relax the ones where nothing does"
-status: ready
+status: draft
 owner: spec
 size: L
 gate: none
@@ -10,6 +10,18 @@ blocks: []
 github: null
 origin: Operator question 2026-07-26 — "the question to ground the spec against the goals of the language has been a great benefit (or will be, at least). What agent would be best suited to perform the same analysis on the spec as a whole?" followed by "ok make a note of the process." Generalizes the single-node result on SPEC-CLOSURE-BOUNDARY, which began with the operator's direction challenge (evt_5qr8c07a1tbc9) and whose immediate cause was six consecutive Architect production blocks on RT-FNSPLIT-B2V against a premise nobody had examined. Steward-filed per COORDINATION §2 (agents cannot create tracked work).
 ---
+
+> ## STATUS CORRECTED `ready` TO `draft` — 2026-08-08, Steward
+>
+> **`ready` means shovel-ready: a written frame, dependencies merged.**
+> This node was not, because
+> no frame exists. Dependencies are met and the Spec enclave is idle,
+> so **this node is the enclave's blocker and the frame is Steward debt.**
+>
+> **The correction is not a downgrade of the work.** A node advertising
+> startable work it does not have makes the backlog read deeper than it
+> is, and that depth is exactly what a Steward reads to decide whether a
+> team is idle for want of work or for want of a lane.
 
 > ## ✅ PRECONDITION DISCHARGED, FIRST PASS RAN — this node is now the umbrella
 >
