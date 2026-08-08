@@ -26991,3 +26991,127 @@ fn d3_the_ported_producer_call_scrutinee_runs_unhooked_on_the_functionized_lane(
          in the tree. A zero here means the variant was removed while the port stayed dead"
     );
 }
+
+/// **`RT-CARRIED-CONTINUATION-RESUME` `D3` — the `Active` carried route is taken,
+/// proven by the DISAPPEARANCE of the continuation-frame refusal plus a reached
+/// detector, not by the row compiling.**
+///
+/// The two population members do **not** compile end to end at this base and
+/// will not until the `Carried` x `Ordinary` suffix successor lands. So this
+/// control cannot assert success, and it deliberately does not.
+///
+/// It also deliberately does **not** key on the refusal the rows now hit. That
+/// message belongs to `RT-PRODUCER-MATCH-PORT`'s trailing-composed-eliminator
+/// guard, and the successor node is going to change exactly that guard -- a
+/// control keyed on it would either break for an unrelated reason or, worse,
+/// **pass vacuously** once the string it matches no longer exists.
+///
+/// What it keys on instead survives the successor:
+///
+/// 1. the continuation-frame refusal is **absent**, whatever the row does next;
+/// 2. the route was **measurably taken** -- arrivals and routes are both
+///    non-zero, so the absence is not the seat having been skipped;
+/// 3. under the mutation the refusal comes **back verbatim** while arrivals stay
+///    non-zero, so the detector is proven reached rather than bypassed.
+///
+/// Clause 3 is what makes clause 1 mean anything: a negative check passes for
+/// any reason, and this is its positive control.
+///
+/// **Promise class: durable invariant.** Every assertion holds whether the row
+/// later compiles or stops at a further wall, because none of them asserts the
+/// row's overall outcome. The arrivals counter is read **before** the
+/// suppression branch in production, so the mutated side cannot manufacture its
+/// own zero.
+#[test]
+fn ccr_d3_the_active_carried_route_is_taken_and_the_continuation_refusal_is_gone() {
+    use crate::cranelift_backend::lowering::core::{
+        ccr_d2_active_arrivals, ccr_d2_active_routes, reset_ccr_d2_counts,
+        set_ccr_d2_suppress_active_route, set_selector_variant_exclusion,
+    };
+    struct Restore;
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            set_selector_variant_exclusion(None);
+            set_ccr_d2_suppress_active_route(false);
+        }
+    }
+
+    /// The refusal this node retired for `Active`. Held once, so the two sides
+    /// of the A/B cannot drift apart.
+    const CONTINUATION_REFUSAL: &str = "a carried scrutinee reached a continuation frame that \
+                                        resumes a compile-time value rather than eliminating one";
+
+    // The same shape both measured members reach the arm through: an ordinary
+    // `Match` over the deferred-constructor recursive fixture.
+    let witness = RuntimeExpr::Match {
+        scrutinee: Box::new(px8j_deferred_recursive_field_fixture()),
+        cases: ["ctor:prelude::Result::Err", "ctor:prelude::Result::Ok"]
+            .into_iter()
+            .map(|constructor| RuntimeMatchCase {
+                constructor: constructor.to_string(),
+                binders: 1,
+                body: RuntimeExpr::Construct {
+                    constructor: crate::EXIT_SUCCESS_CONSTRUCTOR.to_string(),
+                    args: Vec::new(),
+                },
+            })
+            .collect(),
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "CCR D3 witness".to_string(),
+        },
+    };
+
+    let run = |label: &'static str| -> String {
+        let _restore = Restore;
+        reset_ccr_d2_counts();
+        set_selector_variant_exclusion(Some(RecursiveDescentResidual::MatchScrutineeRecursor));
+        let (result, _trace) = px8j_capture_source_trace(&witness, false, label);
+        match result.map(|_| ()) {
+            Ok(()) => "Ok".to_string(),
+            Err(error) => format!("{error:?}"),
+        }
+    };
+
+    // ── A: the route as landed ──────────────────────────────────────────────
+    let routed = run("ken_ccr_d3_routed");
+    let (routed_arrivals, routed_routes) = (ccr_d2_active_arrivals(), ccr_d2_active_routes());
+    assert!(
+        routed_arrivals > 0,
+        "the carried Active arm must be REACHED, or every claim below is about a seat this \
+         program never visited: arrivals={routed_arrivals}"
+    );
+    assert!(
+        routed_routes > 0,
+        "the arm must have ROUTED to resume_active_continuation, not merely been entered: \
+         arrivals={routed_arrivals} routes={routed_routes}"
+    );
+    assert!(
+        !routed.contains(CONTINUATION_REFUSAL),
+        "the continuation-frame refusal must be GONE for an Active frame. This asserts the \
+         ADVANCE, not success -- the row still stops at the Carried x Ordinary suffix guard, \
+         which is a different authority and deliberately not named here: {routed}"
+    );
+
+    // ── B: the mutation at this exact root ──────────────────────────────────
+    set_ccr_d2_suppress_active_route(true);
+    let suppressed = run("ken_ccr_d3_suppressed");
+    let (suppressed_arrivals, suppressed_routes) =
+        (ccr_d2_active_arrivals(), ccr_d2_active_routes());
+    set_ccr_d2_suppress_active_route(false);
+    assert!(
+        suppressed_arrivals > 0,
+        "the detector must still be REACHED under the mutation. A zero here would mean the \
+         mutated side proves nothing, because the refusal could be explained by the arm never \
+         being entered: arrivals={suppressed_arrivals}"
+    );
+    assert_eq!(
+        suppressed_routes, 0,
+        "the mutation must suppress the ROUTE specifically, or it is mutating something else"
+    );
+    assert!(
+        suppressed.contains(CONTINUATION_REFUSAL),
+        "the mutation must recreate the EXACT attributed refusal, verbatim. A different refusal \
+         means this control is anchored to the wrong root: {suppressed}"
+    );
+}
