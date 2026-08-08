@@ -11038,7 +11038,7 @@ fn seed_call_port_d1_the_seed_corpus_population_that_fires_a_residual_is_exactly
 /// 3. The one-variant program reports the SAME set mutated and unmutated. That
 ///    is the measured reason a reachability control cannot discharge this gate:
 ///    every single-variant witness is blind to short-circuiting by construction,
-///    and every witness `RT-DECL-CLOSURE-PORT` left behind is single-variant.
+///    and every `d1_*_witness` already in the tree is single-variant.
 ///
 /// Row 3 is a positive control in the strict sense -- it proves the mutation
 /// switch is not simply breaking everything it touches, which a red-only proof

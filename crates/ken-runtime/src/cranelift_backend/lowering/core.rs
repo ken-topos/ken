@@ -22,12 +22,12 @@ thread_local! {
 /// **`RT-SEED-CALL-PORT` `D1` — the residual set observed at the PRODUCTION
 /// selector site, per compilation.**
 ///
-/// `enumerate_recursive_descent_residuals` landed with `RT-DECL-CLOSURE-PORT`
-/// and is exercised only on hand-built `RuntimeExpr` witnesses. That answers
-/// *"can the instrument see variant V?"* and **not** the question every node in
-/// this campaign actually asks: *"which variants fire on the programs this
-/// repository really compiles?"* A witness is authored to exhibit the variant it
-/// is named for, so a walk with a gap still reports it.
+/// The durable enumerator landed in `RT-SRCBODY-BIND-ORDER` (`7ca5cfc0`).
+/// Before `D1`, all of its call sites used hand-built `RuntimeExpr` witnesses.
+/// That answers *"can the instrument see variant V?"* and **not** the question
+/// every node in this campaign actually asks: *"which variants fire on the
+/// programs this repository really compiles?"* A witness is authored to exhibit
+/// the variant it is named for, so a walk with a gap still reports it.
 ///
 /// This cell closes that distance by recording the enumeration where
 /// `compile_expr_into_module_with_root_projection` selects the authority — the
