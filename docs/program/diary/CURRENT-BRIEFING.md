@@ -33,7 +33,7 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-08 ~00:0xZ · `D5` publishing; the node closes on it
+## LIVE — 2026-08-08 ~00:4xZ · `RT-SEED-CALL-PORT` active; `D5` closed and merged
 
 > ### OPERATOR SEQUENCING RULING — 2026-08-07, verbatim intent. THIS GOVERNS.
 >
@@ -64,18 +64,26 @@
 
 > ### NEXT ACTION ON RESUME — read this line first
 >
-> **`D5` IS MERGED. `RT-CARRIER-BYTESPAN-OBSERVE` IS CLOSED.** PR #1555 from
-> exact `f49a2255`, squashed to `origin/main` **`e0fc15c3`**. **M6 done — all
-> 15 paths blob-verified.** M7 done in this same commit: node flipped `merged`,
-> tracker regenerated.
+> **`RT-SEED-CALL-PORT` IS IN FLIGHT WITH THE RUNTIME RING. WAIT FOR ITS `D1`.**
+> `main` is **`211a208a`**, worktree clean, **zero open PRs, nothing owed by
+> me.** Two outcomes to expect, and both are fine:
 >
-> **⇒ `RT-SEED-CALL-PORT` IS THE NEXT ACTION.** The operator's named entry
-> point: `ready`, dep merged, frame glyph-clean as of PR #1553. Compact the
-> Runtime ring first (§15 — Steward compacts the team before delivering a WP,
-> gated on retros being in), then kick it.
+> - **A free close** — `SeedClosureCall` fires nowhere. **Do not accept it
+>   without the exact-set control having been RUN** (see the correction block
+>   below). Then hand it back and close the node.
+> - **A hard stop**, if the class fires only under a later-owned predicate or
+>   the existing transport is insufficient.
 >
-> **M8 sent (`evt_65nps4njqm1wy`). Librarian routed (`evt_v7nebxdga6y8`). Both
-> discharged; nothing owed on the closed node.**
+> **Do NOT expect a re-size request — I withdrew it.** If one arrives anyway,
+> the ring did not read `evt_60kx15saf97ve`.
+>
+> `RT-CARRIER-BYTESPAN-OBSERVE` is **CLOSED** (PR #1555, exact `f49a2255`, 15
+> paths blob-verified; M7/M8/Librarian all discharged). Nothing owed on it.
+>
+> **OWED BY ME, DEFERRED ON PURPOSE:** route the [[RT-SITEOP-CARRIED-WITNESS]]
+> mechanism fork to the Architect **when that node approaches the frontier, not
+> before** — routing it now inserts work ahead of the campaign. Frame it as
+> *"which mechanism?"*, never *"may I do X?"*.
 >
 > ## `RT-SEED-CALL-PORT` IS KICKED — `evt_51606kvqqjhba` is its thread anchor
 >
@@ -86,9 +94,40 @@
 > **Expect a free close, and do not let that expectation do the measuring.** The
 > node's `D1a` exact-set gate is the whole point — a reachability control passes
 > while a short-circuiting enumerator is the defect it exists to catch.
-> **`D1` includes BUILDING the enumerator** (it never landed in any candidate
-> lineage), and the `M` size does not cover that — **re-size when the ring
-> reports the `D1` cost at pickup.**
+>
+> ## I CORRECTED MY OWN KICK — the enumerator EXISTS. PR #1560, `main` `211a208a`
+>
+> **My kick told the ring `D1` included BUILDING the enumerator and that a
+> re-size would follow. Both were wrong**, and I caught it ~7 minutes in, while
+> they were building it. Correction posted at **`evt_60kx15saf97ve`**.
+>
+> Measured at `origin/main`, landed by `RT-SRCBODY-BIND-ORDER` (`7ca5cfc0`):
+>
+> | what | where |
+> |---|---|
+> | entry point | `lowering/core.rs:598` `enumerate_recursive_descent_residuals` |
+> | non-short-circuiting walk, `BTreeSet`, no wildcard | `core.rs:616` `collect_recursive_descent_residuals` |
+> | `SeedClosureCall` classified | `core.rs:707` |
+> | `D1a`'s exact-set control, live `#[test]` | `core/tests/control.rs:10849` |
+> | its `SeedClosureCall` firing witness | `control.rs:10723` |
+>
+> The control asserts `assert_eq!` over a `BTreeSet` of four variants — exact
+> set, not membership. **The re-size is WITHDRAWN; `M` over-covers.** `AC-2`'s
+> lineage half is discharged by inheritance.
+>
+> **HOW I GOT IT WRONG, because this is the reusable part.**
+> `RT-DECL-CLOSURE-PORT`'s enumerator genuinely never entered the candidate
+> lineage — **true when that node closed.** I carried it forward and never
+> re-derived it after a *later, different* node landed a durable one. **A fact
+> about the tree decays. Re-derive it against current `main` at each use.**
+>
+> **WHAT STILL BINDS — do not let the correction over-swing.** `D1`'s real
+> question is untouched: does `SeedClosureCall` fire on the **committed program
+> corpus**? And **a test witness is not a population** —
+> `d1_seed_closure_call_witness()` is a hand-built `RuntimeExpr`, not a Ken
+> program; it proves the walk can *see* the class, nothing more. The control
+> must also be **run by name**, since later deliverables rewrite `core.rs`
+> underneath it: presence is not greenness.
 >
 > ## TWO ADVERSARY FINDINGS ON THE `D5` MERGE — one live, both dispositioned
 >
