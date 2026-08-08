@@ -26090,3 +26090,98 @@ fn d3_generated_context_arity_sentinel_edge_is_reached() {
          its passing says nothing: {observed:#?}"
     );
 }
+
+// ─── RT-PRODUCER-MATCH-PORT D2 — the producer-call scrutinee unit ───────────
+
+/// **`D2` positive — the producer-call scrutinee crosses into the match through
+/// the EXISTING transport.**
+///
+/// `match ((\x . Some x) 4) with Some y => y`. The scrutinee `Call` is lowered as
+/// a separately owned callable unit by the arm `RT-SEED-CALL-PORT` `D3`
+/// activated, so its result crosses as a carried word; this node's delegation
+/// then eliminates that word with `lower_carried_match` -- the same function the
+/// direct `RuntimeExpr::Match` route already used for a carried scrutinee. **No
+/// second transport was built, and that is the deliverable.**
+///
+/// **What the two assertions prove TOGETHER, and neither alone.** The count is
+/// taken before `lower_carried_match`, which can still refuse, so a count of 1
+/// alone would not establish that an elimination was emitted. Paired with a run
+/// that returns the program's declared observation, it does.
+///
+/// **Promise class: durable invariant.** The ported shape must produce its
+/// declared observation. `D3` removes the witness, not the property.
+#[test]
+fn d2_the_producer_call_scrutinee_crosses_into_the_match_through_the_existing_transport() {
+    set_residual_enumeration_mutation(ResidualEnumerationMutation::None);
+    let example = seed_call_port_producer_match_example();
+
+    reset_producer_match_unit_ports();
+    set_producer_match_call_selector_witness(true);
+    let authority = select_body_emission_authority(&example.ir, &BTreeMap::new());
+    let outcome = run_example_with_seed_observation(&example, &NativeSeedEnvironment::empty());
+    set_producer_match_call_selector_witness(false);
+
+    assert_eq!(
+        authority,
+        BodyEmissionAuthority::FunctionizedUnits,
+        "D2: with the classification suppressed this program must select the functionized lane, \
+         or the run below is not exercising the port at all"
+    );
+    let report = outcome.expect("D2: the ported producer-call scrutinee compiles and runs");
+    assert_eq!(
+        report.observation, example.observation,
+        "D2: the ported elimination must produce the program's declared observation"
+    );
+    assert!(report.verifier_passed);
+    assert_eq!(
+        producer_match_unit_ports(),
+        1,
+        "D2: the port must reach its handoff exactly once. With the successful run asserted \
+         above, this pair is the evidence for a completed carried elimination"
+    );
+}
+
+/// **`D2` is PRODUCTION-INERT, and this is the control that says so.**
+///
+/// `D2` builds the port but must not retire `ProducerMatchCall`. With no witness
+/// armed -- which is every production compile, since the accessor's
+/// `cfg(not(test))` twin returns `false` unconditionally -- the same program
+/// still selects `RecursiveDescent` and the ported arm is never taken.
+///
+/// The count of `0` is the load-bearing half: it distinguishes "production still
+/// routes this shape to the old lane" from "the port happens to agree with it".
+///
+/// **Promise class: transition sentinel.** `D3` is the event that retires it:
+/// once the variant is gone this program selects the functionized lane
+/// unconditionally and the authority asserted here inverts.
+#[test]
+fn d2_with_no_witness_armed_production_still_selects_the_recursive_descent_lane() {
+    set_residual_enumeration_mutation(ResidualEnumerationMutation::None);
+    let example = seed_call_port_producer_match_example();
+
+    reset_producer_match_unit_ports();
+    set_producer_match_call_selector_witness(false);
+    let authority = select_body_emission_authority(&example.ir, &BTreeMap::new());
+
+    assert_eq!(
+        authority,
+        BodyEmissionAuthority::RecursiveDescent,
+        "D2 must not change which authority production selects -- that flip is D3's"
+    );
+    assert_eq!(
+        enumerate_recursive_descent_residuals(&example.ir, &BTreeMap::new()),
+        BTreeSet::from([RecursiveDescentResidual::ProducerMatchCall]),
+        "D2: the witness suppresses the SELECTOR only. The enumerator must still report the \
+         class, so D1's census keeps measuring the same population it measured before"
+    );
+
+    let report = run_example_with_seed_observation(&example, &NativeSeedEnvironment::empty())
+        .expect("the program still compiles on the retained lane");
+    assert_eq!(report.observation, example.observation);
+    assert_eq!(
+        producer_match_unit_ports(),
+        0,
+        "D2: with no witness armed the ported arm must not be taken at all. A non-zero here \
+         means D2 changed production, which is exactly what it is forbidden to do"
+    );
+}

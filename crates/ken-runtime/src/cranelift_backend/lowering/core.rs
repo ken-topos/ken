@@ -84,6 +84,74 @@ pub(in crate::cranelift_backend) fn seed_callee_unit_ports() -> usize {
     SEED_CALLEE_UNIT_PORTS.with(std::cell::Cell::get)
 }
 
+/// **`RT-PRODUCER-MATCH-PORT` `D2` — a HANDOFF counter, and named so.**
+///
+/// Incremented once the composed ordinary frame has been checked for the three
+/// pieces of state the carried elimination cannot express, immediately before
+/// `lower_carried_match`. **That call can still refuse**, so `(Err(_), count ==
+/// 1)` is reachable with no elimination emitted.
+///
+/// ⇒ The count alone proves the arm **took the port** rather than refusing ahead
+/// of it. Evidence for a *completed* carried elimination is the pair **successful
+/// outcome AND count 1**; a count of **0** proves a refusal strictly before the
+/// handoff. Every row below reads it as that pair, never alone.
+#[cfg(test)]
+thread_local! {
+    static PRODUCER_MATCH_UNIT_PORTS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn reset_producer_match_unit_ports() {
+    PRODUCER_MATCH_UNIT_PORTS.with(|cell| cell.set(0));
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn producer_match_unit_ports() -> usize {
+    PRODUCER_MATCH_UNIT_PORTS.with(std::cell::Cell::get)
+}
+
+/// **`RT-PRODUCER-MATCH-PORT` `D2` — the selector witness, and why one is needed
+/// at all.**
+///
+/// `D2` builds the producer-call port but is forbidden from retiring
+/// `ProducerMatchCall`; that is `D3`. While the classification still fires, every
+/// program carrying this shape selects `RecursiveDescent`, so **the ported path
+/// is unreachable in production for the whole of `D2`** and no control could
+/// otherwise execute it.
+///
+/// This cell suppresses the classification in the **selector only**. The
+/// non-short-circuiting enumerator is deliberately left alone, so `D1`'s census
+/// keeps reporting the class exactly as it did before — the witness changes which
+/// authority is chosen, never what the population is measured to be.
+///
+/// It is the same instrument `RT-SEED-CALL-PORT` `D2` used and `D3` deleted with
+/// its variant. **It is scaffolding with a named retirement event**, not a
+/// mechanism: `D3` removes it, at which point every control it gates reaches the
+/// port the way production does.
+#[cfg(test)]
+thread_local! {
+    static PRODUCER_MATCH_CALL_SELECTOR_WITNESS: std::cell::Cell<bool> =
+        const { std::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn set_producer_match_call_selector_witness(armed: bool) {
+    PRODUCER_MATCH_CALL_SELECTOR_WITNESS.with(|cell| cell.set(armed));
+}
+
+#[cfg(test)]
+fn producer_match_call_selector_witness() -> bool {
+    PRODUCER_MATCH_CALL_SELECTOR_WITNESS.with(std::cell::Cell::get)
+}
+
+/// Production never has a witness: the classification is unconditional outside
+/// the test profile, so `D2` cannot change which authority a compiled program
+/// selects.
+#[cfg(not(test))]
+fn producer_match_call_selector_witness() -> bool {
+    false
+}
+
 /// The mutation `D1a` proves its exact-set control against.
 ///
 /// `ShortCircuitLikeTheSelector` is not a synthetic perturbation: it makes the
@@ -644,24 +712,25 @@ fn recursive_descent_residual(expr: &RuntimeExpr) -> Option<RecursiveDescentResi
         }
         RuntimeExpr::Match {
             scrutinee, cases, ..
-        } => matches!(scrutinee.as_ref(), RuntimeExpr::Call { .. })
-            .then_some(RecursiveDescentResidual::ProducerMatchCall)
-            .or_else(|| {
-                matches!(
-                    scrutinee.as_ref(),
-                    RuntimeExpr::ComputationalMatch { cases, .. }
-                        if cases
-                            .iter()
-                            .any(|case| !case.recursive_positions.is_empty())
-                )
-                .then_some(RecursiveDescentResidual::MatchScrutineeRecursor)
-            })
-            .or_else(|| recursive_descent_residual(scrutinee))
-            .or_else(|| {
-                cases
-                    .iter()
-                    .find_map(|case| recursive_descent_residual(&case.body))
-            }),
+        } => (matches!(scrutinee.as_ref(), RuntimeExpr::Call { .. })
+            && !producer_match_call_selector_witness())
+        .then_some(RecursiveDescentResidual::ProducerMatchCall)
+        .or_else(|| {
+            matches!(
+                scrutinee.as_ref(),
+                RuntimeExpr::ComputationalMatch { cases, .. }
+                    if cases
+                        .iter()
+                        .any(|case| !case.recursive_positions.is_empty())
+            )
+            .then_some(RecursiveDescentResidual::MatchScrutineeRecursor)
+        })
+        .or_else(|| recursive_descent_residual(scrutinee))
+        .or_else(|| {
+            cases
+                .iter()
+                .find_map(|case| recursive_descent_residual(&case.body))
+        }),
         RuntimeExpr::ComputationalMatch {
             scrutinee, cases, ..
         } => recursive_descent_residual(scrutinee).or_else(|| {
@@ -3403,23 +3472,70 @@ impl<'a> Lowering<'a> {
                     });
                     self.lower_carried_computational_match(builder, word, frame, &eliminators[1..])
                 }
-                // ── ⛔ DEFERRED, and named rather than absorbed ────────────
+                // ── RT-PRODUCER-MATCH-PORT `D2` — THE CELL IS NOW LIVE ──────
                 //
-                // ⚠ A composed **ordinary** frame is reached only through
-                // heterogeneous deforestation of a producer, and a deforestable
-                // producer is by construction one whose shape was read at
-                // compile time. So a carried scrutinee cannot arrive here from
-                // today's corpus — ⛔ which is exactly why this is written as a
-                // fail-closed arm and not omitted: `§2g` requires the phase to
-                // be classified, and *"cannot occur"* is a disposition, never a
-                // missing cell. The direct `RuntimeExpr::Match` route already
-                // carries the real elimination (`Self::lower_carried_match`).
-                EliminatorFrame::Ordinary(_) => Err(unsupported(
-                    "BoundaryCarrier",
-                    "a carried scrutinee reached an ordinary eliminator through the \
-                     deforestation producer, which selects its case from a compile-time \
-                     constructor shape the carrier does not have",
-                )),
+                // This arm used to refuse, on the reasoning that "a deforestable
+                // producer is by construction one whose shape was read at compile
+                // time, so a carried scrutinee cannot arrive here from today's
+                // corpus". **That premise is false now, and `RT-SEED-CALL-PORT`
+                // `D3` is what falsified it.** `requires_heterogeneous_
+                // deforestation` classifies on the SOURCE shape -- a `Call`
+                // producing a `Construct` is deforestable -- while the callee is
+                // now lowered as a separately owned unit whose result crosses as
+                // a carried word. Both are true at once, which the old comment
+                // took to be impossible.
+                //
+                // The port is a delegation, not a new transport: the elimination
+                // is `Self::lower_carried_match`, the same one the direct
+                // `RuntimeExpr::Match` route uses at its own carried arm. The
+                // producer-call scrutinee becomes a separately owned unit and its
+                // typed result crosses that boundary into these cases.
+                //
+                // Three pieces of frame state this delegation CANNOT express are
+                // refused rather than dropped. `lower_carried_match` takes cases,
+                // default, origin and env and nothing else, so a frame carrying
+                // more is not something this port has ported -- and silently
+                // discarding it would be an unsound accept, not a narrower one.
+                EliminatorFrame::Ordinary(frame) => {
+                    if let Some(index) = frame.retained_scrutinee_index {
+                        return Err(unsupported(
+                            "BoundaryCarrier",
+                            format!(
+                                "a carried producer-call scrutinee reached an ordinary \
+                                 eliminator that retains its scrutinee at binder {index}; the \
+                                 carried elimination has no slot for a retained scrutinee, so \
+                                 this shape is not ported"
+                            ),
+                        ));
+                    }
+                    if frame.deferred_constructor_case.is_some() {
+                        return Err(unsupported(
+                            "BoundaryCarrier",
+                            "a carried producer-call scrutinee reached an ordinary eliminator \
+                             carrying a deferred constructor case, whose fields are selected \
+                             from a compile-time shape the carrier does not have",
+                        ));
+                    }
+                    if !eliminators[1..].is_empty() {
+                        return Err(unsupported(
+                            "BoundaryCarrier",
+                            "a carried producer-call scrutinee reached an ordinary eliminator \
+                             with further composed eliminators behind it; the carried \
+                             elimination consumes exactly one frame, so the remainder would be \
+                             silently dropped",
+                        ));
+                    }
+                    #[cfg(test)]
+                    PRODUCER_MATCH_UNIT_PORTS.with(|calls| calls.set(calls.get() + 1));
+                    self.lower_carried_match(
+                        builder,
+                        word,
+                        frame.cases,
+                        frame.default,
+                        frame.static_origin,
+                        frame.env,
+                    )
+                }
                 EliminatorFrame::PendingLet(_) | EliminatorFrame::Active(_) => Err(unsupported(
                     "BoundaryCarrier",
                     "a carried scrutinee reached a continuation frame that resumes a \
