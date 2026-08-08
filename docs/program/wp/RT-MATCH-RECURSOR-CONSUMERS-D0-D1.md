@@ -236,23 +236,33 @@ Both rows produce the **same backtrace, frame for frame and line for line**:
 
 ```mermaid
 graph TD
-  A[compile_expr_into_module_with_root_projection core.rs:1283] --> B[define_unit_bodies units.rs:3640]
-  B --> C[lower_carried_computational_match core.rs:12238]
-  C --> D[lower_source_carried_match core.rs:7225]
-  D --> E[lower_source_carried_leaf core.rs:6808]
-  E --> F[lower_forked_branch core.rs:6458]
-  F --> G[lower_source_machine_with_continuation_inner core.rs:5241]
-  G --> H[carried_join_arm core.rs:10891]
+  A[compile_expr_into_module_with_root_projection core.rs:1540] --> B[define_unit_body units.rs:3640]
+  B --> C[lower_carried_computational_match core.rs:12160]
+  C --> D[lower_source_carried_match core.rs:7147]
+  D --> E[lower_source_carried_leaf core.rs:6730]
+  E --> F[lower_forked_branch core.rs:6380]
+  F --> G[lower_source_machine_with_continuation_inner core.rs:5163]
+  G --> H[carried_join_arm core.rs:10813]
   H --> I[transfer_into_carrier mod.rs:4985]
-  I --> J[emit_carrier_transfer mod.rs:7249 REFUSES]
+  I --> J[emit_carrier_transfer mod.rs:7242 REFUSES]
 ```
+
+> **Every line number above is stated against this candidate's base,
+> `89aa1550`, and was re-derived there by name.** The backtrace itself was
+> captured with temporary instrumentation in the worktree, which displaced
+> `core.rs` by a uniform **+78** lines and the refusal arm in `mod.rs` by **+7**.
+> An earlier revision of this section carried those displaced numbers —
+> `carried_join_arm` at `10842` rather than `10764` — which resolve to real but
+> **wrong** lines in the tree a reader actually has. The attribution never
+> depended on them; **the function names are the load-bearing handle** and they
+> are unchanged.
 
 **This is not `D2`'s seat.** `RT-RECURSOR-TRANSPORT` `D2` propagates the marker
 at `resume_active_continuation`, and that function is nowhere on this path. The
 `D2` mechanism is sound and is doing its job; it simply does not own this
 crossing. That is precisely the completeness defect the node was filed for.
 
-**The first mis-consumed static fact.** `carried_join_arm` (`core.rs:10842`)
+**The first mis-consumed static fact.** `carried_join_arm` (`core.rs:10764`)
 classifies a join arm into three cases:
 
 - `Carried(word)` — pass through;
@@ -273,7 +283,7 @@ the arm contributes no value and no predecessor to the merge.
 predecessor is *whether control already departed*. `Trap` encodes that property
 and is consulted; `RecursiveBackedge` has it and is not.
 
-**Owner: `carried_join_arm`, `lowering/core.rs:10842`**, the carried-match join
+**Owner: `carried_join_arm`, `lowering/core.rs:10764`**, the carried-match join
 arm consumer — with the protocol's producer being the source-machine fork
 (`lower_forked_branch` / `lower_source_carried_leaf`) that yielded a backedge
 branch. The guard at `emit_carrier_transfer` is **correct and stays**: it is
