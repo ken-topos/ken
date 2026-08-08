@@ -93,6 +93,17 @@ mechanism is unreviewed at exactly the layer that most needs review.
   seats, and confirm each one's *measured* cause is this blocker and not
   something that has since diverged. **A row whose cause changed is a finding
   and comes back to the Steward**, not something to absorb.
+
+  **`D1a` ALSO REPAIRS THE ROWS' OWN POINTERS, and they are already stale.**
+  Found by the Adversary on merged `1b877875`: the rows say *"awaiting Steward
+  recut"*, **but the recut has already happened — it is this node.**
+  `rt_parity_native.rs` contains **zero** occurrences of
+  `RT-SITEOP-CARRIED-WITNESS`, so a reader who lands on one of these rows
+  **cannot reach its live owner from the row.** Make every row name this node.
+
+  **The reasons are otherwise good and must not be rewritten wholesale** — they
+  name the measured cause and explicitly disclaim `D5` as the blocker, which is
+  better than what they replaced. **Repair the pointer, keep the diagnosis.**
 - **`D2` onward — the mechanism.** Cut against §3's ruling.
 
 ## 5. Acceptance criteria
