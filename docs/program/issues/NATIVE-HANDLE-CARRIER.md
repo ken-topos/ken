@@ -1,7 +1,7 @@
 ---
 id: NATIVE-HANDLE-CARRIER
 title: "Native build-pipeline completeness — a constructor-private resource-carrying handle fails checked-core body-view lowering (MissingClosureMetadata) when it crosses the higher-order withBuffer normalization boundary"
-status: ready
+status: draft
 owner: runtime
 size: M
 gate: none
@@ -10,6 +10,18 @@ blocks: [PX8-F-CAP-41]
 github: null
 origin: discovered under [[PX8-F-CAP-41]] Phase 2 impl (foundation-implementer hard-stop evt_563ss8821n7f); Architect means/representation ruling evt_2zkjr68y1sdgf (thr_570t9qzcthjv9, 2026-07-23). Steward-filed (agents cannot create tracked work per COORDINATION §2).
 ---
+
+> ## STATUS CORRECTED `ready` TO `draft` — 2026-08-08, Steward
+>
+> **`ready` means shovel-ready: a written frame, dependencies merged.**
+> This node was not, because
+> its `depends_on` names `RT-BACKEND-MODULE-SPLIT`, which is still
+> `draft`. A frame exists, but an unmet dependency cannot be `ready`.
+>
+> **The correction is not a downgrade of the work.** A node advertising
+> startable work it does not have makes the backlog read deeper than it
+> is, and that depth is exactly what a Steward reads to decide whether a
+> team is idle for want of work or for want of a lane.
 
 > # SEQUENCED 2026-08-08 — RESUMES AFTER [[RT-BACKEND-MODULE-SPLIT]], campaign node #8
 >
