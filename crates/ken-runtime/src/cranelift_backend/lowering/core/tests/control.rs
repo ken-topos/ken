@@ -25730,4 +25730,3 @@ fn d3_generated_context_arity_sentinel_edge_is_reached() {
          its passing says nothing: {observed:#?}"
     );
 }
-
