@@ -11418,25 +11418,35 @@ fn d1_producer_match_call_masking_witness() -> RuntimeExpr {
     }
 }
 
-/// **`D1` -- the masking is MEASURED, at the two positions the mechanism names.**
+/// **`D1` -- both successor classes CAN be masked, at the two positions the
+/// mechanism names.**
 ///
-/// The frame asserts this class hides later ones; the campaign doc's Trap 1 makes
-/// acting on that assertion mandatory rather than optional. This row is the
-/// measurement, and it is what `D4` hands to `RT-RECURSOR-TRANSPORT` as the
-/// size of the population that was invisible while this class fired.
+/// **What this row is evidence for, stated narrowly on purpose.** Its subject is
+/// a hand-built `RuntimeExpr`, and the campaign doc's Trap 1 is explicit that
+/// such a witness establishes what the instrument and the classifier can see --
+/// never that any real program exhibits it. So this proves the *capability*: a
+/// `ProducerMatchCall` at a `Match` node hides a later class sitting in its
+/// scrutinee `Call` and another sitting in a case body.
 ///
-/// Three statements, and the third is the deliverable:
+/// **It is NOT the successor population, and not `D4`'s number.** `D4` owes a
+/// measured before/after over real programs, and that is the only thing that may
+/// be handed to `RT-RECURSOR-TRANSPORT` as its population delta. An earlier draft
+/// of this comment called the two-member set exactly that, which was the same
+/// hand-built-witness-as-population overclaim Trap 1 names.
+///
+/// Three statements:
 ///
 /// 1. the selector reports `ProducerMatchCall` and stops -- the answer the
 ///    authority is actually chosen on;
 /// 2. the program in fact carries all three surviving classes;
-/// 3. therefore the masked set is exactly the other two, computed as a set
-///    difference rather than written out a second time.
+/// 3. the masked set is derived from 1 and 2 by set difference, and then
+///    independently pinned to the two classes it should equal.
 ///
-/// Point 3 is derived from points 1 and 2 in the code. Restating the expected
-/// masked set as its own literal would let the two drift apart, and the whole
-/// defect this node inherits is a claim about a population that stopped being
-/// true when the population moved.
+/// Point 3 carries both halves deliberately. The derivation is what makes the
+/// set track the program rather than a remembered literal; the independent pin
+/// is what makes the row fail if the derivation itself starts producing the
+/// wrong answer. An earlier draft claimed the literal had been avoided, while
+/// the assertion below spelled it out -- the claim was wrong, not the code.
 ///
 /// **Promise class: durable invariant.** It pins that the selector's answer is a
 /// strict subset of what the program carries whenever this class fires. It stays
@@ -11479,17 +11489,46 @@ fn d1_producer_match_call_masks_every_later_check_in_its_own_arm() {
             RecursiveDescentResidual::MatchScrutineeRecursor,
             RecursiveDescentResidual::LexicalCallArgumentRecursor,
         ]),
-        "D1: both later classes are invisible to the selector while this one fires. This set is \
-         RT-RECURSOR-TRANSPORT's population growing when this node retires -- a measurement \
-         improving, not a regression"
+        "D1: on this witness both later classes are invisible to the selector while this one \
+         fires. That is a capability of the mechanism, not a population: what RT-RECURSOR-\
+         TRANSPORT is owed is D4's measured before/after over real programs"
     );
+}
+
+/// Insert one census member, refusing a duplicate key loudly.
+///
+/// The census is keyed on program name, and both obvious ways to build it lose
+/// members in silence: `collect()` into a `BTreeMap` drops all but the last of a
+/// repeated key, and a later `insert` overwrites whatever a gate already put
+/// there. Either collapse would leave the population strictly smaller than the
+/// set the row names, while every assertion over it still passed -- the campaign
+/// doc's Trap 3 in its exact form, since a proof over a silently shrunken
+/// population is vacuous and nothing reds.
+///
+/// The collision that matters is not hypothetical: a member added to
+/// `nc5_seed_examples()` under the same name as the compiling witness would be
+/// dropped by the very insert that is supposed to extend the population.
+fn d1_census_insert(
+    census: &mut BTreeMap<String, BTreeSet<RecursiveDescentResidual>>,
+    name: String,
+    residuals: BTreeSet<RecursiveDescentResidual>,
+) {
+    assert!(
+        !census.contains_key(&name),
+        "D1: duplicate census key {name:?}. Two programs sharing a name collapse into one \
+         entry, so the population would be smaller than the row claims while still reading \
+         green. Give the member a distinct name rather than relaxing this check"
+    );
+    census.insert(name, residuals);
 }
 
 /// **`D1` / `AC-2` -- the measured population, enumerated at its gates.**
 ///
-/// Two production gates plus the one in-tree program that genuinely compiles
-/// while firing this class. Each is enumerated with the non-short-circuiting
-/// walk, so a member firing a second class is reported rather than hidden.
+/// One production gate -- `nc5_seed_examples()` -- plus the one in-tree program
+/// that genuinely compiles while firing this class. Each member is enumerated
+/// with the non-short-circuiting walk, so a member firing a second class is
+/// reported rather than hidden, and each is added through [`d1_census_insert`]
+/// so a name collision fails loudly instead of shrinking the population.
 ///
 /// **What this population is, and what it is not.** `nc5_seed_examples()` is a
 /// production function and is enumerated whole, so it is a population rather than
@@ -11497,9 +11536,15 @@ fn d1_producer_match_call_masks_every_later_check_in_its_own_arm() {
 /// left behind after `RT-SEED-CALL-PORT` `D3` retired its own class from it, and
 /// its doc there already names it as this node's population. **Nothing here
 /// claims to enumerate every program that could fire `ProducerMatchCall`** -- the
-/// class is reachable from ordinary Ken source (`match (f x) with ..`), and the
-/// rows that motivated this node live in `rt_parity_native`, where they are
-/// quarantined by other owners and cannot be executed at this base. That gap is
+/// class is reachable from ordinary Ken source (`match (f x) with ..`), unlike
+/// the predecessor's, whose in-tree producer set was closed.
+///
+/// The rows that motivated this node live in `rt_parity_native`. They are
+/// quarantined by other owners, so they run only under `--ignored`; `D0` did run
+/// all six and each refuses earlier, at an effect seat or the closure boundary.
+/// **So they never reach the selector and supply no production observation for
+/// this class** -- which is a different and weaker statement than their being
+/// unexecutable, as an earlier draft of this comment had it. That gap is
 /// reported in `D1`'s handoff rather than papered over here.
 ///
 /// **Promise class: transition sentinel.** It reds when any member of these gates
@@ -11510,18 +11555,25 @@ fn d1_the_measured_population_and_the_classes_each_member_fires() {
     set_residual_enumeration_mutation(ResidualEnumerationMutation::None);
     let empty: BTreeMap<&str, &RuntimeDeclaration> = BTreeMap::new();
 
-    let mut census: BTreeMap<String, BTreeSet<RecursiveDescentResidual>> = nc5_seed_examples()
-        .into_iter()
-        .map(|example| {
-            let residuals = enumerate_recursive_descent_residuals(&example.ir, &empty);
-            (example.name, residuals)
-        })
-        .collect();
+    let mut census: BTreeMap<String, BTreeSet<RecursiveDescentResidual>> = BTreeMap::new();
+    let mut members = 0usize;
+    for example in nc5_seed_examples() {
+        let residuals = enumerate_recursive_descent_residuals(&example.ir, &empty);
+        d1_census_insert(&mut census, example.name, residuals);
+        members += 1;
+    }
 
     let compiling = seed_call_port_producer_match_example();
-    census.insert(
-        compiling.name.clone(),
-        enumerate_recursive_descent_residuals(&compiling.ir, &empty),
+    let compiling_residuals = enumerate_recursive_descent_residuals(&compiling.ir, &empty);
+    d1_census_insert(&mut census, compiling.name, compiling_residuals);
+    members += 1;
+
+    assert_eq!(
+        census.len(),
+        members,
+        "D1: every source member must survive into the census. A shortfall here means two \
+         programs shared a name and the exactness below would be quantifying over a smaller \
+         population than it names -- campaign Trap 3's vacuity, arriving silently"
     );
 
     let firing: BTreeMap<String, BTreeSet<RecursiveDescentResidual>> = census
