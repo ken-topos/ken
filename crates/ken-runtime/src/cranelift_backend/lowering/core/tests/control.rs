@@ -10745,7 +10745,11 @@ fn d1_lexical_call_argument_recursor_witness() -> RuntimeExpr {
     }
 }
 
-/// A call whose callee is the retained non-lexical closure form.
+/// A call whose callee is the non-lexical closure seed form.
+///
+/// "Retained" is deliberately avoided here: `RT-SEED-CALL-PORT` `D3` retired the
+/// RESIDUAL, while the IR form itself is retained and ported. Calling the form
+/// "retained" now invites reading it as the retired residual lane.
 fn d1_seed_closure_call_witness() -> RuntimeExpr {
     RuntimeExpr::Call {
         callee: Box::new(RuntimeExpr::Closure {
@@ -10795,8 +10799,9 @@ fn d1_active_recursor() -> RuntimeExpr {
 /// instrument.**
 ///
 /// A variant no program reaches is a reportable gap in the measurement, not a
-/// variant that does not fire. Each of the five is named with the witness that
-/// exhibits it.
+/// variant that does not fire. Each SURVIVING variant is named with the witness
+/// that exhibits it, and the loop below is that list -- so the count lives in
+/// the code rather than in this sentence, where it has now gone stale twice.
 #[test]
 fn d1_each_residual_variant_is_observable() {
     let empty: BTreeMap<&str, &RuntimeDeclaration> = BTreeMap::new();
@@ -10821,8 +10826,12 @@ fn d1_each_residual_variant_is_observable() {
         );
     }
 
-    // ⭐⭐ **`D6` RETIRED the fifth variant, and this is the row that proves the
-    // retirement is real rather than a name change.** The declaration route is
+    // ⭐⭐ **`D6` RETIRED `TransparentDeclarationClosure`, and this is the row
+    // that proves the retirement is real rather than a name change.** Named
+    // rather than numbered: it was "the fifth variant" until
+    // `RT-SEED-CALL-PORT` `D3` retired another one, and an ordinal into a
+    // moving population is exactly what goes quietly wrong. The declaration
+    // route is
     // still exercised, with the same closure-seed declaration that used to
     // report `TransparentDeclarationClosure` — and it must now report **nothing
     // at all**.
@@ -10859,11 +10868,12 @@ fn d1_each_residual_variant_is_observable() {
 /// variants separates the two behaviours.
 ///
 /// ⛔ Asserts the **exact set**, not a length and not a subset: a walk that
-/// found three of four and a walk that found four would both satisfy "more than
-/// one".
+/// missed one variant and a walk that found them all would both satisfy "more
+/// than one".
 ///
-/// ⚠ `D6` retired the fifth variant, so the closure-seed declaration is still
-/// supplied here and now contributes **nothing** — which keeps this row a live
+/// ⚠ `D6` retired the declaration-head variant and `RT-SEED-CALL-PORT` `D3`
+/// retired the seed-closure-call variant. BOTH retired shapes are still
+/// supplied here and now contribute **nothing** — which keeps this row a live
 /// check on the declaration route rather than turning it into an
 /// expression-only walk.
 ///
@@ -10914,22 +10924,24 @@ fn d1_the_enumerator_reports_every_variant_not_the_first() {
 
 // ─── RT-SEED-CALL-PORT D1 / D1a — the class's real population ──────────────
 
-/// The constructor both `D1a` fixtures match on. `nc5`'s `adt-constructor-match`
+/// The constructor this fixture matches on. `nc5`'s `adt-constructor-match`
 /// seed uses the same one, so it is known to lower with an empty seed
 /// environment; a fresh name would make a refusal ambiguous between the
 /// fixture's shape and its metadata.
 #[cfg(test)]
 const SEED_CALL_PORT_SOME: &str = "ctor:fixture::Core::Option::Some";
 
-/// A program firing EXACTLY TWO residual variants: the `Match` scrutinee is
-/// directly a `Call` (`ProducerMatchCall`) and that `Call`'s callee is the
-/// retained non-lexical closure form (`SeedClosureCall`).
+/// A compiling program whose `Match` scrutinee is directly a `Call`, so it fires
+/// `ProducerMatchCall` -- and whose callee is a non-lexical closure seed, which
+/// fired a second variant until `RT-SEED-CALL-PORT` `D3` retired it.
 ///
-/// Two variants is the whole point. A one-variant program cannot separate the
-/// enumerator from its short-circuiting twin, because both answer identically on
-/// it -- which is why `D1a` cannot be discharged by a reachability control.
+/// **It fired exactly two variants at `D1` and fires exactly one now**, which is
+/// why `D1a`'s exact-set discrimination moved off it: a one-variant program
+/// cannot separate the enumerator from its short-circuiting twin, because both
+/// answer identically on it. The fixture is kept for the production-site row,
+/// where what matters is that it genuinely compiles.
 #[cfg(test)]
-fn seed_call_port_two_variant_example() -> RuntimeExample {
+fn seed_call_port_producer_match_example() -> RuntimeExample {
     RuntimeExample {
         name: "seed-call-port-d1a-two-variant".to_string(),
         checked_core_shape: "match ((\\x . Some x) 4) with Some y => y".to_string(),
@@ -10978,8 +10990,9 @@ fn seed_call_port_two_variant_example() -> RuntimeExample {
 ///
 /// The port count is the fourth thing and it is what makes this an activation
 /// rather than a deletion: the program reaches the ported arm's handoff with no
-/// witness armed anywhere. `D2` could only demonstrate that under a test-only
-/// selector mask; here the mask does not exist.
+/// witness IN THE TREE at all. `D2` could only demonstrate that under a
+/// test-only selector mask; `D3` deleted the mask along with the variant, so
+/// there is nothing left to arm or disarm.
 ///
 /// **Promise class: durable invariant.** The class is retired and this program
 /// compiles through the functionized lane. No planned extension re-fires it.
@@ -11022,8 +11035,8 @@ fn d3_the_d1_firing_population_now_selects_functionized_units_and_enumerates_no_
     assert_eq!(
         seed_callee_unit_ports(),
         1,
-        "D3 is an ACTIVATION: the program must reach the ported arm's handoff with no witness \
-         armed. A zero here means the variant was removed while the port stayed dead"
+        "D3 is an ACTIVATION: the program must reach the ported arm's handoff with no selector \
+         witness in the tree. A zero here means the variant was removed while the port stayed dead"
     );
 }
 
@@ -11172,7 +11185,7 @@ fn d3_the_production_site_hook_still_observes_a_real_compiled_program() {
     set_residual_enumeration_mutation(ResidualEnumerationMutation::None);
     reset_observed_recursive_descent_residuals();
 
-    let example = seed_call_port_two_variant_example();
+    let example = seed_call_port_producer_match_example();
     let report = run_example_with_seed_observation(&example, &NativeSeedEnvironment::empty())
         .expect("the fixture compiles and runs");
     assert_eq!(report.observation, example.observation);
@@ -11246,11 +11259,13 @@ fn d2_order_sensitive_example() -> RuntimeExample {
 /// **`AC-6.1` — the canonical explicit-seed-env positive, through the port.**
 ///
 /// The reachability count is what makes this a control rather than a
-/// restatement that the seed still works. `closure-capture-application` returns
-/// `7` on the `RecursiveDescent` lane too, so the observation alone cannot tell
-/// the two lanes apart. The paired zero -- same program, witness disarmed, the
-/// arm never reaching its handoff -- is the half that proves the count is
-/// measuring the port and not merely counting compilations.
+/// restatement that the seed still works: `closure-capture-application` returned
+/// `7` on the `RecursiveDescent` lane too, so the observation alone never told
+/// the two lanes apart.
+///
+/// `D3` retired the variant, so this program has no route back to that lane and
+/// the count can no longer be discriminated here by disarming anything. `AC-7`
+/// carries that instead, reaching this same arm with no witness in the tree.
 ///
 /// **What the two assertions prove TOGETHER, and neither alone.** The count is
 /// taken before `call_declared_unit`, which can still refuse, so a count of 1
@@ -11276,9 +11291,8 @@ fn d2_ac6_1_the_canonical_seed_runs_through_the_ported_callee_unit() {
     assert!(report.verifier_passed);
     assert_eq!(
         ports, 1,
-        "AC-6.1: the ported arm must reach its handoff exactly once -- a zero here means the \
-         assertion above passed on the RecursiveDescent lane and says nothing about D2. With the \
-         successful run asserted above, this pair is the evidence for a completed typed unit call"
+        "AC-6.1: the ported arm must reach its handoff exactly once. With the successful run \
+         asserted above, this pair is the evidence for a completed typed unit call"
     );
 
     // `RT-SEED-CALL-PORT` `D3` INVERTED this half, and the inversion is the
@@ -11294,8 +11308,10 @@ fn d2_ac6_1_the_canonical_seed_runs_through_the_ported_callee_unit() {
 
 /// **`AC-6.2` — the missing-capture loud refusal, raised by the port itself.**
 ///
-/// With the witness armed the refusal now comes from `D2`'s arm resolving a seed
-/// symbol through `lower_seed_capture`, not from the retained lane. The port
+/// The refusal comes from `D2`'s arm resolving a seed symbol through
+/// `lower_seed_capture`, not from the retained lane -- and since `D3` retired
+/// the variant there is no longer any route back to that lane for this program,
+/// so no witness is involved. The port
 /// count must be **zero**: the arm counts at its handoff point, after arity and
 /// every capture have resolved, so a capture refusal lands strictly before the
 /// count. That zero is evidence of refusal BEFORE the handoff -- a distinct and
@@ -11353,8 +11369,8 @@ fn d2_ac6_3_the_ported_unit_receives_parameters_before_captures() {
     let report = outcome.expect("the order-sensitive fixture compiles and runs");
     assert_eq!(
         ports, 1,
-        "AC-6.3: the fixture must reach the ported arm's handoff, or the value below is about \
-         the retained lane"
+        "AC-6.3: the fixture must reach the ported arm's handoff, or the value below is not \
+         about the ported transport at all"
     );
     assert_eq!(
         report.observation,
@@ -11371,13 +11387,18 @@ fn d2_ac6_3_the_ported_unit_receives_parameters_before_captures() {
 // ⭐ Every control below runs the SAME program. What varies is one mutation,
 // applied at one plane, so a refusal names the plane that refused.
 //
-// ⛔⛔ **The selector witness is what makes any of this reachable.** Production
-// cannot enter the `FunctionizedUnits` declaration-call seam before `D6`,
-// because `TransparentDeclarationClosure` fires for every closure-seed
-// transparent declaration and a checked recursive declaration call REQUIRES a
-// closure-seed declaration. ⇒ A control that "fails before emission" without
-// the witness proves nothing about `D5`: it can fail earlier, for the
-// selector's ordinary reason, and never reach the validator at all.
+// ⛔⛔ **This preamble described a selector witness that no longer exists.** It
+// read: production cannot enter the `FunctionizedUnits` declaration-call seam
+// before `D6`, because `TransparentDeclarationClosure` fires for every
+// closure-seed transparent declaration, so a control that "fails before
+// emission" without the witness proves nothing about `D5`.
+//
+// `D6` retired that variant and removed the witness with it, and
+// `RT-SEED-CALL-PORT` `D3` did the same for the seed-closure-call witness. ⇒
+// Every control below now reaches the seam the way production does, which is
+// strictly stronger than the hooked route they were written against. The
+// caution is kept as history because it explains why the fixtures are shaped
+// the way they are, not because anything still needs arming.
 
 #[cfg(test)]
 const D5_DECLARATION: &str = "decl:fixture::d5::loop";
@@ -11611,9 +11632,9 @@ fn d5_compile(
 //
 // ⛔ It asserts the **empty set** and not merely the retired variant's absence.
 // The `D5` fixture is a closure-seed transparent declaration containing a
-// checked recursive declaration call — precisely the shape the campaign's other
-// four variants also key on — so "no residual fires" is a real claim about all
-// five classifiers on a nontrivial program, not a restatement of the deletion.
+// checked recursive declaration call — precisely the shape the campaign's
+// surviving variants also key on — so "no residual fires" is a real claim about
+// every classifier on a nontrivial program, not a restatement of the deletion.
 
 #[test]
 fn d6_the_governed_fixture_reports_no_residual_and_selects_functionized_units() {
@@ -11628,7 +11649,7 @@ fn d6_the_governed_fixture_reports_no_residual_and_selects_functionized_units() 
         enumerate_recursive_descent_residuals(&entry, &declarations),
         BTreeSet::new(),
         "D6: with the declaration-head variant retired, this fixture must carry NO residual at \
-         all. A residual here is one of the four RETAINED variants firing on a program that \
+         all. A residual here is one of the RETAINED variants firing on a program that \
          used to be masked past them -- report it rather than tuning it away, because it means \
          the campaign has a second reason to hold this lane that nobody has enumerated"
     );
@@ -11843,10 +11864,10 @@ fn d5_c3_a_second_residual_leaves_witness_mode_on_recursive_descent() {
     assert_eq!(
         select_body_emission_authority(&entry, &declarations),
         BodyEmissionAuthority::RecursiveDescent,
-        "D5 control 3: the witness masks ONE residual variant. If it forced \
-         the authority instead, this would read FunctionizedUnits — and \
-         control 2's positive would be an artefact of the hook rather than \
-         evidence about the seam"
+        "D5 control 3: a SECOND residual still holds the authority on RecursiveDescent. This \
+         read \"the witness masks ONE residual variant\" until D6 removed that witness and \
+         RT-SEED-CALL-PORT D3 removed the last one; the property it guards is unchanged, and it \
+         is now guarded against the real classifier rather than against a hook"
     );;
 }
 
