@@ -80,6 +80,36 @@ that same program and be **completely unreported**.
 - **`D4` — The masked-population delta**, handed to the Steward for
   [[RT-RECURSOR-TRANSPORT]]'s re-scope.
 
+### THE PROSE SWEEP IS PART OF `D3`. Budget for it.
+
+**[[RT-SEED-CALL-PORT]] spent FOUR review rounds on this and the mechanism was
+correct in every one of them.** Its implementer's own statement of the shape,
+recorded here because this node performs the identical operation — retiring a
+variant and changing a counted population:
+
+> **Every claim which counts or names a member of a population my delta changes
+> is falsified by that delta, and prose cannot go red.**
+
+Concretely, what that node shipped and had bounced: a comment its own commit
+falsified; a counter documented as an emission oracle whose increment sat before
+a fallible call; a dozen sentences counting a population the same commit was
+changing; then a corrective child claiming a completed sweep that was not one.
+
+**The fourth round is the one to learn from, because it is the sweep itself
+failing.** They wrote the grep, then ran it over a narrower domain than the
+claim they made for it. Two specific misses:
+
+- **It omitted the NEW count.** A retirement from N to N-1 makes the *new*
+  number stale-able too — their own corrected prose had just introduced the word
+  and the sweep did not cover it.
+- **It never covered string literals** — which is exactly where a fixture's
+  user-visible identity lives.
+
+⇒ **Before handing back `D3`, sweep for every place the retired variant is
+named OR counted, including string literals and including the number you just
+wrote.** State the grep's domain alongside its result, so the claim and the
+instrument can be compared. **No test will catch any of this.**
+
 ## 5. Acceptance criteria
 
 - **`AC-1a` — the ceiling moved.** The selector reports
