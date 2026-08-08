@@ -179,9 +179,28 @@ measurements, not judgment calls, so neither is yours to absorb.
 
 ## 8. Base
 
-**Current `origin/main` at release**, which carries the accepted partial
-`50808c11` (the `carried_join_arm` repair). If that partial has not yet merged
-when you start, cut from it and say so — it is the object that exposes this
-node's population, and without it the rows still refuse on `RecursiveBackedge`.
+**Cut from the accepted partial carrying the `carried_join_arm` repair** — it is
+the object that exposes this node's population, and without it the rows still
+refuse on `RecursiveBackedge` and nothing here reproduces.
+
+**As of 2026-08-08 that object is `24d585f8`, NOT `50808c11`.** QA superseded
+`50808c11`; `24d585f8` is a strict descendant differing by two comment lines and
+zero non-comment lines.
+
+> ### CUT FROM THE OBJECT THAT WILL MERGE, NOT THE ONE THIS FRAME NAMES
+>
+> **Standing rule, and apply it without asking if `24d585f8` is superseded in
+> turn.** The accepted partial merges by **squash**, so the SHA named here never
+> becomes an ancestor of `main`. A branch cut from a superseded object carries
+> the superseded lines in their pre-fix form, and at merge that is either a
+> conflict or a **silent re-introduction of the exact defect review rejected**.
+>
+> **The silent case is the dangerous one, and comment-only fixes are its worst
+> case:** a reverted comment reds no test, trips no gate, and passes a
+> diff-scope check. It is the one class of correction every mechanical control
+> we have is blind to.
+>
+> Measure against the object under review, and **name your exact base in the
+> handback** rather than relying on this line being current.
 
 Not `10369776`, ever.

@@ -33,11 +33,30 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-08 ~12:5xZ · CORRECTED `D0`-`D2` LANDED; `RT-MATCH-RECURSOR-CONSUMERS` IS ACTIVE
+## LIVE — 2026-08-08 ~13:4xZ · THIRD WALL ON ONE CHAIN; `RT-CARRIED-CONTINUATION-RESUME` RELEASED
 
-**`main = a737b972`.** The corrected `D0`-`D2` merged at `89aa1550`;
-`8efdfdb3` never landed. Runtime is now building
-[[RT-MATCH-RECURSOR-CONSUMERS]], and the lexical successor is framed behind it.
+**`main = d3584138`.** `RT-MATCH-RECURSOR-CONSUMERS`'s `D2` **worked** — and
+the refusal advanced to a **sibling authority**, so a third node now sits in
+front of it. Runtime is building that node; the A node is parked behind it with
+its accepted partial in QA.
+
+> ### THE CHAIN, because the shape is the story and it will repeat
+>
+> `resume_active_continuation` (`RT-RECURSOR-TRANSPORT` `D2`, merged
+> `89aa1550`) → `carried_join_arm` (`RT-MATCH` `D2`, built at `50808c11`) →
+> `lower_computational_match_value_composed` (**open**,
+> [[RT-CARRIED-CONTINUATION-RESUME]]).
+>
+> **Every repair was correct and every one revealed the next wall.** That is
+> Campaign Trap 2 — the fail-closed machinery working on a newly reachable
+> population, not a defect in the node that finds it. The implementer stopped
+> at the third rather than absorbing it, which cost one turn and is the whole
+> reason the sibling got its own node instead of being buried in an `M`.
+>
+> ⇒ **Expect a fourth. The frame's third hard stop says route it, not absorb
+> it.** It will be legible and the next step will look obvious — that is
+> exactly the condition under which absorbing feels efficient, and `#27` is the
+> record of five instances of one shape absorbed one at a time.
 
 | item | state |
 |---|---|
