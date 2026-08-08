@@ -495,7 +495,7 @@ fn in_large_stack_thread(name: &'static str, body: fn()) {
 // those were branch-introduced, this one predates the branch.
 // Annotation only -- test body and expectations are unchanged.
 #[test]
-#[ignore = "RT-CARRIER-BYTESPAN-OBSERVE: the FsReadFile byte-span seat cannot observe a carried word; fails at base 21fd46dc"]
+#[ignore = "RT-CARRIER-BYTESPAN-OBSERVE D5: the FsReadFile path seat at Argument(0) is SITE-BOUND -- the synthesized FileError declares SiteOperand(0), which demands a compile-time Lowered template the carried word cannot supply without the banned Carried->Lowered inverse. D5 landed byte-span observation and it is NOT the blocker; awaiting Steward recut"]
 fn buffer_allocate_malformed_capacity_narrows_to_invalid_bounds() {
     in_large_stack_thread("rt-parity-allocate", || {
         assert_narrowed_alike(
@@ -524,7 +524,7 @@ fn buffer_allocate_malformed_capacity_narrows_to_invalid_bounds() {
 // those were branch-introduced, this one predates the branch.
 // Annotation only -- test body and expectations are unchanged.
 #[test]
-#[ignore = "RT-CARRIER-BYTESPAN-OBSERVE: the FsReadFile byte-span seat cannot observe a carried word; fails at base 21fd46dc"]
+#[ignore = "RT-CARRIER-BYTESPAN-OBSERVE D5: the FsReadFile path seat at Argument(0) is SITE-BOUND -- the synthesized FileError declares SiteOperand(0), which demands a compile-time Lowered template the carried word cannot supply without the banned Carried->Lowered inverse. D5 landed byte-span observation and it is NOT the blocker; awaiting Steward recut"]
 fn fs_read_at_malformed_offset_narrows_to_invalid_offset() {
     in_large_stack_thread("rt-parity-read-offset", || {
         assert_narrowed_alike(
@@ -551,7 +551,7 @@ fn fs_read_at_malformed_offset_narrows_to_invalid_offset() {
 // those were branch-introduced, this one predates the branch.
 // Annotation only -- test body and expectations are unchanged.
 #[test]
-#[ignore = "RT-CARRIER-BYTESPAN-OBSERVE: the FsReadFile byte-span seat cannot observe a carried word; fails at base 21fd46dc"]
+#[ignore = "RT-CARRIER-BYTESPAN-OBSERVE D5: the FsReadFile path seat at Argument(0) is SITE-BOUND -- the synthesized FileError declares SiteOperand(0), which demands a compile-time Lowered template the carried word cannot supply without the banned Carried->Lowered inverse. D5 landed byte-span observation and it is NOT the blocker; awaiting Steward recut"]
 fn fs_read_at_malformed_window_narrows_to_invalid_bounds() {
     in_large_stack_thread("rt-parity-read-window", || {
         assert_narrowed_alike(
@@ -596,7 +596,7 @@ fn fs_read_at_malformed_window_narrows_to_invalid_bounds() {
 // those were branch-introduced, this one predates the branch.
 // Annotation only -- test body and expectations are unchanged.
 #[test]
-#[ignore = "RT-CARRIER-BYTESPAN-OBSERVE: the FsReadFile byte-span seat cannot observe a carried word; fails at base 21fd46dc"]
+#[ignore = "RT-CARRIER-BYTESPAN-OBSERVE D5: the FsReadFile path seat at Argument(0) is SITE-BOUND -- the synthesized FileError declares SiteOperand(0), which demands a compile-time Lowered template the carried word cannot supply without the banned Carried->Lowered inverse. D5 landed byte-span observation and it is NOT the blocker; awaiting Steward recut"]
 fn fs_read_at_malformed_offset_without_read_right_narrows_to_invalid_offset() {
     in_large_stack_thread("rt-parity-read-norights", || {
         assert_narrowed_alike(
@@ -689,7 +689,7 @@ fn fs_write_at_malformed_offset_narrows_to_invalid_offset() {
 // real cause.
 // Annotation only -- test body and expectations are unchanged.
 #[test]
-#[ignore = "RT-CARRIER-BYTESPAN-OBSERVE: the FsReadFile byte-span seat cannot observe a carried word; fails at base 21fd46dc"]
+#[ignore = "RT-CARRIER-BYTESPAN-OBSERVE D5: the FsReadFile path seat at Argument(0) is SITE-BOUND -- the synthesized FileError declares SiteOperand(0), which demands a compile-time Lowered template the carried word cannot supply without the banned Carried->Lowered inverse. D5 landed byte-span observation and it is NOT the blocker; awaiting Steward recut"]
 fn fs_write_at_malformed_offset_without_write_right_narrows_to_invalid_offset() {
     in_large_stack_thread("rt-parity-write-readonly", || {
         assert_narrowed_alike(

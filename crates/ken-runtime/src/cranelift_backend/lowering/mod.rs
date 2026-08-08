@@ -353,6 +353,26 @@ enum EffectSeatDispatchMutation {
     /// argument is demanded as a template whether or not a synthesized node
     /// declares a use for it.
     RestoreBulkConversion,
+    /// **`RT-CARRIER-BYTESPAN-OBSERVE` `AC-2`.** Put every `BytesPointerLength`
+    /// seat back to `SPECIALIZED_ONLY`, which is exactly the state `D5`
+    /// activated out of.
+    ///
+    /// It withdraws the AVAILABILITY rather than deleting the observer call, so
+    /// the refusal is raised by the real `Need ⊆ Avail` gate and carries the
+    /// real message. A mutation that stubbed the observer instead would
+    /// manufacture a message that merely resembled the original.
+    RemoveCarriedByteSpanAvailability,
+    /// Force the byte-span observer's outcome to `1` — a well-formed span that
+    /// failed a bounds rule — at the point the lowering reads it.
+    ///
+    /// It injects AFTER the observer boundary on purpose. It is not a claim
+    /// that any rig witnesses `D3` producing this status; it isolates the
+    /// propagation layer between the observer and the program, which is the
+    /// only layer these controls are about.
+    ForceByteSpanOutcomeBounds,
+    /// The same injection for outcome `2` — a word that never denoted a
+    /// viewable byte span.
+    ForceByteSpanOutcomeNotASpan,
 }
 
 #[cfg(test)]
@@ -7591,7 +7611,18 @@ impl<'a> Lowering<'a> {
             },
             _ => observed,
         };
-        if !record.avail.admits(observed) {
+        let admits = record.avail.admits(observed);
+        // `AC-2` — withdraw exactly what `D5` granted, at the membership test
+        // itself, so the refusal below is the PRODUCTION refusal rather than a
+        // manufactured lookalike. Only the byte-span need and only the carried
+        // phase are affected; every other seat answers as it always did.
+        #[cfg(test)]
+        let admits = admits
+            && !(effect_seat_dispatch_mutation()
+                == EffectSeatDispatchMutation::RemoveCarriedByteSpanAvailability
+                && record.need == EffectSeatNeed::BytesPointerLength
+                && observed == EffectSeatPhase::CarriedWord);
+        if !admits {
             return Err(unsupported(
                 "Effect",
                 format!(
@@ -10028,26 +10059,34 @@ impl BoundedNatV1 {
 /// production entry point creates a span from nothing, and it masks:
 ///
 /// - [`SafeByteSpan::masked_at_producer`] — emits the `select` pair itself.
-/// - [`SafeByteSpan::rebuild_from_collected`] — takes `self`, so it cannot mint
-///   from nothing. It carries an existing span's provenance forward through a
-///   collect/rebuild round trip and is unreachable without one.
+/// - [`SafeByteSpan::rebuild_from_collected`] — takes `self`, so it is
+///   unreachable without an existing span. That is a **bearer condition on the
+///   caller**, not a constraint on the values it returns; see its own doc.
 /// - `for_control` — `#[cfg(test)]`, so it does not exist in a production
 ///   build at all.
 ///
 /// ⇒ a newly added production construction has no raw mint to reach for: it
 /// must either mask, or already hold a span that did.
 ///
-/// **What this does and does not establish.** `pointer` and `len` are
-/// Cranelift SSA values, opaque at Rust compile time, so no mechanism here can
-/// *verify* that a span points at live memory. What is structural is the
-/// closure of the construction surface: every production span is rooted in a
-/// mask, by a chain the compiler enforces rather than a convention a reader
-/// must honour.
+/// **What this does and does not establish — narrowed by Architect
+/// `dec_5ghh87fvg7skn`, and the narrowing is the point.** `pointer` and `len`
+/// are Cranelift SSA values, opaque at Rust compile time, so no mechanism here
+/// can *verify* that a span points at live memory. What is structural is the
+/// closure of the **construction authority**: reaching a `SafeByteSpan` at all
+/// requires either the masking mint or possession of a prior span, and that
+/// chain the compiler does enforce.
+///
+/// **It is NOT a claim about the VALUES.** `rebuild_from_collected` discards
+/// its receiver, so a holder of any span can wrap arbitrary SSA values in a new
+/// one. The provenance of a rebuilt `pointer, len` pair is guarded by the single
+/// current call site and by review — **not by mechanism.** The `⇒` above is the
+/// exact and complete statement; anything stronger is false.
 mod safe_byte_span {
     use super::{types, FunctionBuilder, InstBuilder};
 
-    /// A `{pointer, len}` byte span rooted in a masking mint. The fields are
-    /// private to this module by design — see the module-level note.
+    /// A `{pointer, len}` byte span whose CONSTRUCTION is rooted in a masking
+    /// mint. The fields are private to this module by design — see the
+    /// module-level note, which also states what the type does not carry.
     #[derive(Clone, Copy)]
     pub(in crate::cranelift_backend) struct SafeByteSpan {
         pointer: cranelift_codegen::ir::Value,
@@ -10079,18 +10118,33 @@ mod safe_byte_span {
             }
         }
 
-        /// **Provenance-carrying rebuild: takes `self`, so it cannot mint.**
+        /// **A BEARER CONDITION, not a dataflow proof** (Architect
+        /// `dec_5ghh87fvg7skn`). Taking `self` means a caller that does not
+        /// already hold a span cannot reach this at all — that much the compiler
+        /// enforces, and it is what lets production keep the rebuild without
+        /// granting every producer a fresh raw mint.
+        ///
+        /// **The receiver is then DISCARDED.** The returned span's values are
+        /// this call's two arguments and nothing else, so a holder of any span
+        /// can wrap arbitrary SSA values in a new one. Read `self` as a warrant
+        /// proving the caller was already inside the construction surface — it
+        /// does not make the result derived from the old span.
         ///
         /// `d9_collect` takes a span apart into a flat value list and
-        /// `rebuild_recursive_argument` puts it back together. The rebuild is
-        /// order-preserving, so the reconstructed pair is the same span that was
-        /// collected — but the point here is the receiver: because this is a
-        /// method on an existing `SafeByteSpan`, a caller that does not already
-        /// hold one cannot reach it. The new span inherits the old span's
-        /// provenance rather than asserting its own.
+        /// `rebuild_recursive_argument` puts it back together. **That single
+        /// caller is correct because it consumes the loop-header parameters in
+        /// the same structural order the original span was flattened in — a
+        /// local call-site fact, verified by review, that this signature does
+        /// not carry.** A second caller would inherit none of it.
         ///
-        /// This is what lets production keep the rebuild without granting every
-        /// producer a fresh raw mint.
+        /// The values cannot be re-derived from `self` here, and that is not a
+        /// deferred repair: at the rebuild site `self` holds the *preheader* SSA
+        /// handles while the arguments are freshly created *loop-header block
+        /// parameters*. Reusing the receiver would discard the phi-like
+        /// recursive values and can break dominance. A real value-provenance
+        /// mechanism would have to own the whole flatten → block-parameter →
+        /// rebuild mapping, which is a separate design question and not a
+        /// comment-sized change.
         pub(in crate::cranelift_backend) fn rebuild_from_collected(
             self,
             pointer: cranelift_codegen::ir::Value,
@@ -10146,12 +10200,18 @@ mod safe_byte_span {
 /// scope`, on `refused_raw_mint`. `warranted_rebuild` compiles silently.
 ///
 /// ⇒ **MEASURED:** production cannot reach the unconstrained mint.
-/// **CLAIMED:** every production span is therefore rooted in
-/// [`SafeByteSpan::masked_at_producer`], since the only other production route
-/// takes an existing span by receiver. **THE GAP is closed by
-/// `warranted_rebuild`**, which proves the refusal is about *minting* and not
-/// about the fixture: it builds a `ResponseBytes` in this same module and
-/// compiles, because it is handed a span that already exists.
+/// **CLAIMED:** every production span is therefore *constructed* either by
+/// [`SafeByteSpan::masked_at_producer`] or by a caller already holding one,
+/// since those are the only two production routes.
+/// **THE GAP — and `warranted_rebuild` is BOTH SIDES OF IT.** It proves the
+/// refusal is about *minting* rather than about the fixture: it builds a
+/// `ResponseBytes` in this same module and compiles, because it is handed a span
+/// that already exists. The same three lines are the counterexample to the
+/// stronger reading — its `pointer` and `len` are locally constructed and
+/// unrelated to `existing`, and it compiles anyway. **So this probe witnesses
+/// closure of the construction authority and simultaneously shows that the
+/// VALUES are not constrained.** A positive control and a counterexample can be
+/// the same code; do not read this probe as evidence of value provenance.
 ///
 /// **This probe carries ONE refusal on purpose — measured, not assumed.** It
 /// first also carried the braced literal, and enabling it reported only the
@@ -11145,6 +11205,65 @@ impl EffectSeatLedger {
             unreached: population.difference(&image).count(),
         })
     }
+}
+
+/// The `IoErrorIdentityV1::Other` discriminator, as `io_error_tag`
+/// (`ken-host/src/abi_v1.rs`) encodes it: `(payload as u32 as u64) << 32 | 11`.
+///
+/// It is the only `IOError` variant carrying an integer whose meaning is its
+/// payload rather than its discriminator, which is what lets a synthesized
+/// pre-dispatch refusal be represented on an `IOError` surface without minting
+/// a constructor the host would never produce.
+const IO_ERROR_OTHER_DISCRIMINATOR: i64 = 11;
+
+/// `ResourceErrorV1::MalformedResource`, as the wire reply's `detail` field
+/// spells it (`ken-host/src/abi_v1.rs`).
+///
+/// **`RT-CARRIER-BYTESPAN-OBSERVE` `D5`** uses it for a carried word that never
+/// denoted a viewable byte span — the observer's outcome `2`.
+const RESOURCE_ERROR_MALFORMED_RESOURCE: i64 = 1;
+
+/// `ResourceErrorV1::InvalidOffset`, as the wire reply's `detail` field spells
+/// it. Named here rather than written as a bare `6` at its call site.
+const RESOURCE_ERROR_INVALID_OFFSET: i64 = 6;
+
+/// `ResourceErrorV1::InvalidBounds`, as the wire reply's `detail` field spells
+/// it.
+///
+/// **`RT-CARRIER-BYTESPAN-OBSERVE` `D5`** uses it for a well-formed byte span
+/// that failed a containment rule — the observer's outcome `1`. That is the
+/// same answer an out-of-range narrowing already gives, and it is the correct
+/// one: the value is a real span whose extent is not admissible.
+const RESOURCE_ERROR_INVALID_BOUNDS: i64 = 7;
+
+/// **`RT-CARRIER-BYTESPAN-OBSERVE` `D5` — one byte-span seat, read in whichever
+/// phase its operand actually arrived in.**
+///
+/// The `(pointer, len)` pair is what the wire request wants either way, so the
+/// two phases converge here and the arm that stores them does not know which
+/// route produced them — the same shape `BufferAllocate`'s capacity seat already
+/// uses.
+///
+/// `refusal` is the one asymmetry, and it is not an accident of the encoding: a
+/// SPECIALIZED template was decided at compile time, so it has no run-time way
+/// to fail. A CARRIED word is decided at run time by the helper's guards, so it
+/// carries `Some((invalid, resource_code))` — the predicate, and which of the
+/// two refusals it is. Folding that into the existing narrow-failure lane is
+/// what makes a refusal a typed pre-dispatch reply with **zero host dispatch**,
+/// rather than a lowering error or a null read.
+///
+/// **The second element is a `ResourceErrorV1` CODE, not a finished `detail`,
+/// and the distinction is load-bearing.** It names *which* refusal occurred;
+/// how that becomes a value depends on the surface the operation declares, and
+/// only the caller knows that. An earlier revision returned a finished detail
+/// and wrote it straight to the reply, which put a raw resource code on an
+/// `IOError` surface — where `1` and `7` decode as `PermissionDenied` and
+/// `IsDirectory`. The refusal never reached Ken at all: the reply tag was
+/// rejected first and the whole compiled function failed generically.
+struct ObservedBytesSeat {
+    pointer: cranelift_codegen::ir::Value,
+    len: cranelift_codegen::ir::Value,
+    refusal: Option<(cranelift_codegen::ir::Value, cranelift_codegen::ir::Value)>,
 }
 
 /// **`RT-DECL-CLOSURE-PORT` `D7` — the seats of ONE visit, bound to the operands
@@ -16996,6 +17115,115 @@ impl<'a> Lowering<'a> {
         })
     }
 
+    /// **`RT-CARRIER-BYTESPAN-OBSERVE` `D5` — THE per-seat activation, and the
+    /// only place a `BytesPointerLength` seat's phase is dispatched on.**
+    ///
+    /// Exhaustive over the two phases with no wildcard, for the reason
+    /// [`ClaimedEffectSeats::specialized`] gives: the arm that would fire if a
+    /// seat's `Avail` were widened without a route being written must name the
+    /// seat, not fall into a catch-all. Here both arms have a route, so neither
+    /// is the refusal — but the shape is kept so a THIRD phase would break
+    /// compilation.
+    ///
+    /// The seat record handed to the observer is the CLAIMED one, so the
+    /// observer's own `need` check is asking about the seat this visit proved,
+    /// not one re-resolved behind the claim.
+    ///
+    /// # `AC-11` — immediate consumption, discharged STRUCTURALLY
+    ///
+    /// The gate (Architect `dec_5zjh9675253pj`) is that the view must be
+    /// consumed before any invalidating operation and never stored or
+    /// transported across one. `D5` discharges it by showing the invalidating
+    /// operation **is not expressible in the window**, which is stronger than
+    /// ordering the emitted calls carefully:
+    ///
+    /// 1. **What invalidates is Rust-side and takes `&mut BoundaryValueStore`.**
+    ///    `BoundaryRegion::reserve` (`boundary_value.rs`) is what resizes
+    ///    `data`, and a resize is what moves the table under the pointer.
+    ///    `publish_persistent`'s own note — *"invalidated by any later
+    ///    materialization or reservation"* — is about those methods.
+    /// 2. **Emitted code cannot reach them.** A compiled body holds a raw arena
+    ///    pointer and may call only the CLOSED, pinned `BOUNDARY_LOCAL_HELPERS`
+    ///    inventory. That inventory has no reserve, grow, resize or publish
+    ///    entry, and its allocator refuses at `ARENA_NODE_CAPACITY` /
+    ///    `ARENA_DATA_CAPACITY` rather than reallocating.
+    /// 3. ⇒ **Within one emitted host-effect body no reservation or
+    ///    materialization of the persistent image can occur at all**, so the
+    ///    pointer this returns cannot outlive one. It is stored into the wire
+    ///    request and consumed by the `host_dispatch` call in the same body.
+    ///
+    /// The ordering is worth stating exactly, because this lowering *does*
+    /// allocate into the carrier — just never in the window. Operand lowering
+    /// allocates BEFORE the claim group opens, and reply decoding allocates
+    /// AFTER dispatch returns. Between the observation and the dispatch the arm
+    /// emits only stack stores, constants, comparisons and other read-only
+    /// observers. **Even so, the window argument is the weaker half:** point 2
+    /// is what makes an invalidating operation unspellable there, and it holds
+    /// however the arm is later reordered.
+    ///
+    /// **The residual, stated rather than buried:** this is a proof about the
+    /// EMITTED window, not about the Rust harness around it. A test rig that
+    /// holds a returned pointer in Rust across a `reserve_persistent` is still
+    /// reading a moved table — `d4_observe` documents exactly that trap and
+    /// copies while the store is alive. **Widening this inventory with a
+    /// growing helper would retire the proof**, which is why it rests on the
+    /// inventory being closed rather than on a survey of today's call sites.
+    fn wire_bytes_seat(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        seats: &ClaimedEffectSeats<'_>,
+        slot: EffectSeatSlot,
+    ) -> Result<ObservedBytesSeat, CraneliftBackendError> {
+        use cranelift_codegen::ir::condcodes::IntCC;
+        let (record, operand) = seats.operand(slot)?;
+        match operand {
+            LoweringOperand::Specialized(lowered) => {
+                let lowered = lowered.clone();
+                let (pointer, len) = self.wire_bytes(builder, &lowered)?;
+                Ok(ObservedBytesSeat { pointer, len, refusal: None })
+            }
+            LoweringOperand::Carried(word) => {
+                let word = *word;
+                let (pointer, len, outcome) =
+                    self.observe_carried_bytes_span(builder, record, word)?;
+                #[cfg(test)]
+                let outcome = match effect_seat_dispatch_mutation() {
+                    EffectSeatDispatchMutation::ForceByteSpanOutcomeBounds => {
+                        builder.ins().iconst(types::I64, 1)
+                    }
+                    EffectSeatDispatchMutation::ForceByteSpanOutcomeNotASpan => {
+                        builder.ins().iconst(types::I64, 2)
+                    }
+                    _ => outcome,
+                };
+                // The three-valued outcome is preserved ACROSS this boundary
+                // rather than collapsed into one failure: outcome 1 and outcome
+                // 2 select different `ResourceErrorV1` codes, so a program can
+                // still tell "a real span whose extent is inadmissible" from
+                // "this word was never a viewable span". See the observer's doc
+                // for what outcome 2 itself already merges.
+                //
+                // The code is handed UP rather than encoded here, so the arm
+                // that knows the operation's declared error surface is the one
+                // that decides how it is represented on it.
+                let invalid = builder.ins().icmp_imm(IntCC::NotEqual, outcome, 0);
+                let bounds = builder.ins().icmp_imm(IntCC::Equal, outcome, 1);
+                let out_of_bounds = builder
+                    .ins()
+                    .iconst(types::I64, RESOURCE_ERROR_INVALID_BOUNDS);
+                let malformed = builder
+                    .ins()
+                    .iconst(types::I64, RESOURCE_ERROR_MALFORMED_RESOURCE);
+                let resource_code = builder.ins().select(bounds, out_of_bounds, malformed);
+                Ok(ObservedBytesSeat {
+                    pointer,
+                    len,
+                    refusal: Some((invalid, resource_code)),
+                })
+            }
+        }
+    }
+
     fn wire_bytes(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -17170,6 +17398,37 @@ impl<'a> Lowering<'a> {
     /// that ignores the discriminant reads a null span rather than a plausible
     /// one — the failure is loud rather than silently wrong.
     ///
+    /// **THE OUTCOME-`2` COLLAPSE, DECIDED BY `D5` RATHER THAN INHERITED.**
+    /// `D3` minted four statuses; outcome `2` merges three of them — `ERR_TAG`,
+    /// `ERR_CLASS` and `ERR_ESCAPE` — and the row label above is loose for the
+    /// last, since an invocation-owned byte span *is* a byte span, just not one
+    /// this helper may safely view.
+    ///
+    /// **`D5` keeps the collapse, deliberately, and the reason is that nothing
+    /// downstream can express the distinction.** Per-seat activation maps a
+    /// refusal onto a `ResourceErrorV1` code in the wire reply, and Ken's
+    /// surface has no constructor that separates "wrong tag" from "wrong class"
+    /// from "invocation-owned". All three mean the same thing to a program: this
+    /// carried word is not a span this operation may read, decided before any
+    /// host dispatch. Splitting them would need a fourth outcome here, a fourth
+    /// reply code, and a Ken-visible constructor to receive it — three changes
+    /// to carry a distinction no consumer can currently observe.
+    ///
+    /// ⇒ **What `D5` does NOT collapse is outcome `1` against outcome `2`.**
+    /// Those two select *different* reply codes
+    /// ([`RESOURCE_ERROR_INVALID_BOUNDS`] and
+    /// [`RESOURCE_ERROR_MALFORMED_RESOURCE`]), each reaching the program as the
+    /// payload of an `IOError::Other` on the operation's own declared error
+    /// surface, so the separation `D3` built the bounds status for survives all
+    /// the way into a value a Ken program can match on. That last clause is
+    /// witnessed, not asserted:
+    /// `d5_the_two_byte_span_refusals_are_distinct_typed_values_without_dispatch`
+    /// observes the two codes and reddens if either collapses.
+    ///
+    /// **If a later node needs an escape refusal diagnosed distinctly, the
+    /// information is gone by this point and the change belongs in `D3`'s status
+    /// set, not here.**
+    ///
     /// ⚠ **ADDRESS-STABILITY CONTRACT (`AC-11`, Architect `dec_5zjh9675253pj`).**
     ///
     /// The returned pointer is an ephemeral view into the persistent image's
@@ -17178,19 +17437,20 @@ impl<'a> Lowering<'a> {
     /// guarantees the referent's lifetime, not the stability of this interior
     /// address. A consumer must use the pointer and length before any such
     /// operation and must not store or transport the pair across one.
-///
+    ///
     /// ⛔ **The SSA pair is a BORROWED VIEW, never a new persistent
     /// representation.** `D5` owns the per-seat proof that the host-marshalling
     /// consumer uses it before any materialization or reservation; retaining it
     /// across one is a hard stop and a separate mechanism decision, not
     /// something this observer may paper over.
     ///
-    /// ⛔ **Dormant on purpose: no production caller exists yet.** Emitting an
-    /// observer does not make any seat admit a carried word — every
-    /// `BytesPointerLength` seat is still `SPECIALIZED_ONLY`, `Avail` is
-    /// untouched, and `D5` is the per-seat activation. A green control here is
-    /// evidence about this observer and **not** about any seat.
-    #[allow(dead_code)] // `D5` wires the call sites; `D4` lands the mechanism.
+    /// **WIRED by `D5`, which is why there is no `#[allow(dead_code)]` here.**
+    /// `D4` landed this dormant, with every `BytesPointerLength` seat still
+    /// `SPECIALIZED_ONLY`. [`Self::wire_bytes_seat`] is now the sole caller, and
+    /// it is reached from the byte-span seats whose `Avail` `D5` widened. An
+    /// observer that still needed the attribute would be an observer nothing
+    /// called, so its absence is the evidence the activation is real rather
+    /// than a note.
     fn observe_carried_bytes_span(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -17213,7 +17473,8 @@ impl<'a> Lowering<'a> {
             return Err(unsupported(
                 "Effect",
                 format!(
-                    "the byte-span observer was asked for seat {:?} of {:?}, whose need is                      {:?} rather than BytesPointerLength",
+                    "the byte-span observer was asked for seat {:?} of {:?}, whose need is \
+                     {:?} rather than BytesPointerLength",
                     seat.slot, seat.operation, seat.need
                 ),
             ));
@@ -19039,9 +19300,17 @@ fn rebuild_recursive_argument(
         Lowered::StructuralNat(_) => Lowered::StructuralNat(StructuralNatV1 {
             value: next(values)?,
         }),
-        // Rebuilt through the EXISTING span's receiver, so the reconstruction
-        // inherits that span's provenance instead of minting a fresh warrant.
-        // Argument order is left-to-right, matching `d9_collect`'s push order.
+        // Rebuilt through the EXISTING span's receiver, which is what makes the
+        // reconstruction reachable without a fresh raw mint. The receiver is a
+        // warrant, not a source: `rebuild_from_collected` discards it, so the
+        // values below are the only thing that decides the result.
+        //
+        // ⇒ THIS call site is why the result is right, and the reason is local:
+        // argument order is left-to-right, matching `d9_collect`'s push order,
+        // so the two values ARE this span's own, taken back in the order it was
+        // flattened. That is a fact about these two lines, verified by review —
+        // the signature does not carry it, and a second caller would inherit
+        // none of it.
         Lowered::ResponseBytes(span) => {
             Lowered::ResponseBytes(span.rebuild_from_collected(next(values)?, next(values)?))
         }

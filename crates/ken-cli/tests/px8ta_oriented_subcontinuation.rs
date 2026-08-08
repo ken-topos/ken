@@ -258,7 +258,7 @@ fn run_depth(depth: usize) -> (ken_runtime::EffectObservation, usize) {
 // of test, genuinely different cause -- they are not interchangeable.
 // Annotation only -- test body and expectations are unchanged.
 #[test]
-#[ignore = "RT-CARRIER-BYTESPAN-OBSERVE: the FsReadFile byte-span seat cannot observe a carried word; fails at base 21fd46dc"]
+#[ignore = "RT-CARRIER-BYTESPAN-OBSERVE D5: the FsReadFile path seat at Argument(0) is SITE-BOUND -- the synthesized FileError declares SiteOperand(0), which demands a compile-time Lowered template the carried word cannot supply without the banned Carried->Lowered inverse. D5 landed byte-span observation and it is NOT the blocker; awaiting Steward recut"]
 fn public_one_level_bracket_finishes_and_releases() {
     assert_depth_finishes_and_releases_lifo(1);
 }
@@ -343,7 +343,7 @@ fn public_two_three_level_brackets_finish_and_release_lifo() {
 // real cause.
 // Annotation only -- test body and expectations are unchanged.
 #[test]
-#[ignore = "RT-CARRIER-BYTESPAN-OBSERVE: the FsReadFile byte-span seat cannot observe a carried word; fails at base 21fd46dc"]
+#[ignore = "RT-CARRIER-BYTESPAN-OBSERVE D5: the FsReadFile path seat at Argument(0) is SITE-BOUND -- the synthesized FileError declares SiteOperand(0), which demands a compile-time Lowered template the carried word cannot supply without the banned Carried->Lowered inverse. D5 landed byte-span observation and it is NOT the blocker; awaiting Steward recut"]
 fn px8ds_real_same_depth_path_rejects_flat_order_and_runs_exact_edges() {
     std::thread::Builder::new()
         .name("px8ds-real-siblings".to_string())

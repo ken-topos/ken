@@ -154,7 +154,7 @@ fn contains_recursive_bind_ir(expr: &ken_runtime::RuntimeExpr) -> bool {
 // those were branch-introduced, this one predates the branch.
 // Annotation only -- test body and expectations are unchanged.
 #[test]
-#[ignore = "RT-CARRIER-BYTESPAN-OBSERVE: the FsReadFile byte-span seat cannot observe a carried word; fails at base 21fd46dc"]
+#[ignore = "RT-CARRIER-BYTESPAN-OBSERVE D5: the FsReadFile path seat at Argument(0) is SITE-BOUND -- the synthesized FileError declares SiteOperand(0), which demands a compile-time Lowered template the carried word cannot supply without the banned Carried->Lowered inverse. D5 landed byte-span observation and it is NOT the blocker; awaiting Steward recut"]
 fn delayed_capturing_generic_bind_agrees_across_real_executors() {
     let dir = output_dir("agreement");
     let output = ken_cli::build_native_program(
@@ -219,7 +219,7 @@ fn delayed_capturing_generic_bind_agrees_across_real_executors() {
 // those were branch-introduced, this one predates the branch.
 // Annotation only -- test body and expectations are unchanged.
 #[test]
-#[ignore = "RT-CARRIER-BYTESPAN-OBSERVE: the FsReadFile byte-span seat cannot observe a carried word; fails at base 21fd46dc"]
+#[ignore = "RT-CARRIER-BYTESPAN-OBSERVE D5: the FsReadFile path seat at Argument(0) is SITE-BOUND -- the synthesized FileError declares SiteOperand(0), which demands a compile-time Lowered template the carried word cannot supply without the banned Carried->Lowered inverse. D5 landed byte-span observation and it is NOT the blocker; awaiting Steward recut"]
 fn runtime_selected_non_unit_response_is_consumed_across_real_executors() {
     let dir = output_dir("consumed-response");
     let output = ken_cli::build_native_program(

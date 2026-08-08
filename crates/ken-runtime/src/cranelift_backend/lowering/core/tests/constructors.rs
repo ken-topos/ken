@@ -9244,12 +9244,21 @@ fn d4_a_seat_whose_need_is_not_a_byte_span_is_refused() {
 /// nextest, which does not run doctests (`values.rs` records this).
 ///
 /// **This probe covers the SPELLING only; its production sibling covers the
-/// PROVENANCE.** Refusing the braced literal here says nothing about whether a
-/// production caller can mint a span some other way — the first `D4b` candidate
-/// passed this probe while leaving exactly that hole open. The claim that
-/// production has no raw mint is witnessed by `ac10_production_mint_probe` in
-/// `lowering`, which must be run against the PRODUCTION profile; `for_control`
-/// resolves here by construction, so this module structurally cannot test it.
+/// rest of the CONSTRUCTION SURFACE.** Refusing the braced literal here says
+/// nothing about whether a production caller can mint a span some other way —
+/// the first `D4b` candidate passed this probe while leaving exactly that hole
+/// open. The claim that production has no raw mint is witnessed by
+/// `ac10_production_mint_probe` in `lowering`, which must be run against the
+/// PRODUCTION profile; `for_control` resolves here by construction, so this
+/// module structurally cannot test it.
+///
+/// **NEITHER probe establishes PROVENANCE, and the earlier wording here said
+/// the sibling did** (corrected under Architect `dec_5ghh87fvg7skn`). Together
+/// they close *who may construct a span*. They say nothing about *which values a
+/// span carries*: `rebuild_from_collected` discards its receiver, so a holder of
+/// any span may wrap arbitrary SSA values. That the one production rebuild is
+/// correct is a fact about its call site, guarded by review rather than by
+/// mechanism.
 ///
 /// **RESIDUAL — neither probe guards the mechanism's STRENGTH.** They witness
 /// what is refused today. Nothing reddens if a later edit moves `SafeByteSpan`
