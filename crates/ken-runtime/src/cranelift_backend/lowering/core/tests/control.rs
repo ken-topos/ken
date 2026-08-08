@@ -5103,11 +5103,16 @@ fn the_body_authority_selector_narrows_only_completed_ports_and_stays_fail_close
     // `RT-PRODUCER-MATCH-PORT` `D3` -- an ordinary Match whose producer is a
     // Call all select functionized emission, while a Match consuming an active
     // computational recursor still selects recursive descent.
-    // CLAIMED: D3 removed only the two predicates backed by D1 and D2 and did
-    // not turn absence from a functionized allow-list into admission.
-    // THE GAP: this pin measures the source-only selector. S1 and S2 separately
-    // prove the declared-unit and terminal-CFG mechanisms behind the two green
-    // selections; D4 will exercise the complete governed n=3..7 family.
+    // CLAIMED: `RT-FNSPLIT-RECUR-PORT`'s `D3` removed only the two predicates
+    // backed by ITS `D1` and `D2`, and did not turn absence from a functionized
+    // allow-list into admission. That clause is that node's and predates this
+    // one; it is qualified because the paragraph above now names a different
+    // node's `D3`, and an unqualified `D3` beside it reads as this node -- which
+    // retired ONE predicate, not two.
+    // THE GAP: this pin measures the source-only selector. `S1` and `S2`
+    // separately prove the declared-unit and terminal-CFG mechanisms behind
+    // that node's two green selections; its `D4` exercises the complete
+    // governed n=3..7 family.
     assert_eq!(
         select_body_emission_authority(
             &RuntimeExpr::Value(RuntimeValue::Bool(true)),
