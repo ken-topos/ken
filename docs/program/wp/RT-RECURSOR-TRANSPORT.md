@@ -91,7 +91,13 @@ second.
 
 Confirm both variants are still live and still selected, and record the exact
 classification sites by phrase. **Preserve the exhaustive two-variant selector
-and enumerator** — it stays discriminating through the whole transition.
+and enumerator through `D0`-`D2` and every commit up to the final
+variant-removal commit** — that is the window in which it discriminates, and
+the window in which its evidence must be captured.
+
+**It does NOT stay discriminating through the whole transition, and this
+sentence said it did until 2026-08-08.** `D3` empties the population by design;
+see the reconciliation under `D3` and the rewritten `AC-6`.
 
 If a variant is already unreachable at your base, that is a finding: record it
 with the evidence and route it. Do not delete it on that basis alone.
@@ -191,6 +197,76 @@ The lane itself is **not** yours. [[RT-DESCENT-RETIRE]] owns the
 these two variants is what unblocks that node; performing its deletion here is
 banned scope.
 
+> #### RECONCILED 2026-08-08 — `D3` EMPTIES THE ENUM; THE FRAME DENIED IT
+>
+> **Authority: Architect ruling `evt_4tf1hhp51nyh0`**, on the implementer's
+> `D3` stop `evt_zgs93z3p3mfx`. The stop was correct and the contradiction was
+> in this contract, not in the retirement.
+>
+> These two variants are the **entire live `RecursiveDescentResidual`
+> population**. Removing both leaves the enum **uninhabited**: the classifier
+> answers `None` for every program, the enumerator returns the empty set for
+> every program, and the complete enumerator and `ShortCircuitLikeTheSelector`
+> agree on `{}` for every input. **The exact-set control therefore cannot
+> discriminate after `D3`, and calling it green would be exactly the `0/0`
+> witness this frame bans.** `AC-6` promised the opposite, so it was
+> unsatisfiable; it is rewritten below as a lifecycle boundary.
+>
+> **This is not a four-row perimeter.** `D3` owns retiring or rewriting **every**
+> control whose subject disappears with these two variants. Known at
+> `8efdfdb3`, and explicitly **not a bound**:
+>
+> - `the_body_authority_selector_narrows_only_completed_ports_and_stays_fail_closed`
+> - `retained_authority_residual_is_the_typed_selector_accounting`
+> - `d1_each_residual_variant_is_observable`
+> - `d1_the_enumerator_reports_every_variant_not_the_first`
+> - `d3_the_exact_set_control_still_reds_under_short_circuiting`
+> - `d3_the_previously_masked_classes_are_now_reported_directly`
+> - every corpus, entry, wrapper and production-site row that treats an empty
+>   enumeration as evidence of classifier completeness
+>
+> **Re-sweep the whole of `crates/ken-runtime/src` by type, by enumerator, by
+> mutation, and by both variant names.** A list handed to you is a floor.
+>
+> **Four things you may not do to keep a test non-empty**, because each tests a
+> population production does not have:
+>
+> 1. **Retain either production variant.**
+> 2. **Invent a `cfg(test)` ghost variant.**
+> 3. **Preserve a per-variant selector-exclusion hook** solely to keep a
+>    population inhabited.
+> 4. **Move the exact-set test unchanged to [[RT-DESCENT-RETIRE]].** With an
+>    empty subject it is vacuous *there* too. That node's own `D1` zero reading
+>    plus its `D2` temporary-positive control is the lawful successor evidence,
+>    and **a later one-shot positive control cannot retroactively make this
+>    node's final empty population discriminating.**
+>
+> **What survives, and what it is allowed to claim:**
+>
+> - **The two executable position witnesses stay, with their real
+>   discriminators.** At final `D3` they must select `FunctionizedUnits`, execute
+>   to their accepted observations, and **still red when their respective
+>   transport is disabled.** That is what discharges `AC-2` — without any
+>   residual-population fiction.
+> - **The production-site `Some(empty)` hook row may remain only as a
+>   site-execution sentinel** — it distinguishes *"the selector site ran"* from
+>   *"it never ran."* **Its doc comment and its assertion must both say it proves
+>   neither completeness nor the absence of missed residuals.** A sentinel that
+>   does not disclaim what it cannot see is read as coverage.
+> - **Keep the dead lane, the selector/enumerator scaffolding, the now-empty
+>   enum, and the authority** for [[RT-DESCENT-RETIRE]]. Deleting them here stays
+>   banned. Remove **only** the two variants, their production
+>   constructor/insertion sites, and the variant-specific test hooks.
+> - **Keep both collector walks.** The arm must still descend into scrutinee and
+>   case bodies so a future variant is findable there.
+>
+> **Two obligations on the handoff:**
+>
+> - **Call the enumerator oracle `spent`/`dormant`, never `discriminating`.**
+> - **Record the nondegenerate historical evidence at exact `D2` `8efdfdb3`**
+>   — where the population was still inhabited. **Do not reconstruct it after
+>   retirement**; there is nothing left to reconstruct it from.
+
 ## 5. Acceptance criteria
 
 - **AC-1 — both variants are gone from the `RecursiveDescentResidual` enum and
@@ -202,6 +278,20 @@ banned scope.
   *Control:* the witness fails when the transport is disabled and passes when it
   is enabled, both from the committed tree. A hand-run mutation does not
   discharge this.
+  **At final `D3` both witnesses must additionally select `FunctionizedUnits`
+  and execute to their accepted observations** — still redding when their
+  respective transport is disabled. **These two are what carry `AC-2` once the
+  residual population is empty**, so they are the controls that must survive the
+  sweep intact.
+- **AC-2b — every control whose subject the retirement removes is retired or
+  rewritten, and none is left to pass vacuously.**
+  *Control:* the handback enumerates each such control with its disposition
+  (retired, rewritten to an explicit emptiness assertion, or preserved with a
+  stated reason it is still probative), **and states the sweep that found them**
+  — by type, by enumerator, by mutation, and by both variant names across
+  `crates/ken-runtime/src`. **The list under `D3` is a floor, not the perimeter.**
+  A control left green over an empty population is the failure this AC exists
+  to catch, and it is invisible to a suite count.
 - **AC-3 — outcome (b) holds at every new boundary.** No invocation-local
   activation, resume or return-hole state in ABI data.
   *Control:* name the ABI payload for each new crossing and show its fields are
@@ -215,8 +305,22 @@ banned scope.
   *Control:* `BoundaryUse` stays at zero production hits; `PlannedEffectSeat`'s
   key, vocabulary and choke point are blob-identical to base unless the Architect
   rules otherwise on the record.
-- **AC-6 — the exact-set enumerator stays discriminating through the
-  transition**, including at intermediate commits.
+- **AC-6 — the exact-set enumerator stays discriminating up to the final
+  variant-removal commit, and `D3` deliberately spends it there.**
+  **Rewritten 2026-08-08 per Architect `evt_4tf1hhp51nyh0`. It previously read
+  *"stays discriminating through the transition, including at intermediate
+  commits"* — which the final state cannot satisfy, because `D3` empties the
+  population.** See the reconciliation under `D3`.
+  *Control, in two parts:*
+  1. **Through `D2` and every commit before the final variant-removal
+     commit**, the control still reds under `ShortCircuitLikeTheSelector` on a
+     compound firing both variants. This is the part that must hold, and it is
+     where the evidence is captured.
+  2. **At the final commit** the oracle is **spent**, and the handoff says so in
+     those words. The zero reading passes to [[RT-DESCENT-RETIRE]], which makes
+     it probative through its own `D2` temporary-positive control. **A green
+     exact-set assertion at final `D3` fails this AC** — it is the banned `0/0`
+     witness wearing the AC's name.
 - **AC-7 — the candidate contains NO tracker `status:` change.** This node's flip
   is the Steward's, post-merge, at `merge-procedure.md` M7. **Do not close
   [[RT-DESCENT-RETIRE]] or any other node.**
@@ -240,6 +344,13 @@ banned scope.
   finding to route.
 - **No `0/0` witness.** A control that observes an empty population measures
   nothing.
+  **This bans the CLAIM, not the state.** After `D3` the population is
+  legitimately empty, and that is the point of the node — what is banned is a
+  control that goes green over it and is then read as coverage. An emptiness
+  assertion is fine when it says it is one; the same assertion inherited from
+  when the population was inhabited is not.
+- **No retaining a variant, ghost `cfg(test)` variant, or per-variant hook to
+  keep a population inhabited** — see the reconciliation under `D3`.
 
 ## 7. Hard stops
 
@@ -298,6 +409,20 @@ The provisional part is real. `D1` is a genuine open question, and hard stops 1
 and 2 both make the node bigger. **Post the `D1` outcome as its own checkpoint
 before starting `D2`** — that is the point at which the Steward re-sizes if
 needed.
+
+**`M` re-affirmed 2026-08-08 with `D0`-`D2` complete and the `D3` reconciliation
+applied.** `D1` came back asymmetric (position B closes for free), `D2` landed
+as a narrow guard, and the implementer reports the `D3` production retirement as
+two files and six sites, building clean. **The added `D3` work is the control
+sweep, not more mechanism** — retiring or rewriting every control whose subject
+the retirement removes. That is bounded by the existing suite and does not
+reopen sizing.
+
+**What would:** if the sweep finds a control that another node's *merged*
+evidence depends on and that cannot be honestly rewritten inside this node, that
+is a Steward call on where the evidence lives — route it rather than absorbing
+it. The implementer was right to refuse that call on `2026-08-08`; the frame
+now answers it, so it should not need routing twice.
 
 Checkpoints, exact SHA posted at each:
 
