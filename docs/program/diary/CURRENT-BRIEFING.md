@@ -33,31 +33,80 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-08 ~16:0xZ · #6f `D2` MERGED; FIFTH WALL FILED AS #6g
+## LIVE — 2026-08-08 ~16:2xZ · #6f CLOSED (`D2` + `D3` merged); #6g RELEASED
 
-**`main = c3c8eddc`.** `RT-CARRIED-CONTINUATION-RESUME` (#6e) is **closed**.
-`RT-CARRIED-ORDINARY-COMPOSITION` (#6f) is **`active` with its `D2` merged as an
-accepted partial** — PR **#1635**, CI green, all six paths verified by blob
-identity. **`D3` is owed and is not blocked by the fifth wall.**
+**`main = dcd6d84c`.** `RT-CARRIED-CONTINUATION-RESUME` (#6e) is **closed**, and
+`RT-CARRIED-ORDINARY-COMPOSITION` (#6f) is now **closed too** — `D2` accepted
+partial at exact `1f89a92b` (PR **#1635**, six paths blob-verified) and `D3` at
+exact `fcf5ce23` (PR **#1637**, two paths `+172/-0`, blob-verified). All four
+deliverables in, both CI green.
 
-**The chain now stands at five walls, five correct repairs, three returned
-cleanly on the armed terms rather than absorbed.** That is why every one is
-visible in the tracker instead of buried in a sizing overrun.
+**`RT-SPECIALIZED-ACTIVE-RESUME` (#6g) is RELEASED** — frame was already on
+`main` at blob `284029ac`, so no framing pass sat between the merge and the
+kick. Cut from `dcd6d84c`.
 
-> ### WHAT `D3` OWES — read this before reviewing the candidate
+**The chain stands at five walls, five correct repairs, three returned cleanly
+on the armed terms rather than absorbed.** That is why every one is visible in
+the tracker instead of buried in a sizing overrun.
+
+> ### THE `D3` FINDING, kept because it generalizes past this node
 >
-> 1. **Assert the ADVANCE, not compile success.** Both rows still stop one
->    authority further out, so an end-to-end assertion cannot pass.
-> 2. **Do not key on the fifth wall's refusal string.** It is already pinned in
->    full equality by a committed control, and #6g may change it — keyed there,
->    `D3` breaks for an unrelated reason or **passes vacuously** once the string
->    is gone. The vacuous case is the one nobody notices.
-> 3. **Prove it can fail on its own candidate**, and state the denominator as
->    **excluding committed controls** — one of the three counted members is this
->    chain's own control, so the independent population is **two**.
+> `D3` was armed **not to key on the fifth wall's refusal string** — that string
+> exists, is pinned in full equality by a committed control, and #6g may
+> legitimately change it, so a control keyed there passes vacuously once it is
+> gone.
 >
-> Cut `D3` from **`c3c8eddc`**. `1f89a92b` is **not an ancestor of `main`**; the
-> partial squashed, for the third time on this chain.
+> **The `D2` refusal — the one `D3`'s advance was actually defined against —
+> fails the OPPOSITE way: `D2` deleted it from PRODUCTION.** Grounded, not
+> inherited: `c3c8eddc` removes the `return Err(unsupported("BoundaryCarrier",
+> ...))` block whole, and the only production trace left is the comment
+> beginning *"The carried elimination consumes exactly one frame"*.
+>
+> **State it as "deleted from production, reproducible on demand under the `D3`
+> mutation" — not as "the only trace is a comment".** The stronger-sounding
+> version is false of the merged tree: at `dcd6d84c` the sentence appears
+> verbatim in `D3`'s own `#[cfg(test)]` mutation and as `PRE_D2_REFUSAL` in the
+> control, whose mutated arm **asserts it does appear**
+> (`suppressed.contains(PRE_D2_REFUSAL)`). **The precise version is also the
+> better argument**, because reproducible-on-demand is what makes `!contains`
+> *worthless* rather than merely free.
+>
+> ⇒ **`!contains(D2_refusal)` is true for free, forever**, and would keep
+> passing if the repair were ripped out entirely. **A string no production code
+> can produce is absent for free, so asserting its absence measures nothing.**
+>
+> **Cite that comment by phrase, never by line.** It was `core.rs:3845` at
+> `c3c8eddc` and is `core.rs:3870` at `dcd6d84c` — this merge's `+40` lines land
+> above it. A number qualified against a tree other than the reader's is worse
+> than no number.
+>
+> **And on this chain, do not count phrase hits — read the construct.** A sweep
+> for that sentence returns five hits at `dcd6d84c`, and `core.rs:3969` is a
+> **different** refusal: *"a carried scrutinee reached an active continuation
+> frame ... the resume consumes the frame's own pending suffix"*. Same
+> vocabulary and same shape, different subject and different consumer. The
+> campaign reuses refusal wording heavily, so a grep count is not a measurement
+> here — it has three times now nearly produced a false finding.
+>
+> **This is the trap worth carrying: asserting the absence of the refusal you
+> just repaired reads as exactly the right test.** The armed constraint pointed
+> at a string that exists and might change; the real hazard was a string that had
+> already ceased to exist. The landed control keys on a non-zero pre-guard
+> denominator plus **`continuations == arrivals` as equality** — not `> 0`, so one
+> continued arrival cannot mask a second that refused — with a **mutation** that
+> makes the pre-`D2` sentence producible again. Reds at
+> `arrivals=1 continuations=0`.
+>
+> **The denominator correction stands and outlives `D3`:** that control is a
+> member of the population it observes, so the independent production population
+> is **two, not three**, and **any census re-run after `fcf5ce23` reads inflated**
+> unless it excludes committed controls.
+>
+> **Checked at `dcd6d84c`: no committed census would silently read three.** The
+> only committed test over this population is `D3`'s own control
+> (`control.rs:27164`); there is no landed assertion on a member count. So the
+> inflation risk is entirely forward-looking — it binds the **next** census
+> author, not anything already on `main`.
 
 > ### THE `AC-1` THAT LOOKS UNMET IS A DIFFERENT NODE'S, AND THIS IS THE ONE
 > ### THING MOST LIKELY TO BE MISREAD LATER

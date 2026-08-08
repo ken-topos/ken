@@ -1,7 +1,7 @@
 ---
 id: RT-SPECIALIZED-ACTIVE-RESUME
 title: "A live specialized value with an Active frame is refused by a constructor-only destructure — Active resume does not require constructor shape"
-status: ready
+status: active
 owner: runtime
 size: M
 gate: none
