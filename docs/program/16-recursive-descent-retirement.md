@@ -359,8 +359,8 @@ graph LR
 | 4 | `RT-SEED-CALL-PORT` | S–M | cheapest; reuses #3 directly and may close on its own `D1` |
 | 5 | `RT-PRODUCER-MATCH-PORT` | M | its **syntactic** `ProducerMatchCall` retirement only — ⛔ **not** the carried-`Match` transport, which is #3's `D7` |
 | **3-atomic** | `RT-RECURSOR-TRANSPORT` | L | ⭐⭐ **MOVED 2026-07-29 from #6 — it is `D7`'s reached successor and assembles ATOMICALLY with #3.** `D1` is answered: outcome **(b)** |
-| 6 | `RT-FNUNIT-RESULT-TOKEN` | M | ⭐ **Trap 2, filed 2026-08-08** — retiring `SeedClosureCall` made a shape newly reachable that the `FunctionizedUnits` lane does not support (`native result token 265 is not in the result table`). Owns `nc22`, currently `#[ignore]`d. ⛔ **Gates #7**: it is the only program exercising a shape supported *only* by the lane #7 deletes. Its `M` is a **scoping** figure, not a measured one — the family width is unestablishable from a corpus holding one instance |
-| 7 | `RT-DESCENT-RETIRE` | M | delete the selector, enum, authority and lane; bank the win. ⛔ Gated on **five** nodes — the four migration nodes **and #6** |
+| 6 | `RT-FNUNIT-RESULT-TOKEN` | M | **Trap 2, filed 2026-08-08** — retiring `SeedClosureCall` made a shape newly reachable that the `FunctionizedUnits` lane does not support (`native result token 265 is not in the result table`). Owns `nc22`, currently `#[ignore]`d. **Gates #7**: it is the only program exercising a shape supported *only* by the lane #7 deletes. Its `M` is a **scoping** figure, not a measured one — the family width is unestablishable from a corpus holding one instance |
+| 7 | `RT-DESCENT-RETIRE` | M | delete the selector, enum, authority and lane; bank the win. Gated on **five** nodes — the four migration nodes **and #6** |
 | 8 | `RT-BACKEND-MODULE-SPLIT` | M | ⭐ **operator, 2026-07-31** — split the oversized `ken-runtime` backend files. ⛔ **After #7, never before** — see below |
 
 > ### ⭐⭐ REORDERED 2026-07-29 — THE HARDEST NODE MOVED FROM #6 TO #3-ATOMIC
