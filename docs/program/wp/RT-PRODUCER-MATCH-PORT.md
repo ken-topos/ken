@@ -77,8 +77,42 @@ that same program and be **completely unreported**.
   allocates no aggregate, record that fact rather than minting a token.
 - **`D3` — Remove `ProducerMatchCall`** from `RecursiveDescentResidual`, and only
   then re-run `AC-1a` and `AC-1b`.
-- **`D4` — The masked-population delta**, handed to the Steward for
-  [[RT-RECURSOR-TRANSPORT]]'s re-scope.
+- **`D4` — Post-retirement capability evidence.** That both surviving classes
+  are visible to the enumeration once this class stops short-circuiting, and
+  that the selector walks past the `Match` node.
+
+  **RESTATED 2026-08-08, and the original demand was MINE AND WRONG.** `D4` said
+  "the masked-population delta, handed to the Steward for
+  [[RT-RECURSOR-TRANSPORT]]'s re-scope." **That measurement cannot be taken from
+  this node and is not needed.**
+
+  **Why it cannot be taken.** A before/after delta needs a pre-retirement
+  operand, and **`D3` destroys it** — the variant no longer exists to name. The
+  first attempt subtracted `{MatchScrutineeRecursor}` from a *post*-retirement
+  value and labelled the subtrahend a pre-retirement selector result. Before
+  retirement the selector reported `ProducerMatchCall` **and stopped**, so
+  **both** survivors were hidden, not one, and the answer understated the
+  successor population by half. **Manufacturing the operand from post-retirement
+  values IS the defect**; the ring withdrew the claim rather than repairing it,
+  which was correct.
+
+  ⇒ **This is [[RT-DESCENT-RETIRE]] §3's "the oracle is spent by the commit that
+  clears it," arriving one node early.** That frame writes it down in advance;
+  this one did not.
+
+  **Why it is not needed.** [[RT-RECURSOR-TRANSPORT]] `D2` already measures its
+  own population — *"including the population unmasked by
+  `RT-PRODUCER-MATCH-PORT`'s `D4` **if that node has landed by pickup**... It no
+  longer gates this one — scope against what is measured on `c45a59a9`."* **The
+  successor measures rather than inherits, so no figure is owed to it.**
+
+  **Also note: a hand-built `RuntimeExpr` could not have supplied it anyway.**
+  Campaign Trap 1 says a synthetic witness proves instrument and class
+  visibility, never a real-program population.
+
+  ⇒ **Standing question for any before/after claim in this campaign: NAME THE
+  BASE EACH SIDE WAS MEASURED ON, BEFORE YOU SUBTRACT.** If one side has no base
+  you can name, the subtraction does not exist.
 
 ### THE PROSE SWEEP IS PART OF `D3`. Budget for it.
 
