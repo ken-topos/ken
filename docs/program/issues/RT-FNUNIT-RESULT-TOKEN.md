@@ -70,6 +70,30 @@ compile.
   functionized path.
 - **Is the gap the token's production or its registration?** Those route
   differently.
-- **How wide is the shape class?** `nc22` is one fixture. Establish whether it
-  is one shape or a family before sizing — the `M` here is provisional and was
-  set without that answer.
+- **How wide is the shape class?** `nc22` is one fixture. **The `M` was set
+  without that answer, and the answer cannot come from reading this corpus** —
+  see below.
+
+## THE SIZING QUESTION IS SCOPING, NOT MEASUREMENT
+
+**Measured by the Adversary on the closing merge `91435b89`:**
+
+1. **`nc22` is a single composite program, not a loop over shapes.** Its body is
+   one nested `Let` / `Call{callee: Closure}` / `Match` / `Construct` / `Record`
+   / `If` tree — "broad starter shapes" names breadth *within* one program. The
+   skip suppresses **one row**, not a corpus.
+2. **`nc22` is the ONLY one of 21 `nc` fixtures carrying a `Call` whose callee
+   is a `Closure` or `LexicalClosure`.** It is alone.
+
+⇒ **The family-width question is not merely unmeasured — it is
+UNESTABLISHABLE from this corpus**, which holds exactly one instance of the
+failing shape. Answering it **requires authoring fixtures that do not exist.**
+
+⇒ **And the skip's consequence is wider than one lost row: this corpus now has
+ZERO live coverage of that shape in either direction.** Nothing in it will
+observe the wall move — **not a repair, and not a regression.**
+
+**So the open question for whoever picks this up is scoping, not measurement:**
+is authoring the missing fixtures inside the `M`, or was `M` sized for a repair
+against one known fixture? **Answer that before starting.** If it is the
+latter, the node is mis-sized and comes back to the Steward.

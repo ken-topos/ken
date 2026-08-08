@@ -35,6 +35,27 @@
 
 ## LIVE — 2026-08-08 ~00:4xZ · `RT-SEED-CALL-PORT` active; `D5` closed and merged
 
+> ### OPEN RISK CARRIED OUT OF `RT-SEED-CALL-PORT` — a cost that MOVED, with no code change to prompt a re-read
+>
+> **Nobody has ever executed an `AC-6` control under a committed swap
+> mutation** — not the ring, not QA, not the Architect, not me, not the
+> Adversary. That was **harmless at `D2`**, where the port was production-inert
+> and the controls guarded a path nothing took.
+>
+> **At `D3` the port went live. Those same unmutated controls are now the only
+> thing standing behind the `Parameter ++ Capture` ABI order in production.**
+>
+> ⇒ **Nothing about the controls changed, so nothing prompts anyone to re-read
+> their strength.** The identical control silently went from guarding nothing
+> to guarding the real path. **This is a general shape worth catching
+> elsewhere: activating a mechanism re-prices every control in front of it,
+> and the re-pricing is invisible in the diff.**
+>
+> The structural argument is strong — `AC-6.3`'s oracle is a fresh literal and
+> the callee ABI is planner-owned, so a swap silently computes `-3` — but
+> **structural closure is not execution.** Route this if `RT-PRODUCER-MATCH-PORT`
+> or a later node touches that transport.
+>
 > ### OPERATOR SEQUENCING RULING — 2026-08-07, verbatim intent. THIS GOVERNS.
 >
 > **"continue with the D-series, then return to `RT-SEED-CALL-PORT` and
