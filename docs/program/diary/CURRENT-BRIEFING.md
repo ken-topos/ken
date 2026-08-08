@@ -33,17 +33,31 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-08 ~15:3xZ · FIFTH WALL RULED A SIBLING; #6g FILED AND FRAMED
+## LIVE — 2026-08-08 ~16:0xZ · #6f `D2` MERGED; FIFTH WALL FILED AS #6g
 
-**`main = 8c6ab6f9`.** `RT-CARRIED-CONTINUATION-RESUME` is **closed** — all four
-deliverables landed, all eight of its own ACs met. Its `D2` **worked**: the
-carried value survives the composition, **measured on the refusal backtrace
-rather than inferred from the phase-agnostic signature**, which is the thing the
-types could not have told us. The refusal then advanced a fourth time, and that
-successor is now released and building.
+**`main = c3c8eddc`.** `RT-CARRIED-CONTINUATION-RESUME` (#6e) is **closed**.
+`RT-CARRIED-ORDINARY-COMPOSITION` (#6f) is **`active` with its `D2` merged as an
+accepted partial** — PR **#1635**, CI green, all six paths verified by blob
+identity. **`D3` is owed and is not blocked by the fifth wall.**
 
-The implementer returned the wall on the armed terms without absorbing it, for
-the **second time in a row**. That is the standard on this chain.
+**The chain now stands at five walls, five correct repairs, three returned
+cleanly on the armed terms rather than absorbed.** That is why every one is
+visible in the tracker instead of buried in a sizing overrun.
+
+> ### WHAT `D3` OWES — read this before reviewing the candidate
+>
+> 1. **Assert the ADVANCE, not compile success.** Both rows still stop one
+>    authority further out, so an end-to-end assertion cannot pass.
+> 2. **Do not key on the fifth wall's refusal string.** It is already pinned in
+>    full equality by a committed control, and #6g may change it — keyed there,
+>    `D3` breaks for an unrelated reason or **passes vacuously** once the string
+>    is gone. The vacuous case is the one nobody notices.
+> 3. **Prove it can fail on its own candidate**, and state the denominator as
+>    **excluding committed controls** — one of the three counted members is this
+>    chain's own control, so the independent population is **two**.
+>
+> Cut `D3` from **`c3c8eddc`**. `1f89a92b` is **not an ancestor of `main`**; the
+> partial squashed, for the third time on this chain.
 
 > ### THE `AC-1` THAT LOOKS UNMET IS A DIFFERENT NODE'S, AND THIS IS THE ONE
 > ### THING MOST LIKELY TO BE MISREAD LATER
@@ -286,12 +300,15 @@ per §10⁻a.
 >
 > ### MY NEXT ACTION, so a cold resume does not have to re-derive it
 >
-> **The wait has an address (§1a):** the **publisher request on a resolved merge
-> Decision** binding exact `1f89a92b`, owed by `runtime-leader`, thread
-> `thr_pvxda1tcg20d`. QA and the Architect have both approved that SHA; the
-> Decision is the authorization and I read it fresh from the object before
-> publishing (`§14`, `M1`). **It is a code merge** — background the publisher, and
-> M8 notification to the Adversary is owed after it lands.
+> **DISCHARGED ~16:0xZ:** `D2` published as PR #1635 on resolved Decision
+> `dec_3tx908cb6072z`, verified on `main`, M8 sent (`evt_2bx5da4cjybzt`), ring
+> routed to `D3` (`evt_3cp5pyqr6xrgw`).
+>
+> **The wait has an address (§1a):** the **`D3` candidate SHA** for
+> [[RT-CARRIED-ORDINARY-COMPOSITION]], owed by `runtime-leader`, thread
+> `thr_pvxda1tcg20d`. When it merges, #6f closes and **I kick #6g** — a fresh
+> top-level post carrying its own anchor, because `thr_pvxda1tcg20d` is #6f's
+> thread and is not #6g's home.
 >
 > **A runtime turn legitimately runs hours** (`MODELS.md` — that seat is T1 on
 > genuinely hard work); tens of minutes of silence is not a stall. Read the
