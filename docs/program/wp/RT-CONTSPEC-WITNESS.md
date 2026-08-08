@@ -185,22 +185,41 @@ Both produced a false hard stop on seam 1 (`evt_3q972fhrnsr0b`, ruled
   ⛔ **State plainly in it that the census recorded first refusals of a mechanism
   that was never merged**, so a later reader does not mistake `superseded` for
   work that was silently dropped.
-- **D6 — the tracker closure**, in one commit: this node and
-  `RT-RECURSOR-TRANSPORT`.
+- **D6 — NO TRACKER WORK IS OWED BY THE RING. There is nothing to do here.**
 
-  > **Corrected 2026-08-08 by the Steward: this was a THREE-node closure and it
-  > is now TWO.** `RT-DECL-CLOSURE-PORT` merged separately under the operator's
-  > partial-merge policy and its node is already `merged`, which is terminal.
-  > **Do not flip it, and do not look for a third node to flip.**
+  > **Rewritten 2026-08-08 by the Steward, twice, and the second correction is
+  > the one that mattered.** Raised by `runtime-leader` asking a narrow workflow
+  > question about candidate `baa45832`.
   >
-  > The old wording was not merely stale, it was actively misleading: `AC-7`
-  > demanded *exactly three* status flips, so an implementer closing the two
-  > genuinely-open nodes would have **failed the AC by doing the right thing**,
-  > and the only way to pass it was to invent a third flip.
+  > **This said "the three-node tracker closure: this node,
+  > `RT-RECURSOR-TRANSPORT`, `RT-DECL-CLOSURE-PORT`."** Both other entries are
+  > wrong, for different reasons, and I removed only the first one on my first
+  > pass:
   >
-  > If `RT-RECURSOR-TRANSPORT` has also merged separately by the time you reach
-  > this, the closure is one node — **state the count you found and why**, do
-  > not reconcile it to a number written here.
+  > - `RT-DECL-CLOSURE-PORT` is already `merged`, which is terminal. Nothing to
+  >   flip.
+  > - **`RT-RECURSOR-TRANSPORT` MUST NOT BE CLOSED BY THIS NODE.** It is
+  >   `status: ready`, **`size: L`**, and **its mechanism has never been built**
+  >   — both classes it owns are live in production at `core.rs` (grep
+  >   `MatchScrutineeRecursor` and `LexicalCallArgumentRecursor`). It is a
+  >   `depends_on` of [[RT-DESCENT-RETIRE]]. **Closing it would mark unbuilt
+  >   work resolved and unblock the lane deletion while two classes can still
+  >   select it** — which is `RT-DESCENT-RETIRE`'s own banned scope: *"a partial
+  >   deletion is strictly worse than none: it removes the fallback while a
+  >   class can still select it."*
+  >
+  > **How the error survived my first correction, stated because it is the
+  > reusable part:** I re-derived the *count* (three to two) and inherited the
+  > *membership* unexamined. The list came from `RT-CONTSPEC-LOWER`, written
+  > when `RT-RECURSOR-TRANSPORT` was to land in the same atomic candidate; the
+  > recut split them and nobody re-derived the set. **Fixing the arithmetic of
+  > an inherited premise reads as having checked it.**
+  >
+  > ⇒ **What remains of `D6` is this node's own flip, and that is the
+  > Steward's at `merge-procedure.md` M7, after the publisher completes.**
+  > **Put no `status:` change in the candidate.** A node cannot truthfully
+  > record its own merge — the event it is recording has not happened, and a
+  > rejected or superseded branch then carries a tracker asserting work landed.
 
 - **D7 — INHERITED 2026-08-03 from [[RT-CONTSPEC-ACTIVATE]]: the behavioural
   target-dependence witness.** Architect ruling `evt_bz62dah3ecp0`. On the
@@ -260,15 +279,14 @@ Both produced a false hard stop on seam 1 (`evt_3q972fhrnsr0b`, ruled
   *Control:* the candidate's path list — no planner or ABI file appears.
 - **AC-6 — the prior-slice surfaces are blob-identical to the merge base.**
   *Control:* `git rev-parse` per surface, candidate against merge base.
-- **AC-7 — `D6` closes every still-open node in the set, in one commit**, and
-  each closed node names this seam as what closed it.
-  *Control:* the tracker diff; one commit, and the `status` flips match the set
-  of nodes that were open when you started. **State that set explicitly in the
-  handback.** As measured 2026-08-08 it is two — this node and
-  `RT-RECURSOR-TRANSPORT` — because `RT-DECL-CLOSURE-PORT` is already `merged`.
-  **The count is a measurement you take, not a number this AC pins**; a node
-  that merges separately before you get here leaves the set smaller and that is
-  correct, not a shortfall.
+- **AC-7 — the candidate contains NO tracker `status:` change.**
+  *Control:* `git diff` over `docs/program/issues/` on the candidate is empty of
+  `status:` lines. **Discharged by the handback stating that you made no tracker
+  change, not by a tracker diff.**
+  **Rewritten 2026-08-08** — this previously required flips the ring must not
+  make. This node's own flip is the Steward's at M7; `RT-RECURSOR-TRANSPORT`
+  must not be closed at all (see `D6`), and `RT-DECL-CLOSURE-PORT` is already
+  terminal.
 - **AC-8 — CI green** on the merge.
 
 - **AC-9 — INHERITED from [[RT-CONTSPEC-ACTIVATE]] `D4` item 4 (2026-08-03,

@@ -31,16 +31,26 @@ cumulative branch.
 
 ## Closure
 
-When this merges it closes, in one tracker commit, **every node in the set that
-is still open at that point**. That obligation moved here from
-RT-CONTSPEC-LOWER, which does not continue as a single node.
+**This node closes ITSELF and nothing else**, and the Steward performs that flip
+after the publisher completes (`merge-procedure.md` M7). The candidate carries
+no tracker `status:` change.
 
-**Corrected 2026-08-08:** the set was written as three — itself,
-[[RT-RECURSOR-TRANSPORT]] and [[RT-DECL-CLOSURE-PORT]] — and is now **two**.
-[[RT-DECL-CLOSURE-PORT]] merged separately under the operator's partial-merge
-policy and is already `merged`, which is terminal. The frame's `AC-7` pinned
-*exactly three* flips, which a correct implementer would have failed; it now
-asks for the set measured at the base.
+**Corrected twice on 2026-08-08, and the second correction is the substantive
+one.** The inherited obligation from RT-CONTSPEC-LOWER named three nodes —
+itself, [[RT-RECURSOR-TRANSPORT]] and [[RT-DECL-CLOSURE-PORT]]. Both other
+entries are wrong:
+
+- [[RT-DECL-CLOSURE-PORT]] merged separately under the operator's partial-merge
+  policy and is already `merged`, which is terminal.
+- **[[RT-RECURSOR-TRANSPORT]] must NOT be closed by this node.** It is `ready`,
+  `size: L`, its mechanism has never been built — both residual classes it owns
+  are live in production — and it is a `depends_on` of [[RT-DESCENT-RETIRE]].
+  Closing it would mark unbuilt work resolved and unblock the lane deletion
+  while two classes can still select it.
+
+**The first pass corrected the count and inherited the membership.** Re-deriving
+the arithmetic of an inherited premise reads as having checked it. Raised by the
+Runtime leader asking a narrow workflow question about the candidate.
 
 Also carried forward unchanged: the **761 witness gate**.
 `fs_read_at_malformed_offset_narrows_to_invalid_offset` must produce
