@@ -70,6 +70,7 @@ pub(in crate::cranelift_backend) enum SynthesizedFixedConstructorRole {
     ResourceReleaseFailed,
     ResourceKindMismatch,
     ResourceBufferLimit,
+    ResourceAllocationFailed,
     ResourceInvalidOffset,
     ResourceInvalidBounds,
     ResourceNoProgress,
@@ -85,7 +86,7 @@ pub(in crate::cranelift_backend) enum SynthesizedFixedConstructorRole {
 }
 
 impl SynthesizedFixedConstructorRole {
-    pub(super) const ALL: [Self; 24] = [
+    pub(super) const ALL: [Self; 25] = [
         Self::FileError,
         Self::FileOperationRead,
         Self::FileOperationWrite,
@@ -98,6 +99,7 @@ impl SynthesizedFixedConstructorRole {
         Self::ResourceReleaseFailed,
         Self::ResourceKindMismatch,
         Self::ResourceBufferLimit,
+        Self::ResourceAllocationFailed,
         Self::ResourceInvalidOffset,
         Self::ResourceInvalidBounds,
         Self::ResourceNoProgress,
@@ -126,6 +128,7 @@ impl SynthesizedFixedConstructorRole {
             Self::ResourceReleaseFailed => &symbols.resource_release_failed,
             Self::ResourceKindMismatch => &symbols.resource_kind_mismatch,
             Self::ResourceBufferLimit => &symbols.resource_buffer_limit,
+            Self::ResourceAllocationFailed => &symbols.resource_allocation_failed,
             Self::ResourceInvalidOffset => &symbols.resource_invalid_offset,
             Self::ResourceInvalidBounds => &symbols.resource_invalid_bounds,
             Self::ResourceNoProgress => &symbols.resource_no_progress,

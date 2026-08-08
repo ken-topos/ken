@@ -498,6 +498,7 @@ pub(crate) struct CheckedHostSpineV1 {
     pub resource_release_failed: StableSymbol,
     pub resource_kind_mismatch: StableSymbol,
     pub resource_buffer_limit: StableSymbol,
+    pub resource_allocation_failed: StableSymbol,
     pub resource_invalid_offset: StableSymbol,
     pub resource_invalid_bounds: StableSymbol,
     pub resource_no_progress: StableSymbol,
@@ -7016,6 +7017,10 @@ mod px7l_tests {
             resource_buffer_limit: StableSymbol::constructor(
                 &family("ResourceError"),
                 "BufferLimit",
+            ),
+            resource_allocation_failed: StableSymbol::constructor(
+                &family("ResourceError"),
+                "AllocationFailed",
             ),
             resource_invalid_offset: StableSymbol::constructor(
                 &family("ResourceError"),

@@ -44,6 +44,7 @@ pub struct NativeProcessSymbols {
     pub resource_release_failed: RuntimeSymbol,
     pub resource_kind_mismatch: RuntimeSymbol,
     pub resource_buffer_limit: RuntimeSymbol,
+    pub resource_allocation_failed: RuntimeSymbol,
     pub resource_invalid_offset: RuntimeSymbol,
     pub resource_invalid_bounds: RuntimeSymbol,
     pub resource_no_progress: RuntimeSymbol,
@@ -102,6 +103,8 @@ impl NativeProcessSymbols {
             resource_release_failed: "ctor:prelude::ResourceError::ReleaseFailed".to_string(),
             resource_kind_mismatch: "ctor:prelude::ResourceError::ResourceKindMismatch".to_string(),
             resource_buffer_limit: "ctor:prelude::ResourceError::BufferLimit".to_string(),
+            resource_allocation_failed:
+                "ctor:prelude::ResourceError::AllocationFailed".to_string(),
             resource_invalid_offset: "ctor:prelude::ResourceError::InvalidOffset".to_string(),
             resource_invalid_bounds: "ctor:prelude::ResourceError::InvalidBounds".to_string(),
             resource_no_progress: "ctor:prelude::ResourceError::NoProgress".to_string(),
