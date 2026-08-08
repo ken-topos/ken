@@ -439,6 +439,31 @@ pub(in crate::cranelift_backend) fn reset_coc_d2_counts() {
     COC_D2_SUFFIX_CONTINUATIONS.with(|count| count.set(0));
 }
 
+/// `D3`'s mutation at the repaired root: restore the pre-`D2` refusal instead of
+/// continuing the suffix.
+///
+/// The restored text is spelled here rather than referenced, because `D2`
+/// DELETED it from production -- the only other occurrence is a comment. That is
+/// exactly why `D3` cannot assert its absence: a string no code can produce is
+/// absent for free. This arm makes it producible again, so the pairing of
+/// "absent under the repair" with "present under the mutation" measures
+/// something.
+#[cfg(test)]
+thread_local! {
+    static COC_D2_SUPPRESS_CONTINUATION: std::cell::Cell<bool> =
+        const { std::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn set_coc_d2_suppress_continuation(suppress: bool) {
+    COC_D2_SUPPRESS_CONTINUATION.with(|cell| cell.set(suppress));
+}
+
+#[cfg(test)]
+fn coc_d2_suppress_continuation() -> bool {
+    COC_D2_SUPPRESS_CONTINUATION.with(std::cell::Cell::get)
+}
+
 /// **`RT-CARRIER-BYTESPAN-OBSERVE` `D2` — the reply byte span, MASKED at the
 /// typed producer** (Architect `dec_12s3j2gj67c66`).
 ///
@@ -3856,6 +3881,21 @@ impl<'a> Lowering<'a> {
                     #[cfg(test)]
                     if !suffix.is_empty() {
                         COC_D2_SUFFIX_ARRIVALS.with(|count| count.set(count.get() + 1));
+                    }
+                    // `D3`'s mutation, placed AFTER the denominator above and
+                    // deliberately not folded into it: a suppressed run must
+                    // still show the arm was reached, or a zero continuation
+                    // count would be an artifact of the mutation rather than a
+                    // measurement.
+                    #[cfg(test)]
+                    if !suffix.is_empty() && coc_d2_suppress_continuation() {
+                        return Err(unsupported(
+                            "BoundaryCarrier",
+                            "a carried producer-call scrutinee reached an ordinary eliminator \
+                             with further composed eliminators behind it; the carried \
+                             elimination consumes exactly one frame, so the remainder would be \
+                             silently dropped",
+                        ));
                     }
                     // ⇒ Fail closed past a bounded re-entry depth. See the field's
                     // own comment for why the lexicographic measure is stated but
