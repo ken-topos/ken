@@ -74,15 +74,53 @@
 > Runtime ring first (§15 — Steward compacts the team before delivering a WP,
 > gated on retros being in), then kick it.
 >
-> **STILL OWED BY ME after this publish — two items, neither optional:**
+> **M8 sent (`evt_65nps4njqm1wy`). Librarian routed (`evt_v7nebxdga6y8`). Both
+> discharged; nothing owed on the closed node.**
 >
-> 1. **M8 — notify the Adversary.** Code merge, 15 crates files. **No
->    acknowledgement of any kind, ever** (§10⁻a). If you cannot find an M8 post
->    for `e0fc15c3`, it was not sent.
-> 2. **M3 FOLLOW-UP — route TWO cited sources to the LIBRARIAN:**
->    `crates/ken-cli/tests/px4b_native_production.rs` and
->    `crates/ken-cli/tests/rt_parity_native.rs` are in
->    `library/SOURCE-ATTESTATIONS`. **Never into the ring's frame.**
+> ## `RT-SEED-CALL-PORT` IS KICKED — `evt_51606kvqqjhba` is its thread anchor
+>
+> Released from `origin/main` `1b877875`. Compaction gate discharged first:
+> implementer **ctx 0%**, QA *"Context compacted"*, all three worktrees clean
+> and zero ahead. **The RecursiveDescent campaign has resumed.**
+>
+> **Expect a free close, and do not let that expectation do the measuring.** The
+> node's `D1a` exact-set gate is the whole point — a reachability control passes
+> while a short-circuiting enumerator is the defect it exists to catch.
+> **`D1` includes BUILDING the enumerator** (it never landed in any candidate
+> lineage), and the `M` size does not cover that — **re-size when the ring
+> reports the `D1` cost at pickup.**
+>
+> ## TWO ADVERSARY FINDINGS ON THE `D5` MERGE — one live, both dispositioned
+>
+> 1. **`library/learn/reading-ken/06-execution.md:186-199` is FALSE on `main`.**
+>    It says five `assert_narrowed_alike` rows await
+>    `RT-CARRIER-BYTESPAN-OBSERVE`; that node **closed without re-arming them**,
+>    so a reader who checks it concludes the differential is restored when it is
+>    not. **Routed to the Librarian** (`evt_6eayw0w0hgc0`) — `library/` is
+>    theirs and runs concurrently. **The lesson is bigger than the fix: the
+>    `LIB-ASBUILT` guard argued the passage could not silently invert BECAUSE it
+>    named both owner nodes — that assumed the node would land AND re-arm. It
+>    landed and closed. A guard written for a whole deferral points the wrong
+>    way when only part of it lands.**
+> 2. **The 5 rows in `rt_parity_native.rs` say "awaiting Steward recut" — the
+>    recut already happened.** Folded into
+>    [[RT-SITEOP-CARRIED-WITNESS]] `D1a`: repair the pointer, keep the
+>    diagnosis.
+>
+> **CORRECTION TO MY OWN M8, in my favour and recorded so I do not repeat the
+> weaker claim.** I told the Adversary `AC-11`'s discharge *"rests entirely on
+> the `BOUNDARY_LOCAL_HELPERS` inventory staying closed"*, flagged as an
+> assumption. **It is better than that: the inventory is pinned by
+> reconciliation at `boundary_value_clif.rs:3712-3788` and `:5410`**, which
+> compares it against what is actually emitted and fails telling you to extend
+> it. **That closure has a MECHANISM behind it, not a convention** — the
+> opposite outcome from `rebuild_from_collected`.
+>
+> **UN-RE-DERIVED BY ANYONE: the 3/4 seven-call census partition.** I took it
+> from QA and the Architect; the Adversary tried to re-derive it and its three
+> instruments each measured the wrong population. **Nobody has independently
+> confirmed it.** Also unread by anyone: 23 of the 29 restated quarantine
+> reasons.
 >
 > ## `D5` WAS HARD-STOPPED AND RE-CUT — 2026-08-07 (PR #1554)
 >
