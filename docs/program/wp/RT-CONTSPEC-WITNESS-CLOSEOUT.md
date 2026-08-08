@@ -176,7 +176,9 @@ anything the campaign was measuring.
 
 ---
 
-## D4 - the 761 witness gate: fixed, not moved, and a third state the question did not have
+## D4 - the 761 gate: fixed, not moved, and a third state
+
+The question's binary form has no room for the third state; it is below.
 
 The gate asks whether
 `fs_read_at_malformed_offset_narrows_to_invalid_offset` produces
@@ -396,3 +398,101 @@ Steward flipped `RT-CONTSPEC-LEDGER` to `merged` in a separate post-merge commit
 asserts something untrue of the tree it sits in. **It is a single frontmatter
 line and it is the one to drop** if the convention should win over the AC's
 literal reading; the rest of `D6` does not depend on it.
+
+---
+
+## D7 / AC-9 - precondition discharged, behavioural witness ROUTED
+
+**`AC-9` is not discharged. It is routed, with the refusal quoted, exactly as
+the frame's own escape clause directs.** What follows is what moved and what
+did not, because the two are easy to conflate here.
+
+### What this seam did discharge: the fixture precondition
+
+The frame assigns this seam one precondition: *"at least two distinct
+same-shaped targets in one lawful callable population"*, and states that a
+pre-call *"found no distinct same-shaped call target"* refusal is a missing
+fixture, not a discharge. **That precondition is now met.**
+
+`d7_two_same_shaped_targets_in_one_population` supplies two targets that are
+same-shaped under `RT-WORKER-BIND`'s definition - declared arity 1, capture
+count 0 - differing only in the constructor their body returns. It **executes**:
+
+```
+OK (Returned(Constructor { constructor: "ctor:fixture::d7::Alpha", args: [] }), Some(517))
+```
+
+**The shape of that fixture is forced, not stylistic, and the forcing is a
+measurement.** Putting both closures in one aggregate refuses:
+
+```
+Unsupported(UnsupportedLowering { construct: "Closure",
+  reason: "a closure cannot cross the boundary: it is runtime-local and
+           live-domain only, and it has no durable lane" })
+```
+
+measured at **both** `recursive_positions` configurations, `[0]` and `[0, 1]`.
+That is the same ordinary-`Closure` wall the frame records as stopping seam 2's
+six shapes. Binding the sibling target in the enclosing scope keeps one closure
+per aggregate and lowers lawfully.
+
+### What moved: the redirect now reaches the call seam
+
+`ContinuationEmissionMutation::RedirectToDistinctSameShapedTarget` selects a
+distinct target whose declared arity and capture count equal the exact target's.
+Distinctness is on the emitted callable and sameness on the two declared counts
+- never origin inequality, never widths, alignments, offsets, carriers,
+ownership or the frame header.
+
+With a real two-target population it **resolves a distinct same-shaped target
+and enters the call seam**, which is the thing `RT-CONTSPEC-ACTIVATE` could not
+do: there the same-shaped redirect refused before the call and, in the
+Architect's words, *"was never a control at all."* Both facts are pinned by
+`d7_the_same_shaped_redirect_reaches_the_call_seam_and_is_caught_by_the_emission_oracle`,
+whose first assertion is that the pre-call refusal does **not** occur.
+
+### Why AC-9 still does not discharge, and the exact first refusal
+
+The redirect is caught at compile time:
+
+```
+Backend(Module("the emitted direct-call target funcid40 disagrees with the
+  planner-issued continuation target funcid43 for a causal token; the call that
+  was built is not the call that was planned"))
+```
+
+**The assembly therefore never executes and no result is observed.** `AC-9`
+refuses precisely this green: it is `RT-CONTSPEC-ACTIVATE`'s `AC-2`, already
+met, and it observes the mutation changing the field it mutates. Recording it
+as a discharge would be the exact substitution the AC was written to forbid.
+
+⇒ **The open design question, which is the Architect's and not mine.** For a
+redirect to reach execution, the emitted call and its planner-issued record must
+*agree* on the wrong target - the emission-equality oracle is doing its job by
+rejecting a disagreement. Making them agree means moving the **planner-issued**
+target, not only the emitted `FuncRef`. That lands on this frame's banned scope
+(no planner or ABI repair, no change to planner populations), so I did not
+attempt it. Whether a behavioural witness is reachable without touching a banned
+surface - or whether `AC-9` needs recutting against a seam that is guarded
+compile-time by construction - is a design ruling.
+
+**Nothing was weakened to get closer.** `boundary_transfer_admissibility` is
+untouched, no durable or borrowed closure lane was fabricated, no planner or ABI
+population changed, and there is no `0/0` witness.
+
+### One instrument correction, recorded because it nearly passed as evidence
+
+The redirect's first implementation read the exact target's declared shape from
+`StaticTransitionPlan::emittable_units()`. The exact target is a continuation
+specialization and is **not** a member of that population, so the lookup
+answered `None` and the control refused with *its own* error - "could not read
+the exact target's declared arity and capture count".
+
+**That refusal is a red, and a red is what a working control looks like.** Had I
+read it as the mutation being caught, I would have recorded a control that never
+compared two shapes at all. It was caught only by reading which message came
+back. The fix reads both sides from the same source - each call's own declared
+record - so a disagreement cannot be an artefact of two derivations. This is the
+same failure family the frame warns about when it says a green mutation is a
+reach question before it is a defect; it holds for reds too.
+

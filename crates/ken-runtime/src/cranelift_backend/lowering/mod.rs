@@ -1365,6 +1365,31 @@ enum ContinuationEmissionMutation {
     /// integrated fixture must supply two distinct same-shaped targets in one
     /// lawful callable population.
     SubstituteEmittedFuncRef,
+    /// **`RT-CONTSPEC-WITNESS` `D7`/`AC-9` — the two-target same-shaped
+    /// redirect, and the one control in this enum whose oracle is an executed
+    /// RESULT rather than a compile-time rejection.**
+    ///
+    /// Selects a **distinct** target whose **declared arity and capture count**
+    /// equal the exact target's, per `RT-WORKER-BIND`'s definition of
+    /// same-shaped. Distinctness is on the emitted callable, never on origin
+    /// inequality; sameness is on the two declared counts, never on widths,
+    /// alignments, offsets, carriers, ownership or the frame header.
+    ///
+    /// ⭐ **Why same-shaped is the whole point, and why this is not
+    /// [`ContinuationEmissionMutation::SubstituteEmittedFuncRef`] again.** That
+    /// one substitutes *any* other callable, so a differently-shaped target is
+    /// caught on shape by the finished-CLIF oracle and the program never runs.
+    /// A same-shaped target passes every structural check there is — same
+    /// declared arity, same capture count, same ABI — so **nothing but the
+    /// executed answer can tell the two apart.** `AC-9` asks for exactly that
+    /// and explicitly refuses a green showing only that the claimed target
+    /// moved.
+    ///
+    /// ⛔ No fall back to exact. If this function declares no distinct
+    /// same-shaped target the control fails loudly: per the frame, a pre-call
+    /// "found no distinct same-shaped call target" refusal is a missing fixture
+    /// precondition, **not** a discharge.
+    RedirectToDistinctSameShapedTarget,
     /// `4b` closure seam: emit the direct call but do not record it against its
     /// causal token, so the finished-CLIF sweep must notice an emission the
     /// records do not account for.
