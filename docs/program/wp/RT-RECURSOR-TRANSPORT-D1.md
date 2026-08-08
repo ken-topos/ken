@@ -3,8 +3,8 @@
 **Base, pinned: `f4212c2cc8a990410f6a58c48ff482b681f2e706`.** Frame blob
 `80311af5`, node blob `ed829abd`, both verified present at that base before any
 edit. **`D0` and `D1`'s measurements were taken on that tree; `D2`'s were taken
-on the `D2` candidate**, which is a different object — each section names the
-SHA its figures belong to.
+at the `D2` evidence checkpoint `392e883a`**, a different object — **every
+count in this document names the object it was measured on, never a role.**
 
 **`D1`'s answer is asymmetric.** One position closes for free; the other does
 not and is routed as a refusal. That is the input to the Steward's re-size, and
@@ -28,9 +28,9 @@ git rev-parse HEAD    -> f4212c2c...     (re-quoted before the suite)
 scripts/ken-cargo test -p ken-runtime --lib
 ```
 
-**812 passed, 0 failed, 4 ignored.** The anchor was quoted three times in the
-one shell and the worktree was empty at the time, so this is a baseline of the
-base and not of my change.
+**812 passed, 0 failed, 4 ignored, at `f4212c2c`.** The anchor was quoted three
+times in the one shell and the worktree was empty at the time, so this is a
+baseline of that object and not of my change.
 
 ### Both variants are live and selected
 
@@ -249,11 +249,19 @@ different failure with the same substring pass.
 
 ### Validation
 
-**Suite at the `D2` candidate: 816 passed, 0 failed, 4 ignored** — the 814 at
-`2e5e6a8b` plus the two `D2` controls. Targeted, same shell, anchor quoted
-before and after; never `--workspace`.
+**Suite at the `D2` evidence checkpoint `392e883a`: 816 passed, 0 failed, 4
+ignored** — the 814 at `2e5e6a8b` plus the two `D2` controls. Targeted, same
+shell, anchor quoted before and after; never `--workspace`.
 
-Every count in this document is bound to the SHA it was measured at, and no
-count in it describes "the current candidate". A suite figure is destroyed by
-the next commit that adds a test, so a count labelled by position rather than
-by object is stale the moment it is true.
+⛔ **`392e883a` is named rather than "the `D2` candidate", and the distinction
+is the one this document keeps getting wrong.** A role moves; an object does
+not. The child that added the oracle assertion below introduces **no test**, so
+the population and therefore this figure are unchanged from `392e883a` — which
+is why binding to the parent evidence SHA is stable and avoids a commit trying
+to name its own hash.
+
+Every count in this document names the SHA it was measured on — `812` and `814`
+at `2e5e6a8b`, `816` at `392e883a` — and none is labelled by role. A suite
+figure is destroyed by the next commit that adds a test, so a count bound to a
+position rather than to an object is stale the moment it is true. This document
+asserted that rule while breaking it twice; the SHAs above are the fix.

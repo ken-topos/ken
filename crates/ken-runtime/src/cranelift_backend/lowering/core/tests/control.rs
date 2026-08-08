@@ -11380,10 +11380,17 @@ fn rt_d2_exact_counts_and_the_suppression_ab() {
          a zero-match reading would mean the suppression skipped the detector rather than the \
          return, and the A/B would prove nothing"
     );
-    assert!(
-        suppressed.contains("scrutinee is not a constructor value after ordinary expression \
-lowering"),
-        "suppressing only this guard must replay the exact D1 refusal: {suppressed}"
+    // ⛔ FULL EQUALITY, not a substring. The rendered form pins all three facts
+    // the claim needs at once -- the COMPILE-TIME status, the `construct`, and
+    // the exact reason. A substring check permits a different status or a
+    // different `UnsupportedLowering.construct` carrying the same text, which
+    // is the same defect as asserting a message and calling it an oracle.
+    assert_eq!(
+        suppressed,
+        "COMPILE-ERR Unsupported(UnsupportedLowering { construct: \"ComputationalMatch\", \
+reason: \"scrutinee is not a constructor value after ordinary expression lowering\" })",
+        "suppressing only this guard must replay the exact D1 refusal -- same status, same \
+         construct, same reason"
     );
     let e_events = trace
         .iter()
