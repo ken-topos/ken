@@ -11440,25 +11440,28 @@ fn d1_producer_match_call_masking_witness() -> RuntimeExpr {
     }
 }
 
-/// **`D3` -- the masking is GONE, and this row is where `D4`'s number comes
-/// from.**
+/// **`D3` -- the masking is gone. This row establishes POST-RETIREMENT
+/// capability only, and is NOT `D4`'s number.**
 ///
-/// At `D1` this program fired `ProducerMatchCall` at its own `Match` node and
-/// the selector stopped there, hiding one later class in the scrutinee `Call`
-/// and another in a case body. `D3` retires the class, so the same program now
-/// reports those two directly.
+/// An earlier draft computed a "before/after delta" here by subtracting
+/// `{MatchScrutineeRecursor}` from what the program carries, and labelled that
+/// subtrahend the pre-retirement selector result. **It was not.** Before
+/// retirement the selector reported `ProducerMatchCall` and stopped, so the
+/// subtraction compared two POST-retirement facts and understated the successor
+/// population by half.
 ///
-/// **The before/after delta is computed here rather than remembered.** `before`
-/// is what the selector reported while the class fired -- a single reason -- and
-/// `after` is what it reports now. The difference is exactly the population
-/// `RT-RECURSOR-TRANSPORT` gains, and it is derived from the same witness in
-/// both readings so the two cannot drift apart.
+/// **The reconstructed pre-retirement fact, stated as reconstruction:** while the
+/// class fired, the selector answered `ProducerMatchCall` alone on this witness,
+/// which means BOTH surviving classes were hidden from it, not one. That cannot
+/// be re-measured here -- the variant no longer exists to name -- so it is
+/// asserted about nothing and only written down.
 ///
-/// **This is capability evidence, not a program census.** The witness is a
-/// hand-built `RuntimeExpr`, and campaign Trap 1 is explicit that such a witness
-/// establishes what the classifier can see, never what a real program exhibits.
-/// `D4` reports the delta over real programs; this row supplies the mechanism
-/// half and says so.
+/// **`D4` is a real-program before/after measurement and this witness cannot
+/// supply it.** The subject is a hand-built `RuntimeExpr`, and campaign Trap 1 is
+/// explicit that such a witness establishes what the classifier can see, never
+/// what any program exhibits. What is proved below is the capability: with the
+/// class retired, the selector walks past the `Match` node and both remaining
+/// classes are visible to the enumeration.
 ///
 /// **Promise class: durable invariant.** It pins that no reason is hidden behind
 /// a retired class on this shape. `RT-DESCENT-RETIRE` removes the enum that
@@ -11475,32 +11478,21 @@ fn d3_the_previously_masked_classes_are_now_reported_directly() {
         recursive_descent_residual(&witness),
         Some(RecursiveDescentResidual::MatchScrutineeRecursor),
         "D3: with ProducerMatchCall retired the selector must walk into the scrutinee Call and \
-         report the class that was masked there"
+         report a class that was previously hidden behind it"
     );
 
-    let carried = enumerate_recursive_descent_residuals(&witness, &empty);
+    // Both survivors are visible to the enumeration. No set difference is taken:
+    // there is no pre-retirement operand available in this tree to subtract, and
+    // manufacturing one from post-retirement values is the defect this row
+    // carried before.
     assert_eq!(
-        carried,
+        enumerate_recursive_descent_residuals(&witness, &empty),
         BTreeSet::from([
             RecursiveDescentResidual::MatchScrutineeRecursor,
             RecursiveDescentResidual::LexicalCallArgumentRecursor,
         ]),
         "D3: the program still carries both surviving classes -- retiring a class must not \
          change what the program contains, only what the selector stops at"
-    );
-
-    // `D4`'s delta, derived from this witness in both readings.
-    let before = BTreeSet::from([RecursiveDescentResidual::MatchScrutineeRecursor]);
-    let newly_visible: BTreeSet<RecursiveDescentResidual> = carried
-        .iter()
-        .copied()
-        .filter(|residual| !before.contains(residual))
-        .collect();
-    assert_eq!(
-        newly_visible,
-        BTreeSet::from([RecursiveDescentResidual::LexicalCallArgumentRecursor]),
-        "D3/D4: retiring this class makes RT-RECURSOR-TRANSPORT's population strictly larger on \
-         this shape. That is a measurement improving, not a regression"
     );
 }
 
