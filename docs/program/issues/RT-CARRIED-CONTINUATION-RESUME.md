@@ -1,7 +1,7 @@
 ---
 id: RT-CARRIED-CONTINUATION-RESUME
 title: "A carried scrutinee reaching a continuation frame has no resume path — the carried elimination does not implement the Carried x {PendingLet, Active} arm"
-status: active
+status: merged
 owner: runtime
 size: M
 gate: none
@@ -80,5 +80,32 @@ they prove materially distinct authorities, that is a hard stop, not a two-case
 Gates completion of [[RT-MATCH-RECURSOR-CONSUMERS]] and its `AC-1`. Does **not**
 reopen or reassign [[RT-RECURSOR-TRANSPORT]] `D2`. Does not touch rows 1-5 or the
 `LexicalCallArgumentRecursor` population ([[RT-LEXICAL-RECURSOR-CONSUMERS]]).
+
+## Closed 2026-08-08 — all four deliverables landed, all eight ACs met
+
+`D0`/`D1` census, `D2` route and `D3` control are on `main` at **`06e031de`**,
+across PRs **#1623** (`cc736aaf`, the accepted partial) and **#1625**
+(`752a7099`, the control). CI green on both.
+
+| AC | discharge |
+|---|---|
+| AC-1 population closed by measurement | the four-cell census over **486 arrivals** with denominators, not a grep |
+| AC-2 `PendingLet`/`Active` partitioned on evidence | discharged in a shape the AC did not anticipate — **one variant fires, the other has no members.** See the note in the frame |
+| AC-3 committed discriminating control | `D3`, keyed on the **advance** and proven able to fail |
+| AC-4 landed guards intact | `emit_carrier_transfer` byte-unchanged, `carried_join_arm` unchanged, `PendingLet` still fail-closed |
+| AC-5 / AC-6 / AC-7 | zero added `#[ignore]`; no retirement or lane deletion; no tracker `status:` in either candidate |
+| AC-8 CI green | #1623 and #1625 |
+
+> ### THIS NODE CLOSING DOES NOT CLOSE A ROW, AND THAT IS NOT A SHORTFALL
+>
+> **`AC-1` here is *this node's* population closure and it is discharged.** The
+> undischarged `AC-1` that appears throughout this node's handbacks belongs to
+> [[RT-MATCH-RECURSOR-CONSUMERS]] — a different node's AC, now gated on
+> [[RT-CARRIED-ORDINARY-COMPOSITION]]. **Do not read the two as one.** Both rows
+> still refuse, one authority further out.
+>
+> The obligation here was *"resume a pending computation over a carrier value,
+> or prove that frame/value pairing invalid."* The resume path was built and the
+> carrier was **measured** to survive the composition. That obligation is met.
 
 Frame: `docs/program/wp/RT-CARRIED-CONTINUATION-RESUME.md`.
