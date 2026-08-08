@@ -195,7 +195,7 @@ evidence summary. Function-local Cranelift handles do not escape their scope.
 ## 3. Recommended architecture
 
 ```mermaid
-flowchart LR
+flowchart TD
     Source[Checked RuntimeExpr] --> Plan[Validated static plan]
     Plan --> Terms[Canonical term and generated-term arenas]
     Terms --> State[Closed lowering state and continuation IR]
