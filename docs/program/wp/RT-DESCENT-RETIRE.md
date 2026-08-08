@@ -106,12 +106,44 @@ the proof is unavailable and any argument for it is circular.
   stale "cannot occur" is not merely wrong prose — **it is the justification for
   an arm that may now be reachable and wrong.** No test reds.
 
-  **The population is real, not hypothetical:** a grep for
+  **THE 46 IS A CANDIDATE SET, NOT A BOUND — AND THE PHRASE LIST MISSES THE
+  CLASS THAT WAS ACTUALLY FALSIFIED.** A grep for
   `cannot (arrive|occur|reach|happen)` / `never reaches` / `unreachable in
-  practice` / `by construction` across
-  `cranelift_backend/lowering/*.rs` and `planning/*.rs`, excluding tests,
-  returned **46 hits at `origin/main = 1699e0a3`.** Most will be unrelated. The
-  sweep's job is to separate them.
+  practice` / `by construction` across `cranelift_backend/lowering/*.rs` and
+  `planning/*.rs`, excluding tests, returned **46 hits at
+  `origin/main = 1699e0a3`.** **Do not treat that as the population.** I
+  selected it by phrase while scoping this deliverable by premise; those are not
+  the same set, and the gap is not hypothetical.
+
+  **Two verified counterexamples**, both production, both load-bearing
+  impossibility premises, **neither matching any of the four patterns**
+  (Adversary, on the `D2` merge; coordinates re-derived by me at
+  `origin/main = 55d811b8`, since the reported ones had drifted):
+
+  - `lowering/core.rs:11324` — *"planner proved impossible, and no switch could
+    instantiate it."*
+  - `lowering/core.rs:15447` — *"...already refused every other source, so this
+    arm is **unreachable-by-validation** rather than a fallback."*
+
+  ⇒ **The second is the falsified claim's exact structural shape:** an arm whose
+  safety is **delegated to a named upstream stage's refusal.** The one that broke
+  held precisely that, and broke because the upstream stage classified on the
+  **source** shape while the world moved underneath it.
+
+  **And note the trap in the wording:** *"unreachable-by-validation"* is one
+  hyphen from *"unreachable in practice"* and means something different — it
+  names **which stage is trusted**, which is exactly the premise that can go
+  stale.
+
+  ⇒ **Widen the selector before you enumerate.** The at-risk premise *"an
+  earlier stage already refused this"* is expressible with none of the four
+  phrases. A first cut — `already refused` / `refused every` / `proved
+  impossible` / `validated upstream` / `guaranteed by the (planner|validator)` —
+  finds **4 more in `core.rs` alone**. **Treat both lists as seeds and state the
+  selector you actually ran.**
+
+  **Neither counterexample is claimed to be false.** Their truth was not
+  evaluated; they are evidence about the *enumeration's coverage*, nothing more.
 
   **Scope it by the premise, not by the phrase.** The at-risk class is any claim
   resting on *which values can reach a point* — carried versus compile-time
