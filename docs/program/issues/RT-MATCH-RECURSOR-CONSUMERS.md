@@ -1,7 +1,7 @@
 ---
 id: RT-MATCH-RECURSOR-CONSUMERS
 title: "Complete the MatchScrutineeRecursor consumer repair in Position A — the D2 increment closed one witness, not the population"
-status: ready
+status: active
 owner: runtime
 size: M
 gate: none

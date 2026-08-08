@@ -33,29 +33,32 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-08 ~12:1xZ · HARD STOP 4 PARTITIONED INTO TWO NODES; `8efdfdb3` DID NOT LAND
+## LIVE — 2026-08-08 ~12:5xZ · CORRECTED `D0`-`D2` LANDED; `RT-MATCH-RECURSOR-CONSUMERS` IS ACTIVE
 
-**`main = c7693a7c`, never modified today.** Runtime is working the `D2` record
-correction; both successor nodes are filed and framed.
+**`main = a737b972`.** The corrected `D0`-`D2` merged at `89aa1550`;
+`8efdfdb3` never landed. Runtime is now building
+[[RT-MATCH-RECURSOR-CONSUMERS]], and the lexical successor is framed behind it.
 
 | item | state |
 |---|---|
 | corrected `D0`-`D2` | **MERGED.** `b62ff22d` squashed to `main` **`89aa1550`**, CI green, verified by content on all three paths. Decision `dec_57zsqcpzcpmhp` |
 | `8efdfdb3` | **never merged.** Approval withdrawn mid-publish (`evt_38bz22cqd7e48`); `dec_6nsrbyw1wjpb` void; PR #1609 closed pre-merge, synthetic branch deleted |
 | what landed instead | a bounded child over `8efdfdb3` narrowing every class-wide claim to the exact witnesses, recording **both** A and B populations as open. `lowering/core.rs` **byte-identical to `8efdfdb3`** — the `D2` production mechanism is untouched by the correction |
-| runtime ring | **compacted** at this WP boundary (all three seats), ready for the next node |
+| runtime ring | **compacted** at this WP boundary (all three seats), then kicked. Leader cut `wp/RT-MATCH-RECURSOR-CONSUMERS` from `89aa1550` and dispatched `D0`+`D1` as one continuous turn; implementer confirmed picked up |
 | branch tip `10369776` | **held evidence only** — not a candidate, not a repair base, not to be continued |
-| [[RT-MATCH-RECURSOR-CONSUMERS]] | **`ready`, framed** — row 6 / Position A completion. **Releases first** |
+| [[RT-MATCH-RECURSOR-CONSUMERS]] | **`active`** — released as `evt_131xgg8gd16v`, thread `thr_5wff`. Row 6 / Position A completion. First of the two by ruled order |
 | [[RT-LEXICAL-RECURSOR-CONSUMERS]] | **`draft`, framed and shovel-ready** — rows 1-5. Flips `ready` the moment the A node merges |
 | `D3` | blocked on **both**. `RT-DESCENT-RETIRE` downstream of that |
 | `#[ignore]` on this arc | **zero, ruled.** Not discouraged — ruled out |
 | [[RT-CENSUS-CAVEAT-GUARD]] | filed `ready` (PR #1611). The last unowned finding from this window; blocks nothing, contends on `core/tests/control.rs`, so it schedules after this arc |
 
 **Merged this window: #1610** (the partition), **#1611** (the census-guard
-node), **#1612** (briefing), **#1613** (the corrected `D0`-`D2`, the only code
-merge). `main` moved `c7693a7c` → `5d4c623e` → `5939c46d` → `41dfac14` →
-**`89aa1550`**. Adversary notified on #1613 per merge-procedure M8
-(`evt_10r40cs54j4gc`), with both open populations named as unhunted.
+node), **#1612** / **#1614** (briefing), **#1613** (the corrected `D0`-`D2`, the
+only code merge). `main` moved `c7693a7c` → `5d4c623e` → `5939c46d` →
+`41dfac14` → **`89aa1550`** → **`a737b972`**. Adversary notified on #1613 per
+merge-procedure M8 (`evt_10r40cs54j4gc`), with both open populations named as
+unhunted; it hunted `89aa1550` and returned **no defect**
+(`evt_5armvc9aejj8t`), correctly unacknowledged per §10⁻a.
 
 > ### TWO PUBLISHER RUNS KILLED PRE-MERGE THIS WINDOW, AND I HANDLED THEM DIFFERENTLY ON PURPOSE
 >
@@ -92,16 +95,26 @@ merge). `main` moved `c7693a7c` → `5d4c623e` → `5939c46d` → `41dfac14` →
 
 > ### MY NEXT ACTION, so a cold resume does not have to re-derive it
 >
-> **When the `D2` correction merges: compact the runtime team, then kick
-> [[RT-MATCH-RECURSOR-CONSUMERS]].** Its frame is written at
-> `docs/program/wp/RT-MATCH-RECURSOR-CONSUMERS.md` — **do not re-frame it.** The
-> kick is a top-level post and must carry the COORDINATION §4b anchor line.
-> **Then flip [[RT-LEXICAL-RECURSOR-CONSUMERS]] to `ready`** the moment the A
-> node merges; its frame is written too.
+> **DISCHARGED ~12:4xZ:** the runtime ring was compacted and
+> [[RT-MATCH-RECURSOR-CONSUMERS]] kicked as `evt_131xgg8gd16v` with the §4b
+> anchor line. What follows replaces it.
 >
-> **The wait has an address (§1a):** a resolved `dec_` on `0003cb5b`, owed by
-> `runtime-leader`. If that is absent and the ring is quiet, that is the stall
-> to chase — not a re-frame.
+> **The wait has an address (§1a):** the `D0`/`D1` exact-SHA checkpoint — or a
+> frame hard stop — owed by `runtime-leader` on thread `thr_5wff`. `M` is
+> provisional and that checkpoint is my re-size point. **A runtime turn
+> legitimately runs hours** (`MODELS.md` — that seat is T1 on genuinely hard
+> work); tens of minutes of silence is not a stall and must not be nudged as one.
+>
+> **The moment it merges: flip [[RT-LEXICAL-RECURSOR-CONSUMERS]] to `ready` and
+> kick it.** Its frame is already written at
+> `docs/program/wp/RT-LEXICAL-RECURSOR-CONSUMERS.md` — **do not re-frame it.**
+> Compact the ring first, then kick with the §4b anchor line. There is no
+> Steward pass owed between that merge and that kick.
+>
+> **DO NOT FOLD THE TWO NODES.** Distinct producer, activation hook, boundary
+> and completion owner. If the two `D1` partitions prove one exact shared
+> production root, that is a **subsumption proposal routed to me before
+> coding** — never inferred from shared retirement timing or syntax.
 
 > ### THE CENSUS PARTITIONED SIX REDS INTO TWO POPULATIONS AND TWO SEAMS
 >
