@@ -569,7 +569,29 @@ worker `StaticOriginId(723)`, arity `1`, `dynamic_splices=1`,
 > ⇒ ⛔ Read §8b below as a fact about the `723` residual, ⛔ never as authority that
 > `D7`'s population is closed.
 >
-> ⭐⭐ **WHAT THIS NODE NOW OWES, and it is not a cell repair:** replace `D7`'s
+> ## STEWARD FLAG 2026-08-08 — RE-DERIVE THIS OBLIGATION BEFORE PICKUP
+>
+> **The paragraph below was written while `RT-DECL-CLOSURE-PORT` `D7` was
+> unlanded. `D7` has since merged, and the Architect has ruled on what it did
+> and did not owe (`evt_1v9m7t4m9dmj7`).** Two things changed under it:
+>
+> - **`D7` landed the narrower `PlannedEffectSeat` population**, derived from
+>   actual host-effect consumers, with a deliberately separate vocabulary. Some
+>   or all of "replace `D7`'s population authority in place" may already be
+>   discharged.
+> - **The four continuation-side `BoundaryUse*` axes are being deleted** by
+>   `RT-CONTSPEC-LEDGER`, which this node sits behind. They are an unowned
+>   schema fragment with no consumer. **The `BoundaryUse` record named below is
+>   the host-effect population, not those four axes** — same word, different
+>   domain, and conflating them is the exact confusion `D7` was built to
+>   prevent.
+>
+> ⇒ **Do not start from this paragraph.** Re-derive what remains owed against
+> the merged `D7` and route the delta to the Steward. This flag is a caution
+> that the text is stale, **not** a ruling that the obligation is discharged —
+> nobody has measured that yet.
+>
+> **WHAT THIS NODE NOW OWES, and it is not a cell repair:** replace `D7`'s
 > **population authority in place** — re-derive from the actual owner/phase
 > transition graph, one exact `BoundaryUse` record per static lowering event, one
 > choke-point API with unforgeable planned-edge tokens, and a planned-set-vs-

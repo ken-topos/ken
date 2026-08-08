@@ -40,10 +40,14 @@ Three measurements agree on the boundary, all in current source at
    `plan_static_transition_graph_with_symbols` that is **not a field of
    `StaticTransitionPlan`**. So `(case body, ordinal)` does not determine the
    IH contract, and the walk cannot reach the fact that would.
-3. **Production continuation inputs have no callable domain at all.**
-   `BoundaryUseAvail::Callable` and `BoundaryUseNeed::PreserveCallableIdentity`
-   exist solely as `#[cfg(test)]` mutations; every production projection is
-   `Value` / `PreserveValue`.
+3. **Production continuation inputs have no callable domain at all.** As
+   measured when this node was filed, `BoundaryUseAvail::Callable` and
+   `BoundaryUseNeed::PreserveCallableIdentity` existed solely as `#[cfg(test)]`
+   mutations; every production projection was `Value` / `PreserveValue`.
+   **`RT-CONTSPEC-LEDGER` (recut 2026-08-08) deletes those enums outright**, so
+   the measurement holds a fortiori once that node lands. The frame's `D0` says
+   how to record which world you measured in; the shape of this node is
+   unaffected either way.
 
 ## Why this is a successor and not a precursor
 

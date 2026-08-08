@@ -1,59 +1,72 @@
 ---
 id: RT-CONTSPEC-LEDGER
-title: "ContinuationSpecialization seam 3 — make the boundary-use ledger record something: the four boundary-use axes are compile-time constants in production, so the ledger distinguishes no two continuation inputs"
+title: "ContinuationSpecialization seam 3 — retire the boundary-use schema: the four BoundaryUse axes are compile-time constants that no lowering, ABI, selection, lifetime, or emission consumer reads, so they are deleted from the continuation-specialization contract"
 status: ready
 owner: runtime
-size: M
+size: S
 gate: none
-depends_on: [RT-CONTSPEC-ACTIVATE, RT-DECL-CLOSURE-PORT]
+depends_on: [RT-CONTSPEC-ACTIVATE]
 blocks: [RT-CONTSPEC-WITNESS]
 github: null
-origin: "Architect ownership/sizing ruling evt_1yymw1gdszpbs (2026-08-02), outcome (c) on RT-CONTSPEC-LOWER, seam 3 of four. Steward-filed (agents cannot create tracked work per COORDINATION section 2)."
+origin: "Architect ownership/sizing ruling evt_1yymw1gdszpbs (2026-08-02), outcome (c) on RT-CONTSPEC-LOWER, seam 3 of four. Recut to schema retirement by Architect ruling evt_1v9m7t4m9dmj7 (2026-08-08), sustaining hard stop 7. Steward-filed (agents cannot create tracked work per COORDINATION section 2)."
 ---
 
-# Seam 3 — the ledger's vocabulary exists only under `cfg(test)`
+# Seam 3 — the boundary-use schema is unowned, so it is deleted
 
-Measured at `main = cef564f1` in
-`crates/ken-runtime/src/cranelift_backend/planning/static_transition.rs`:
+Measured at `main = 0fd9f6e8` in
+`crates/ken-runtime/src/cranelift_backend/planning/static_transition.rs`, which
+is the **entire** occurrence surface (27 `BoundaryUse` hits and 28
+boundary-field hits across `crates/`, all in that one file):
 
-- The four boundary-use enums (`BoundaryUsePhase` `:417`, `BoundaryUseOperation`
-  `:424`, `BoundaryUseNeed` `:431`, `BoundaryUseAvail` `:438`) each have two
+- The four boundary-use enums (`BoundaryUsePhase` `:878`, `BoundaryUseOperation`
+  `:885`, `BoundaryUseNeed` `:892`, `BoundaryUseAvail` `:899`) each have two
   variants, and in each the **second is `#[cfg(test)]`**.
 - `ContinuationInputProjection` has **exactly one** construction site,
-  `exact_continuation_projection` `:2754`, which hardcodes all four to the one
-  non-test variant.
+  `exact_continuation_projection` `:7491-7494`, which hardcodes all four to the
+  one non-test variant.
+- **No lowering, ABI, selection, lifetime, or emission consumer reads any of
+  them.** Their only other behaviour is test mutation and copy-back in the
+  interning-key omission harness.
 
-⇒ Every continuation input the planner produces carries the identical
-boundary-use tuple. The ledger has one row shape and records no distinction.
+## Recut 2026-08-08 — from population to deletion
 
-## The finding worth carrying: the control is green and unreachable
+The prior cut told the ring to make the four second variants
+production-reachable and prove a distinct-tuple count above 1. Hard stop 7 fired
+against it and the Architect **sustained** the stop (`evt_1v9m7t4m9dmj7`).
 
-`continuation_keys_equal_under_mutation` `:2832` already proves, per field, that
-the interning key separates two units differing only in that field. That proof
-is real and must keep passing. But `ContinuationProjectionOmission` `:531` is
-itself `#[cfg(test)]`, and the harness reaches a distinct value by flipping to
-the `#[cfg(test)]` variant.
+The fields are not a dormant authority awaiting a mapping. They are an unowned
+schema fragment: changing a tuple would intern another specialization key whose
+emitted semantics are identical. Populating them *"would manufacture
+semantically duplicate units and then call the duplication evidence that the
+ledger works."*
 
-⇒ **The discrimination is proved over a value production cannot construct.** The
-seam's subject is not a missing mechanism — it is an instantiated key over an
-uninstantiated vocabulary. A green boundary control today is not evidence the
-ledger works.
+⇒ The seam keeps its position and its owner, and its deliverable becomes
+deletion: the four enums, the four fields on `ContinuationInputProjection` and
+`ContinuationInputView`, the constructor literals, the view-copy path, and the
+corresponding omission variants, mutation cases, copy-back cases and four rows
+of the key-discrimination control. Removing those rows retires tests for
+distinctions production cannot make; it does not weaken a production guarantee.
 
-## Recut 2026-08-02 — flipped `draft` to `ready`
+## `RT-DECL-CLOSURE-PORT` is no longer a dependency authority
 
-The prior cut selected 17 D7-owned rows from the `46d29783` first-refusal
-census. That census is a historical record from the held `1aef3192` lineage and
-cannot name a current source authority; seam 2 was recut off it for the same
-reason (`evt_2zhx69f2fw07w`, Architect confirmation `evt_66t42tapvdbsj`). The
-census is no longer an input to any deliverable or AC.
+The same ruling corrected the Architect's earlier `evt_40ra70t92mjd2`. That
+ruling stays correct in its negative parts — no mapping existed, the four
+literals were not a classifier, coercion into the binary enums was forbidden —
+but its ownership claim was wrong: **`RT-DECL-CLOSURE-PORT` `D7` did not owe a
+global boundary-use record.** Its landed `PlannedEffectSeat` population is a
+host-operation semantic seat with a deliberately separate vocabulary, and
+reading it as a continuation projection would repeat the domain confusion `D7`
+was built to prevent.
 
-The discriminator is now `D5`: distinct boundary-use tuples over a fixed
-fixture, **exactly 1 on the base and greater than 1 on the candidate**. A
-candidate census of 1 fails the seam.
+`RT-DECL-CLOSURE-PORT` is therefore **removed from `depends_on`** and is
+historical context only. It is merged regardless, so this changes authority, not
+gating.
 
-Release is gated on seam 2 merging via `depends_on`, not on further framing.
-Seam 2 may edit `static_transition.rs`, so the frame opens with a mandatory
-re-measurement and a hard stop if it disagrees.
+## Sizing dropped from M to S
 
-Frame: `docs/program/wp/RT-CONTSPEC-LEDGER.md`. Branches from `main` after seam 2
-lands and carries only its own delta.
+A single-file deletion with a closed census and no design left in it. One
+checkpoint, not three: `D2` alone does not compile, because the mutation cases
+reference the deleted variants.
+
+Frame: `docs/program/wp/RT-CONTSPEC-LEDGER.md`. Branches from `main` and carries
+only its own delta.
