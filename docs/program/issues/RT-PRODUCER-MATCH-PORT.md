@@ -1,7 +1,7 @@
 ---
 id: RT-PRODUCER-MATCH-PORT
 title: "Producer-match call port — an ordinary Match whose scrutinee is directly a Call routes the whole object to RecursiveDescent"
-status: active
+status: merged
 owner: runtime
 size: M
 gate: none
