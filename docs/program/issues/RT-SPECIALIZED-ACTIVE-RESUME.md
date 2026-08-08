@@ -3,7 +3,7 @@ id: RT-SPECIALIZED-ACTIVE-RESUME
 title: "A live specialized value with an Active frame is refused by a constructor-only destructure — Active resume does not require constructor shape"
 status: active
 owner: runtime
-size: M
+size: S
 gate: none
 depends_on: [RT-CARRIED-ORDINARY-COMPOSITION]
 blocks: [RT-MATCH-RECURSOR-CONSUMERS]
@@ -113,3 +113,71 @@ the four landed repairs above. Does not touch rows 1-5 or the
 `LexicalCallArgumentRecursor` population ([[RT-LEXICAL-RECURSOR-CONSUMERS]]).
 
 Frame: `docs/program/wp/RT-SPECIALIZED-ACTIVE-RESUME.md`.
+
+## `D0`/`D1` MEASURED — re-sized `M` to `S`
+
+Steward, 2026-08-08, `evt_64f8gm80y2w0y`.
+
+Checkpoint `f3be6476`, base `dcd6d84c`, one path `+257/-0`, `crates/`
+byte-identical. **`AC-1` and `AC-2` discharged over the lib corpus.**
+
+`Specialized x first-Active` closes at **4 arrivals, 2 independent** (`d8d`,
+`px8j`; `ccr_d3` and `coc_d3` are this chain's own committed controls, excluded).
+Denominator 497 arrivals / 507 retained, one disposition each, zero orphans.
+All four uniform: `ProcessExitStatus`, `pending_len=0`, `route=DirectScrutinee`,
+`owner=Predeclared(0)`, disposition `ConstructorRefusal`. Every other class is
+**zero**, and two of those zeros are stronger than "not observed":
+`BoundedNat`/`StructuralNat` are **never reached from this function at all**, and
+the variant axis is a **wildcard-free committed table**, so a new `Lowered`
+variant cannot be silently absorbed.
+
+> ### THE RESUME IS THE IDENTITY FOR THE WHOLE MEASURED POPULATION
+>
+> `resume_active_continuation` opens with
+> `let Some((head, tail)) = active.pending.split_first() else { return Ok(value) };`,
+> and **every measured member has `pending_len=0`**.
+>
+> ⇒ **Routing to the resume and simply skipping the guard are observationally
+> identical on every member.** A `D3` control keyed on behaviour — refusal gone,
+> value flows — **cannot discriminate the two implementations**; a guard-skip
+> passes it identically, and the difference surfaces only when a
+> non-empty-`pending` member appears and is silently mishandled.
+>
+> **`D3` must assert the ROUTE was taken**, not merely that the refusal
+> disappeared. The mechanism is chosen for behaviour no measured member
+> exercises, so that is a measured-at-base limitation, not a proven general
+> resume.
+
+> ### THE RETAINED LANE IS A FREE POSITIVE CONTROL, AND IT TESTS THE THESIS
+>
+> The **same two programs** arrive as `Constructor, pending_len=1, ACCEPTED` when
+> retained and `ProcessExitStatus, pending_len=0, REFUSED` when activated, with
+> the `Active` frame constant across both. **The retained lane already reaches
+> the end state the activated lane should reach**, on the same program, and both
+> lanes already run.
+>
+> That is a **non-degenerate pair on a shared input** (`COORDINATION §7b`) and is
+> stronger than a counter: a counter says the route fired, the pair says the two
+> lanes agree. **It is also a direct test of the campaign's thesis** that the
+> residual lane is removable without changing behaviour — if the lanes diverge
+> after `D2`, the premise failed and that is a stop-and-route.
+
+**`AC-5` is discharged BY DISJOINTNESS AND THE DISCHARGE IS CONDITIONAL.** The
+committed suppression control arrives as `Specialized(RecursiveBackedge)` with
+first frame `Ordinary` — outside the repair cell on **both** axes. That holds
+**for the narrow key only**. `D2` routes `ProcessExitStatus x first-Active` as
+measured; any widening re-measures `AC-5` in the same candidate and is never
+carried forward.
+
+**Owed before `D2`: the cross-crate census.** The `D0` instrument is env-gated
+rather than `cfg(test)` precisely so it can run inside `ken-cli` and
+`ken-verify` integration binaries, where a `cfg(test)` instrument is structurally
+blind. **That run has not been performed**, so the closed perimeter is the lib
+corpus, and both independent members are hand-built `RuntimeExpr` values —
+**Campaign Trap 1, unclosed across five nodes because the capability did not
+exist until now.** Bounded, with an exit: if the harness cannot carry the
+instrument, that is the answer, and `D2` proceeds on the lib-corpus perimeter
+with the limitation recorded here.
+
+No hard stop fired. Interface widening in particular did **not** fire:
+`resume_active_continuation` (`core.rs:2059`) already takes a `LoweringOperand`.
