@@ -1,0 +1,115 @@
+---
+id: RT-SPECIALIZED-ACTIVE-RESUME
+title: "A live specialized value with an Active frame is refused by a constructor-only destructure — Active resume does not require constructor shape"
+status: ready
+owner: runtime
+size: M
+gate: none
+depends_on: [RT-CARRIED-ORDINARY-COMPOSITION]
+blocks: [RT-MATCH-RECURSOR-CONSUMERS]
+github: null
+origin: Architect fifth-wall sibling-authority ruling evt_1pw1ng8448mef (2026-08-08) on the RT-CARRIED-ORDINARY-COMPOSITION D2 hard stop evt_5vs6jav0b9zws, discharged against the evidence-only trace aa78c973. Handle suggested by the Architect in the same ruling. Campaign docs/program/16-recursive-descent-retirement.md node #6g. Steward-filed (agents cannot create tracked work per COORDINATION §2).
+---
+
+> # THIS IS THE FIFTH WALL, AND THE FIRST ONE THAT IS NOT A CARRIER PROBLEM.
+
+The previous four were `BoundaryCarrier` refusals about how a carried operand
+may **cross or be consumed**. **This one is not carrier transport at all — the
+carrier has already been eliminated.**
+
+Four repairs landed on this chain and **none is reopened by this node**:
+
+- [[RT-RECURSOR-TRANSPORT]]'s `D2` at `resume_active_continuation`.
+- [[RT-MATCH-RECURSOR-CONSUMERS]]'s `D2` at `carried_join_arm`.
+- [[RT-CARRIED-CONTINUATION-RESUME]]'s `D2` — the `Carried x Active` resume route.
+- [[RT-CARRIED-ORDINARY-COMPOSITION]]'s `D2` — the suffix continuation, **which
+  worked**: the trailing-suffix refusal is gone from both A rows, and the rows
+  reaching a fifth authority is itself the proof the continuation ran.
+
+## What it is
+
+```
+Unsupported(ComputationalMatch, "scrutinee is not a constructor value after
+ordinary expression lowering")
+```
+
+Owner: **`lower_computational_match_value_composed`**, at its
+`Lowered::Constructor` destructure. *(At the `D2` candidate `1f89a92b` that
+destructure is `core.rs:3923` and the refusal `core.rs:3932`. **The function name
+and the destructure are the handles** — this node moves that code, so line
+numbers rot against its own deliverable. Re-derive by name.)*
+
+## The owned fact, and why it is a distinct authority
+
+**The destructure sits before the eliminator dispatch.** So the value's shape is
+demanded before anyone asks what the eliminator needs, and **an `Active` frame
+never reaches its resume when the value is an ordinary non-constructor.**
+
+**Constructor shape is necessary for `Computational` and `Ordinary` elimination.
+It is not a prerequisite for resuming an `Active` continuation** — the existing
+producer and bounded/structural-Nat paths already resume `Active` over a
+`LoweringOperand` without that premise (Architect, `evt_1pw1ng8448mef`).
+
+Measured on the evidence-only trace `aa78c973`, identical index-for-index across
+both A rows: the carried ordinary elimination **completes** and returns
+`Specialized(Lowered::ProcessExitStatus)`; the remaining stack is exactly
+`[Active]` — the bare tail of the pre-continuation frame list; and
+`resume_active_continuation` **has not entered** before the refusal.
+
+⇒ An ordinary live value meets a valid eliminator at a consumer that demands a
+constructor first. **That is not a defect in the `D2` continuation.**
+
+## Population
+
+**Every `Specialized x first-Active` arrival at
+`lower_computational_match_value_composed`**, grouped by exact `LoweredVariant`,
+owner/route, `active.pending` length and frame kinds, with denominators and
+intersections.
+
+**The two measured `ProcessExitStatus` rows are the floor, not the perimeter.**
+This campaign has now read a small-witness result as a class-wide property four
+times, and every correction cost more than the census would have.
+
+## The partition that must not be assumed
+
+`D1` partitions **at least** these, and a shared refusal is not evidence they
+share a mechanism:
+
+1. **ordinary live values that may be resumed** — the repair population;
+2. **`Constructor`**, plus the already-routed `BoundedNat` / `StructuralNat`
+   controls;
+3. **`RecursiveBackedge`** — protocol machinery, **must propagate, not resume**;
+4. **`Trap`** — terminal, **must seal or propagate, not resume**;
+5. any other represented or forbidden variant the census actually finds.
+
+> ### DO NOT MOVE ACTIVE DISPATCH WHOLESALE ABOVE THE SHAPE AND TERMINAL GUARDS
+>
+> **Architect, explicit.** Route **only the measured ordinary-live partition**
+> ahead of the constructor-only destructure, preserving the protocol and terminal
+> laws. Hoisting the dispatch is the obvious repair and it is the wrong one:
+> it would resume `RecursiveBackedge` and `Trap`, which must not resume.
+
+> ### A COMMITTED FULL-EQUALITY CONTROL PINS THIS EXACT REFUSAL
+>
+> `core/tests/control.rs:11425` asserts the rendered `Unsupported` value in
+> **full equality** — status, `construct`, and reason together — as the replay of
+> a **deliberately suppressed** `RecursiveBackedge` propagation. There is exactly
+> one production site for that string.
+>
+> ⇒ **A repair that changes or removes the message reds that assertion by
+> design.** Meet it as a known consequence, not as an unexplained mid-turn red.
+>
+> **And it is more than an obstacle — it is a free discriminator.** The control's
+> suppressed `RecursiveBackedge` path **must still reach the exact constructor
+> refusal** after the repair. If it stops doing so, the partition leaked protocol
+> machinery into the resume path, which is precisely the failure the
+> do-not-hoist rule above is guarding against.
+
+## Scope
+
+Gates completion of [[RT-MATCH-RECURSOR-CONSUMERS]] and its `AC-1`. Does **not**
+reopen the accepted [[RT-CARRIED-ORDINARY-COMPOSITION]] `D2` mechanism, or any of
+the four landed repairs above. Does not touch rows 1-5 or the
+`LexicalCallArgumentRecursor` population ([[RT-LEXICAL-RECURSOR-CONSUMERS]]).
+
+Frame: `docs/program/wp/RT-SPECIALIZED-ACTIVE-RESUME.md`.

@@ -6,7 +6,7 @@ owner: runtime
 size: M
 gate: none
 depends_on: [RT-CARRIED-CONTINUATION-RESUME]
-blocks: [RT-MATCH-RECURSOR-CONSUMERS]
+blocks: [RT-SPECIALIZED-ACTIVE-RESUME, RT-MATCH-RECURSOR-CONSUMERS]
 github: null
 origin: Architect fourth-wall ruling evt_63ae56tttz9pq (2026-08-08) on the RT-CARRIED-CONTINUATION-RESUME D2 armed stop evt_7qcgfbwgxh0qf, measured at checkpoint cc736aaf. Handle assigned by the Architect in that ruling. Campaign docs/program/16-recursive-descent-retirement.md node #6f. Steward-filed (agents cannot create tracked work per COORDINATION §2).
 ---
