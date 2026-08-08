@@ -1,7 +1,7 @@
 ---
 id: KERNEL-NESTED-IND
 title: "admit nested strictly-positive inductives in the kernel — structural positivity through declared parameter positions, generated and checked dependent eliminators with one lifted IH per contained recursive occurrence, iota, and surface consumability"
-status: draft
+status: ready
 owner: kernel
 size: L
 gate: none
@@ -10,18 +10,6 @@ blocks: [DS-9]
 github: null
 origin: Architect ruling evt_55k9f9efvd8jk, Decision dec_13af1mercv2m0 resolved. Demand-pulled by DS-9, which blocked at its first deliverable on `JsonArray (List Json)`; fork raised by the Steward as evt_1ykvpj7yvtg18. The five-point prerequisite contract below is the Architect's, transcribed verbatim in substance. Steward-filed; Steward owns the frame and AC/control placement.
 ---
-
-> ## STATUS CORRECTED `ready` TO `draft` — 2026-08-08, Steward
->
-> **`ready` means shovel-ready: a written frame, dependencies merged.**
-> This node was not, because
-> no frame exists. Dependencies are met and Team Kernel is idle, so
-> **this node is the Kernel team's blocker and the frame is Steward debt.**
->
-> **The correction is not a downgrade of the work.** A node advertising
-> startable work it does not have makes the backlog read deeper than it
-> is, and that depth is exactly what a Steward reads to decide whether a
-> team is idle for want of work or for want of a lane.
 
 > ## ⛔⛔ `D1b`/`D2` GATE (2026-07-28) — THE POLARITY PRODUCER IS FAIL-OPEN
 >

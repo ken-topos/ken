@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-08-08 18:04:02Z — from 184 issue file(s) in `docs/program/issues/`.
+2026-08-08 18:14:51Z — from 184 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -103,7 +103,7 @@ the committed file matches the generator's output.
 | `F1-37` | F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion | draft | runtime | TBD | none | — |
 | `F3-39` | F3 [task-list #39] — reducer: degrade-not-wrap + retire legacy arms | draft | runtime | TBD | none | — |
 | `F4` | content-addressing + value-model design (aka PX8-F-PROOF) | draft | foundation+spec-enclave | M | none | — |
-| `KERNEL-NESTED-IND` | admit nested strictly-positive inductives in the kernel — structural positivity through declared parameter positions, generated and checked dependent eliminators with one lifted IH per contained recursive occurrence, iota, and surface consumability | draft | kernel | L | none | — |
+| `KERNEL-NESTED-IND` | admit nested strictly-positive inductives in the kernel — structural positivity through declared parameter positions, generated and checked dependent eliminators with one lifted IH per contained recursive occurrence, iota, and surface consumability | ready | kernel | L | none | — |
 | `KW-ORACLE-CLOSURE` | close the KW-THEOREM source oracle structurally — the occurrence sweep is never applied, and the file population is a five-arm hand enumeration | merged | language | S | none | 986 |
 | `KW-ORACLE-REMOVE` | Delete the whole-tree source-text oracle: it asserts facts about repository text, which is now a prohibited test subject | merged | language | S | none | 1035 |
 | `KW-THEOREM` | rename the surface keyword `lemma` to `theorem` | merged | language | M | none | — |
@@ -152,7 +152,7 @@ the committed file matches the generator's output.
 | `RT-CONTSRC-PRODUCER-LOCAL` | Producer-local continuation source coordinate — a mid-body value is a third availability class with no ABI seat, so continuation specialization cannot name its environment | merged | runtime | L | none | — |
 | `RT-DECL-CLOSURE-PORT` | Transparent-declaration-closure emission port — a retained TransparentDeclarationClosure residual forces the whole object onto the monolithic RecursiveDescent root, which exceeds Cranelift's per-function ceiling | merged | runtime | L | none | — |
 | `RT-DESCENT-RETIRE` | Retire RecursiveDescent — delete the migration selector, the residual enum, the authority variant, and the recursive-descent emission lane | ready | runtime | M | none | — |
-| `RT-EFFECT-DIFF` | One reusable rich differential boundary over EffectObservation — interpreter vs native, first-divergence reporting, so backend-local tests can observe what only the CLI suites currently can | draft | runtime | L | none | — |
+| `RT-EFFECT-DIFF` | One reusable rich differential boundary over EffectObservation — interpreter vs native, first-divergence reporting, so backend-local tests can observe what only the CLI suites currently can | ready | runtime | L | none | — |
 | `RT-ENTRY-TRAP-254` | public_source_observes_raw_argv_environment_cwd_bytes_in_field_order exits 1 with an explicit entry trap where it expects 254 — branch-introduced, and the only tip failure that is not the byte-span gap | closed | runtime | M | none | — |
 | `RT-ENTRY-TRAP-PX7O` | px7o heterogeneous eliminator frames: native traps at the explicit entry (RuntimeTrap(4), exit 1) where the interpreter returns exit 7 -- the entry-trap family the de Bruijn repair did NOT clear | closed | runtime | TBD | none | — |
 | `RT-ESCAPE` | escaping a second Resource through a bracket fails native lowering | merged | runtime | M | none | PR #911 @ 238a5c5d (origin/main 4ac9141e, CI green) |
@@ -163,7 +163,7 @@ the committed file matches the generator's output.
 | `RT-FNSPLIT-B2B` | RT-NATIVE-FNSPLIT Boundary B2b — full emission census, finite differences, and the explicit growth verdict | closed | runtime | M | none | — |
 | `RT-FNSPLIT-B2E` | semantic boundary-value elimination — an opaque boundary inhabitant plus a mechanically closed operation-by-class disposition ledger over every reachable Lowered consumer, inert | closed | runtime | L | none | — |
 | `RT-FNSPLIT-B2F` | functionization and authority switch — per-static-origin Cranelift target functions, atomic with switch-over, equivalence evidence, and old-path removal | merged | runtime | L | none | 1192 |
-| `RT-FNSPLIT-B2O-CHECK` | the B2O checking layer advertises more than it enforces — structural closure for the item enumerator and reachability for the validator arms | draft | runtime | M | none | — |
+| `RT-FNSPLIT-B2O-CHECK` | the B2O checking layer advertises more than it enforces — structural closure for the item enumerator and reachability for the validator arms | ready | runtime | M | none | — |
 | `RT-FNSPLIT-B2O` | static body ownership — a total, validated occurrence → PredeclaredFunction mapping in the semantic plane, inert | merged | runtime | M | none | 963 |
 | `RT-FNSPLIT-B2R` | representation and call-ABI contract — a stable executable contract for every value that crosses a generated-function boundary, inert | merged | runtime | L | none | 967 |
 | `RT-FNSPLIT-B2V` | executable boundary-value ABI — one closed 64-bit tagged word for ValueWord/ResultWord plus the emitted-code interface to construct, discriminate and project it | merged | runtime | L | none | — |
@@ -229,8 +229,11 @@ Items whose status is `ready` and whose every `depends_on` entry is
 itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 
 - `CI-IGNORED-SWEEP` — nothing in the repo ever re-runs an ignored row, so every skip is write-only and a landed repair ships with its own regression cover switched off
+- `KERNEL-NESTED-IND` — admit nested strictly-positive inductives in the kernel — structural positivity through declared parameter positions, generated and checked dependent eliminators with one lifted IH per contained recursive occurrence, iota, and surface consumability
 - `RT-CARRIER-PRODUCER-OCCURRENCE` — a source aggregate reaches the carrier with no planner-issued producer occurrence, so the C2 edge refuses to emit and the nested-payload selection row never exercises its property
 - `RT-CONTSRC-CALLABLE-CONTRACT` — Closed callable-contract arm for continuation sources — a recursive IH is a compiler-only static worker with no value carrier, and the enclosing slot authority is unconditionally a value contract, so its environment sits outside the domain RT-CONTSRC-PRODUCER-LOCAL owns
+- `RT-EFFECT-DIFF` — One reusable rich differential boundary over EffectObservation — interpreter vs native, first-divergence reporting, so backend-local tests can observe what only the CLI suites currently can
+- `RT-FNSPLIT-B2O-CHECK` — the B2O checking layer advertises more than it enforces — structural closure for the item enumerator and reachability for the validator arms
 - `RT-FNUNIT-RESULT-TOKEN` — Broad starter shapes fail the result-token table on the FunctionizedUnits lane — pre-existing, unmasked by retiring SeedClosureCall
 - `RT-WORKER-FIXTURE-DECODE` — AC-5's target-redirect detector is dark — its expression dies at the run step with Backend NativeResultDecode token 9, before any of its three comparisons, while the fixture helper's other caller passes
 
@@ -252,7 +255,7 @@ is itself not yet `merged`/`closed`:
 - `ABI-S4` blocked by `ABI-M1` (status: draft)
 - `ABI-S5` blocked by `PX9` (status: draft)
 - `ABI-S6` blocked by `ABI-S1` (status: draft)
-- `DS-9` blocked by `KERNEL-NESTED-IND` (status: draft)
+- `DS-9` blocked by `KERNEL-NESTED-IND` (status: ready)
 - `F4` blocked by `A3` (status: draft)
 - `NATIVE-HANDLE-CARRIER` blocked by `RT-BACKEND-MODULE-SPLIT` (status: draft)
 - `PX10` blocked by `PX9` (status: draft)
