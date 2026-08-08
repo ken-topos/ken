@@ -55,8 +55,9 @@ that same program and be **completely unreported**.
   reported first. This is the campaign's Trap 1 and it is not optional here.
 - **Retiring this class will make [[RT-RECURSOR-TRANSPORT]]'s population
   visibly larger.** That is a *measurement improving*, not a regression, and
-   it does not mean this node broke something. Record the before/after
-  populations so the successor node is scoped against the real number.
+  it does not mean this node broke something. **Do NOT record a before/after
+  delta for it** — see `D4`: the before-side operand is destroyed by `D3`, and
+  the successor measures its own population rather than inheriting a number.
 
 ## 4. Deliverables
 
@@ -154,7 +155,10 @@ instrument can be compared. **No test will catch any of this.**
   "the residual is gone" — the objects build. `AC-1a` does **not** discharge
   this: it quantifies over the firing set, and the regression population is its
   complement (campaign doc, Trap 2).
-- **`AC-2`.** `D1`'s enumeration and `D4`'s before/after delta are in the tree.
+- **`AC-2`.** `D1`'s enumeration and `D4`'s **post-retirement capability
+  evidence** are in the tree. **A before/after delta is NOT required and must
+  not be reconstructed** — `D3` destroys the before-side operand, and
+  manufacturing it from post-retirement values is the defect `D4` records.
 - **`AC-3` (no-regression).** Workspace green **in CI** — never a local
   `--workspace` run (`COORDINATION §12`).
 - **`AC-4`.** The exhaustive-match fail-closed property at `core.rs:59-65` is
