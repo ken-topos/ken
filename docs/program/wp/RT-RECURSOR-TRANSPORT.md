@@ -215,9 +215,12 @@ Pin your base SHA in your first checkpoint post.**
 **`07ce6ef1` is not the repair base and must not be resumed.** It is **not an
 ancestor of `d9b2eb38`** and survives only on preserved and old `D7` branches.
 Measured: its `StaticRecursorWorker` prototype has **36 crate hits there and
-zero on current `main`**, while the four core files have diverged by roughly
-**+44,986/-16,942**. Continuing or cherry-picking it **would overwrite the
-landed continuation-specialization, ownership, ABI and ledger architecture.**
+zero on current `main`**, and the four core files have diverged by
+**`+58,582/-17,365`** — `git diff --numstat 07ce6ef1 837f9296 --` over
+`lowering/core.rs`, `lowering/core/tests/control.rs`, `lowering/mod.rs`,
+`planning/static_transition.rs`. Continuing or cherry-picking it **would
+overwrite the landed continuation-specialization, ownership, ABI and ledger
+architecture.**
 
 It may be cited as **historical refusal and design evidence only**. Every
 mechanism claim must be re-derived on your base.
