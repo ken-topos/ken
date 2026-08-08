@@ -10943,7 +10943,7 @@ const SEED_CALL_PORT_SOME: &str = "ctor:fixture::Core::Option::Some";
 #[cfg(test)]
 fn seed_call_port_producer_match_example() -> RuntimeExample {
     RuntimeExample {
-        name: "seed-call-port-d1a-two-variant".to_string(),
+        name: "seed-call-port-producer-match".to_string(),
         checked_core_shape: "match ((\\x . Some x) 4) with Some y => y".to_string(),
         ir: RuntimeExpr::Match {
             scrutinee: Box::new(RuntimeExpr::Call {
@@ -11832,14 +11832,14 @@ fn d5_planned_callable_declaration_origins(
         .collect()
 }
 
-// ── Control 3: the witness masks ONE variant, it does not force authority ──
+// ── Control 3: a second residual retains RecursiveDescent ─────────────────
 
 #[test]
-fn d5_c3_a_second_residual_leaves_witness_mode_on_recursive_descent() {
+fn d5_c3_a_second_residual_retains_recursive_descent() {
     let entry = d5_entry();
     let declaration = d5_declaration();
     let carrier = d5_frame_carrier();
-    // A second residual the witness has no business masking.
+    // A second residual, and the authority must stay on RecursiveDescent.
     //
     // `RT-SEED-CALL-PORT` `D3`: this was a seed-closure call until that variant
     // was retired. The property under test is that a SECOND residual keeps the
