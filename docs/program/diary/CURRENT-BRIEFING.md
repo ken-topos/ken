@@ -40,8 +40,10 @@ correction; both successor nodes are filed and framed.
 
 | item | state |
 |---|---|
-| `8efdfdb3` | **NOT merged and not merging.** Architect withdrew approval mid-publish (`evt_38bz22cqd7e48`); **`dec_6nsrbyw1wjpb` is void**; PR #1609 closed pre-merge, synthetic branch deleted from origin |
-| what lands instead | a **bounded child** over `8efdfdb3` — dispatched `evt_gkyfgre7b3tg`, **returned at `0003cb5bd67c7489b180e8c9200fa490df1898a8`** on `wp/RT-RECURSOR-TRANSPORT-d2-record`. Two files; `lowering/core.rs` **byte-identical to base**. **In review — I am waiting on its resolved Decision, owed by runtime-leader**, and I publish the same turn |
+| corrected `D0`-`D2` | **MERGED.** `b62ff22d` squashed to `main` **`89aa1550`**, CI green, verified by content on all three paths. Decision `dec_57zsqcpzcpmhp` |
+| `8efdfdb3` | **never merged.** Approval withdrawn mid-publish (`evt_38bz22cqd7e48`); `dec_6nsrbyw1wjpb` void; PR #1609 closed pre-merge, synthetic branch deleted |
+| what landed instead | a bounded child over `8efdfdb3` narrowing every class-wide claim to the exact witnesses, recording **both** A and B populations as open. `lowering/core.rs` **byte-identical to `8efdfdb3`** — the `D2` production mechanism is untouched by the correction |
+| runtime ring | **compacted** at this WP boundary (all three seats), ready for the next node |
 | branch tip `10369776` | **held evidence only** — not a candidate, not a repair base, not to be continued |
 | [[RT-MATCH-RECURSOR-CONSUMERS]] | **`ready`, framed** — row 6 / Position A completion. **Releases first** |
 | [[RT-LEXICAL-RECURSOR-CONSUMERS]] | **`draft`, framed and shovel-ready** — rows 1-5. Flips `ready` the moment the A node merges |
@@ -49,8 +51,44 @@ correction; both successor nodes are filed and framed.
 | `#[ignore]` on this arc | **zero, ruled.** Not discouraged — ruled out |
 | [[RT-CENSUS-CAVEAT-GUARD]] | filed `ready` (PR #1611). The last unowned finding from this window; blocks nothing, contends on `core/tests/control.rs`, so it schedules after this arc |
 
-**Merged this window: #1610** (the partition) and **#1611** (the census-guard
-node). `main` moved `c7693a7c` → `5d4c623e` → `5939c46d`.
+**Merged this window: #1610** (the partition), **#1611** (the census-guard
+node), **#1612** (briefing), **#1613** (the corrected `D0`-`D2`, the only code
+merge). `main` moved `c7693a7c` → `5d4c623e` → `5939c46d` → `41dfac14` →
+**`89aa1550`**. Adversary notified on #1613 per merge-procedure M8
+(`evt_10r40cs54j4gc`), with both open populations named as unhunted.
+
+> ### TWO PUBLISHER RUNS KILLED PRE-MERGE THIS WINDOW, AND I HANDLED THEM DIFFERENTLY ON PURPOSE
+>
+> **PR #1609 (`8efdfdb3`) — closed and its branch deleted.** That object was
+> never going to merge; leaving it open would age into a revert against a
+> moving `main`.
+>
+> **PR #1613 (`b62ff22d`) — left OPEN, with a comment saying it was held.** The
+> leader rejected `dec_ae7hwrrvbnfb` over its scope wording and opened a
+> replacement **for the identical object**. Closing would have thrown away a
+> live CI run and churned the PR number for nothing; the publisher reuses an
+> existing open PR for the same head. It then merged on the replacement.
+>
+> ⇒ **The discriminator is whether the OBJECT changes, not whether the Decision
+> was rejected.** Same object under a new Decision: hold the PR. New object:
+> close it.
+>
+> **The comment is load-bearing, not politeness** — an open PR with a dead
+> publisher is otherwise indistinguishable from an authorized merge in flight.
+
+> ### THE REJECTED DECISION WAS REJECTED FOR EXACTLY THE AMBIGUITY I HAD ALREADY CHECKED
+>
+> `dec_ae7hwrrvbnfb` said the *"full cut touches only"* `control.rs` and the
+> record file — ambiguous between the **correction's** diff and the **merged**
+> diff, and the difference is whether the production repair lands at all. I
+> verified before publishing: three paths from the original base, `core.rs`
+> +297 present.
+>
+> **I verified it and published; the leader rejected their own Decision over
+> it.** Both responses were right, and the split is the lesson: **verifying an
+> ambiguous record makes it safe to act on, and does nothing to make it safe to
+> leave standing.** A Decision is a durable artifact that outlives my reading of
+> it. Next time, say so at the time rather than only satisfying myself.
 
 > ### MY NEXT ACTION, so a cold resume does not have to re-derive it
 >
