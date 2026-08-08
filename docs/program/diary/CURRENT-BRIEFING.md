@@ -33,43 +33,104 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-08 ~09:0xZ · ContinuationSpecialization COMPLETE; `RT-RECURSOR-TRANSPORT` recut and HELD
+## LIVE — 2026-08-08 ~10:5xZ · `RT-RECURSOR-TRANSPORT` `D0`-`D2` APPROVED; `D3` unblocked, implementer compacting
 
-**`main = 80d41892`.** Zero open PRs. Runtime ring idle by instruction, not by
-stall — see the hold below.
+**`main = 10a96d22`.** Zero open PRs. Worktree clean, nothing unpublished.
 
-**The campaign is done.** All four ContinuationSpecialization seams merged:
-`ASSEMBLY`, `ACTIVATE`, `LEDGER`, `WITNESS`. `RT-CONTSPEC-WITNESS` merged as
-**PR #1597 at exact `2149e8c1`**, CI green, all five paths verified
-blob-identical, M7 flip landed, Adversary notified — it hunted and found **no
-defect** (`evt_ac42x3xhqa31`).
+**Runtime is ACTIVE, not held.** `RT-RECURSOR-TRANSPORT` was released and the
+ring has taken `D0`, `D1` and `D2` through to approval. The earlier "recut but
+not released" hold is **discharged** — do not re-read it as live.
 
-**Merged this session, in order:** #1582, #1584, #1585, #1586, #1587, #1589,
-#1590, #1591, #1592, #1593, #1594, then #1595 (the `RT-DESCENT-RETIRE`
-dependency-edge repair), #1596 (glyph cleanup), **#1597 (`WITNESS` code)**,
-#1598 (M7 flip + `RT-RECURSOR-TRANSPORT` recut), #1599 (campaign-doc sweep).
+**`RT-RECURSOR-TRANSPORT` state, exact:**
 
-**Campaign state.** Three of five `RecursiveDescentResidual` classes retired
-(`TransparentDeclarationClosure`, `SeedClosureCall`, `ProducerMatchCall`).
-Surviving: `MatchScrutineeRecursor`, `LexicalCallArgumentRecursor`, both live in
-`lowering/core.rs` and both owned by `RT-RECURSOR-TRANSPORT`.
+| item | value |
+|---|---|
+| approved `D2` checkpoint | `8efdfdb3` (QA + Architect, exact-object) |
+| branch base | `f4212c2c`, no rebase owed |
+| frame on `main` | blob **`f3ea354c`** (PR #1606) |
+| `D1` result | **asymmetric** — position B `LexicalCallArgumentRecursor` closes for free; `D2` was position A alone |
+| hard stop 2 | **cleared for position A** |
+| hard stop 1 | neither triggered nor cleared |
+| size | `M`, re-affirmed |
+| `D3` | authorized, **no commit yet** |
 
-> ### HOLD — `RT-RECURSOR-TRANSPORT` IS RECUT BUT NOT RELEASED
+**Merged this session:** #1582-#1599 (see below), then **#1600-#1603**
+(`RT-RECURSOR-TRANSPORT` release, four stale frame inputs, the `D2` technique
+withdrawal), **#1604** (`RT-FNUNIT-RESULT-TOKEN` frame: five decode producers
+corrected to eight), **#1605** (148 decorative glyphs out of the campaign
+artifacts), **#1606** (the `D3` frame reconciliation below).
+
+**Campaign state.** Three of five `RecursiveDescentResidual` classes retired.
+`MatchScrutineeRecursor` and `LexicalCallArgumentRecursor` survive in
+`lowering/core.rs`; `D3` retires both and is the last migration before
+`RT-DESCENT-RETIRE`.
+
+> ### `D3` — WHAT IS PROVEN, AND THE ONE THING THE NEXT TURN MUST NOT MISREAD
 >
-> It is `ready` and unblocked in the tracker as of #1598. **That is not a
-> release.** Both `runtime-implementer` and `runtime-leader` have acknowledged
-> the hold and are correctly refusing to treat the edge clearing as one.
+> **The production retirement is proven and build-clean.** Two files, six sites,
+> applied twice identically, `-p ken-runtime` at zero errors. It was **not
+> committed** — the implementer restored the tree at a clean seam rather than
+> half-apply the control rewrite on a depleted context. That was the right call:
+> a partially rewritten set of shared campaign controls either fails to compile
+> or, worse, compiles with some controls silently vacuous.
 >
-> **Blocked on:** the Architect's bounded re-read of the campaign-doc sweep
-> (#1599, `80d41892`). My post `evt_1fzv70k8cgnzt`; their finding
-> `evt_4a8eb00h5349t`. **When they clear it, release explicitly** to
-> `runtime-leader` (`agt_37reqrd72cg00`) with the `COORDINATION §4a` anchor line.
+> **The `AC-2b` sweep found 26 axis-touching tests, and they split in two:**
 >
-> **Open question I put to them and must not drop:** the `PX8` release-gate block
-> above the fence asserts `D7` *"lands atomically with `483ef7ab`"*, which did not
-> happen. I gave it a dated status line rather than a rewrite, on the grounds
-> that its gates have all merged and it routes nobody to a wrong base. If they
-> read that boundary differently, rewrite it.
+> - **23 fail to compile** after retirement — self-announcing bookkeeping.
+> - **16 still compile**, and several assert an *empty* enumeration —
+>   `d3_the_seed_corpus_fires_no_residual_at_all`,
+>   `d6_the_governed_fixture_reports_no_residual_and_selects_functionized_units`,
+>   `d3_the_d1_firing_population_now_selects_functionized_units_and_enumerates_no_residual`.
+>   **These pass, and pass for the wrong reason.**
+>
+> ⇒ **THE COMPILE ERRORS ARE A FALSE FLOOR.** A seat that dispositions all 23
+> and sees a green suite has done the easy half and holds positive evidence it
+> finished. **The 16 are the actual work list.** This is sharper than the
+> `AC-2b` I wrote, which said "every control whose subject disappears" without
+> noting the compiler is silent on half of them.
+>
+> **No recut.** Splitting `D3` would land vacuous controls on `main`, which
+> `AC-2b` forbids — the halves cannot merge independently, so a split produces
+> labels rather than merges.
+
+> ### THE `D3` FRAME RECONCILIATION — Architect `evt_4tf1hhp51nyh0`, PR #1606
+>
+> **`AC-6` demanded a property `D3` makes impossible, and I wrote it.** It said
+> the exact-set enumerator *"stays discriminating through the transition,
+> including at intermediate commits."* These two variants are the **entire**
+> live population, so `D3` leaves the enum **uninhabited** — enumerator and
+> `ShortCircuitLikeTheSelector` then agree on `{}` for every input. No
+> satisfying assignment, and no intermediate state either, since joint
+> retirement is one commit. The frame's own `0/0` ban closed the last exit.
+>
+> **Now a lifecycle boundary:** discriminating through `D2` and every commit
+> before the final variant-removal commit; **deliberately spent** at that
+> commit; zero reading handed to `RT-DESCENT-RETIRE`, whose `D1`-zero plus
+> `D2`-temporary-positive pair makes it probative. A green exact-set assertion
+> at final `D3` now **fails** `AC-6`.
+>
+> Also folded in: `D3` owns the full control sweep (six named, **explicitly a
+> floor**); four escapes banned, including moving the exact-set test unchanged
+> to `RT-DESCENT-RETIRE` where it is equally vacuous; new **`AC-2b`** requiring
+> each disposition enumerated in the handback; `AC-2` now carries the retirement
+> via the two position witnesses; the `Some(empty)` hook survives only as a
+> site-execution sentinel that must disclaim completeness in doc *and*
+> assertion.
+>
+> **The same withdrawn claim also sat in `D0`'s leading sentence**, in a section
+> I was not editing. Found only by grepping the whole file for the phrase family.
+
+> ### TRIGGER I MUST NOT DROP — `D2` is an accepted base not yet on `main`
+>
+> `8efdfdb3` is committed and approved by both reviewers, and `D3` builds on it.
+> The standing policy is that **a team's accepted base belongs on `main`**. I did
+> **not** force it, on the judgement that `D3` is one commit away and the branch
+> is not accumulating — this is a short branch, not the 203-commit pathology the
+> rule targets.
+>
+> **If `D3` has not landed within roughly two more implementer turns, that
+> judgement expires: open the merge Decision and land `D2` on its own.** The
+> Decision is the leader's to open (COORDINATION §14 — never merge on prose).
 
 > ### THE RECUT — Architect `evt_237tbdsacqbk4`, three withdrawals
 >
