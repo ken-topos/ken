@@ -241,16 +241,147 @@ measured `pending_len = 0`.** No planner, no ABI, no interface change, and the
 That is the same evidence shape that re-sized the predecessor from `M` to `S`.
 The re-size is the Steward's call, not this document's.
 
-## 10. What this checkpoint does NOT establish
+## 10. The cross-crate census: taken, and what it found
 
-- **Trap 1 is unchanged and this census does not close it.** Both independent
-  members are hand-built `RuntimeExpr` values. The instrument was written
-  environment-gated rather than `#[cfg(test)]` specifically so it could also run
-  inside `ken-cli`'s and `ken-verify`'s integration binaries, where `ken-runtime`
-  is built without `cfg(test)` and a `cfg(test)` instrument is structurally
-  blind. **That cross-crate run was not performed at this checkpoint**, so
-  nothing here establishes that a real Ken program exhibits the population. The
-  capability now exists; the measurement has not been taken.
+Run after the `D0`/`D1` checkpoint, on the Steward's ruling that `AC-1`'s
+"production boundary" means more than one build configuration.
+
+**The instrument does carry cross-crate. That is proven, not assumed.** A
+positive control was added at `select_body_emission_authority`, which runs at
+every compilation, emitting a `COMPILE` row. Without it, "no census file" and
+"no arrivals" are indistinguishable, and the zero would be uninterpretable.
+
+| target | positive control | arrivals at the boundary |
+|---|---|---|
+| `ken-cli --test px8f_buffer_native` | 1 `COMPILE` row | **0** |
+| `ken-cli --test rt_span_prov_native` | 1 `COMPILE` row | **0** |
+| `ken-verify --test px8f_write_partition` | 1 `COMPILE` row | **0** |
+
+So the `#[cfg(test)]` blindness that has bounded every previous census on this
+campaign **is genuinely bypassed** — and the boundary is still not reached from
+any of the three binaries, across three compilations.
+
+**Two facts bound how much that zero is worth, and both cut against reading it
+as reassurance.**
+
+First, **the three named tests are `#[ignore]`d at base for pre-existing
+reasons**, so a default run executes none of them. Run with
+`--include-ignored`, the only failure is
+`sp_a_foreign_span_freeze_rejects_own_span_succeeds_on_both_engines`, which is
+the test carrying the `RT-COMPMATCH-TREE-SCRUTINEE` annotation
+(*"a tree-producing match scrutinee is neither Bool nor a constructor; fails at
+base 21fd46dc"*). That is a **real-program non-constructor scrutinee**, in the
+same class as this node's wall, failing at a **different consumer** — it never
+reaches this boundary. Five tests pass. No failure is attributable to the
+instrument.
+
+Second, and decisively:
+
+> ### THE ACTIVATED LANE CANNOT BE MEASURED CROSS-CRATE AT ALL
+>
+> `SELECTOR_VARIANT_EXCLUSION`, `set_selector_variant_exclusion`,
+> `selector_variant_exclusion` and the probe block inside
+> `select_body_emission_authority` are **all `#[cfg(test)]`**. Dependent crates'
+> integration binaries build `ken-runtime` **without** `cfg(test)`, so the
+> activation seam **does not exist** in them.
+>
+> ⇒ A cross-crate run can only ever observe the **retained** lane. This node's
+> population exists **only** under A-only exclusion. Measuring it cross-crate
+> would require moving a test-only seam into production gating — banned scope,
+> and precisely the harness project the ruling said not to start.
+
+**So the honest statement is narrower than "the instrument could not carry".**
+It carried. What cannot carry is the *activation*, for a structural reason that
+is now named rather than left as an unexamined gap.
+
+**Trap 1 therefore remains open for the activated population**, and this
+candidate does not claim otherwise. Both independent members are still
+hand-built `RuntimeExpr` values.
+
+## 11. `D2`, and the sixth wall it revealed
+
+`D2` routes exactly the measured cell — `ProcessExitStatus` x first-`Active` —
+to `resume_active_continuation`, placed after the `d5a_trace` and immediately
+before the constructor-only destructure. The key is not widened to all
+first-`Active` nor to all non-constructor variants, for the two independent
+reasons recorded at the site.
+
+**The fifth wall is genuinely cleared for the routed cell**, proven by a
+route counter rather than by the refusal's absence — see the mechanism note
+below.
+
+**A sixth authority is now reachable, and it is a hard stop.**
+
+```
+Backend(Module("the discharged continuation call population is not the planned
+one: 1 planned tokens were neither directly emitted nor compositionally
+consumed, and 0 discharged tokens were never planned. Direct: 0, composed: 0"))
+```
+
+Owner: **`lowering/units.rs`, `close()`** — the continuation-call discharge
+ledger. A **different file and a different subject** from all five predecessors:
+not "may this operand cross or be consumed here", but "was the planned
+continuation-call population fully discharged". Its law is
+`planned = direct-emitted (disjoint union) composed-consumed`, asserted as sets
+and deliberately not as counts.
+
+**Why it is a stop and not something to absorb.** Every measured member has
+`pending_len = 0`, where `resume_active_continuation` returns its operand
+unchanged — discharging nothing. Resolving this requires deciding **who owns
+discharging that token for this shape**: the planner (should it plan one?), the
+resume (should the identity case still discharge?), or a third party. That is a
+**planner population** question, which is the frame's hard stop 2, and it is a
+**sixth wall**, which is hard stop 5. Two of the five fire at once.
+
+Nothing here reopens a landed repair: under the fifth wall this program aborted
+before `close()` ever ran, so `D2` made that ledger reachable for this shape for
+the first time. That is Campaign Trap 2 — fail-closed machinery working on a
+newly reachable population.
+
+## 12. Two controls whose denominators were modelling something false
+
+**Mine, caught before commit.** The `D3` route control first asserted
+`mutated_arrivals == arrivals`. It failed 1 against 2, and the reason is
+structural: **a successful route lets lowering continue and reach the consumer
+again**, while the suppressed run aborts at the first refusal. The denominator's
+only job is to rule out "the cell was never entered" as an explanation for
+`routes == 0`, and `> 0` discharges exactly that. Equality would have asserted
+that the repair has no downstream effect — the opposite of what it is for.
+
+**The predecessor's, which `D2` exposed.** `coc_d3`'s
+`assert_eq!(mutated_arrivals, arrivals)` — the clause QA, the Architect and the
+Adversary each singled out as its load-bearing strength — **now reds for the
+same reason**, and this candidate amends it to `> 0` with the justification at
+the site.
+
+That equality was true only because **both** runs aborted at the same downstream
+wall, so both traversed the same amount of program. It was never a property the
+control owned; it was contingent on the constructor-shape refusal stopping
+everything early. `D2` removes that stop for the routed cell, and the contingency
+surfaces.
+
+**This is an amendment to a predecessor's committed control and needs explicit
+re-blessing rather than quiet acceptance.** Its discriminating clauses —
+`mutated_continuations == 0`, and the pre-`D2` refusal becoming producible again
+— are untouched.
+
+## 13. Held, not committed: the lane-pair control
+
+The ruling asked for the retained-versus-activated pair on a shared input as the
+stronger positive control, on the basis that the retained lane already reaches
+the end state the activated lane should reach.
+
+**It was written, and it is what found the sixth wall.** The retained lane
+compiles the witness (`Ok`); the activated lane, after `D2`, fails in
+`units.rs::close()` with the discharge-population error above.
+
+Per the ruling's own terms — *"divergence is the campaign's premise failing, and
+it is a stop-and-route, not a local fix"* — it is **not committed**. Committing
+it red is not permissible, and weakening it to pass would absorb exactly the stop
+it detected. It is held as evidence, and the assertion it makes is the one the
+successor node has to satisfy.
+
+## 14. What this checkpoint does NOT establish
 - The zeros are **over this corpus at this base**. They are what makes the empty
   cells safe to leave fail-closed; they are not unreachability.
 - The retained-configuration reading is not this node's population. It is

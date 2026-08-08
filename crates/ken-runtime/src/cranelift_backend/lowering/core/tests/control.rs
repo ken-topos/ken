@@ -27232,12 +27232,25 @@ fn coc_d3_the_trailing_suffix_is_continued_and_the_mutation_restores_the_refusal
     let (mutated_arrivals, mutated_continuations) =
         (coc_d2_suffix_arrivals(), coc_d2_suffix_continuations());
     set_coc_d2_suppress_continuation(false);
-    assert_eq!(
-        mutated_arrivals, arrivals,
-        "the mutation must not change how often the arm is REACHED -- the denominator is taken \
-         before it. A drop here would mean the mutated side proves nothing, because the missing \
-         continuation could be explained by the arm never being entered: {mutated_arrivals} vs \
-         {arrivals}"
+    // **AMENDED BY `RT-SPECIALIZED-ACTIVE-RESUME` `D2`, and the reason is the
+    // point.** This was `assert_eq!(mutated_arrivals, arrivals)`, and that
+    // equality held only because BOTH runs aborted at the same downstream wall
+    // -- the constructor-shape refusal -- so both traversed the same amount of
+    // program. `D2` routes the ordinary-live cell past that wall, so the
+    // unmutated run now continues and reaches this arm again (measured: 2
+    // against the suppressed run's 1). The equality was therefore contingent on
+    // a downstream refusal rather than on anything this control owns.
+    //
+    // Nothing discriminating is lost. The denominator's only job is to rule out
+    // "the arm was never entered" as an explanation for zero continuations, and
+    // `> 0` discharges exactly that. The load-bearing clauses below --
+    // `mutated_continuations == 0` and the refusal becoming producible again --
+    // are untouched.
+    assert!(
+        mutated_arrivals > 0,
+        "the mutation must still REACH the arm, or the missing continuation below could be \
+         explained by the arm never being entered rather than by the mutation: \
+         mutated_arrivals={mutated_arrivals}"
     );
     assert_eq!(
         mutated_continuations, 0,
@@ -27248,5 +27261,126 @@ fn coc_d3_the_trailing_suffix_is_continued_and_the_mutation_restores_the_refusal
         suppressed.contains(PRE_D2_REFUSAL),
         "and it must make the pre-D2 refusal producible again. This is the clause that stops the \
          A-side absence check being vacuous: {suppressed}"
+    );
+}
+
+/// **`RT-SPECIALIZED-ACTIVE-RESUME` `D3` — the measured cell is ROUTED, and the
+/// route itself is what is asserted.**
+///
+/// **Why this control counts the route rather than the outcome.** `D0`
+/// measured every member of this population at `pending.len() == 0`, and
+/// `resume_active_continuation` returns its operand unchanged in that case. So
+/// routing to the resume and merely deleting the refusal produce **identical
+/// observable behaviour on every member that exists** -- same value, same
+/// absence of an error. A control keyed on "the refusal is gone" or "the value
+/// flows" would pass a guard skip verbatim, and the difference would surface
+/// only when a non-empty-`pending` member first appears, silently doing the
+/// wrong thing. The mechanism is chosen for the non-empty case, so the decision
+/// has to be observed at the decision.
+///
+/// **This control excludes itself from population evidence.** Its own arrival
+/// is a member of the cell it observes, which proves the route is reachable --
+/// not that any program has the shape. `D0`'s independent population is two
+/// (`d8d` and `px8j`), and this control is not a third.
+#[test]
+fn sar_d3_the_ordinary_live_cell_is_routed_to_the_resume_and_the_mutation_restores_the_refusal() {
+    use crate::cranelift_backend::lowering::core::{
+        reset_sar_d2_counts, sar_d2_cell_arrivals, sar_d2_routes, set_sar_d2_suppress_route,
+        set_selector_variant_exclusion,
+    };
+    struct Restore;
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            set_selector_variant_exclusion(None);
+            set_sar_d2_suppress_route(false);
+        }
+    }
+    // Still LIVE production text below the new route -- this repair moves one
+    // case out from under the refusal rather than deleting it. So unlike the
+    // predecessor's, asserting this string's absence is NOT free: the guard can
+    // still emit it, and the mutation makes it do so through the genuine
+    // production path rather than through a replica.
+    const FIFTH_REFUSAL: &str = "scrutinee is not a constructor value after ordinary expression \
+                                 lowering";
+
+    let witness = RuntimeExpr::Match {
+        scrutinee: Box::new(px8j_deferred_recursive_field_fixture()),
+        cases: ["ctor:prelude::Result::Err", "ctor:prelude::Result::Ok"]
+            .into_iter()
+            .map(|constructor| RuntimeMatchCase {
+                constructor: constructor.to_string(),
+                binders: 1,
+                body: RuntimeExpr::Construct {
+                    constructor: crate::EXIT_SUCCESS_CONSTRUCTOR.to_string(),
+                    args: Vec::new(),
+                },
+            })
+            .collect(),
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "SAR D3 witness".to_string(),
+        },
+    };
+
+    let run = |label: &'static str| -> String {
+        let _restore = Restore;
+        reset_sar_d2_counts();
+        set_selector_variant_exclusion(Some(RecursiveDescentResidual::MatchScrutineeRecursor));
+        let (result, _trace) = px8j_capture_source_trace(&witness, false, label);
+        match result.map(|_| ()) {
+            Ok(()) => "Ok".to_string(),
+            Err(error) => format!("{error:?}"),
+        }
+    };
+
+    // ── A: the route as landed ──────────────────────────────────────────────
+    let routed = run("ken_sar_d3_routed");
+    let (arrivals, routes) = (sar_d2_cell_arrivals(), sar_d2_routes());
+    assert!(
+        arrivals > 0,
+        "the measured cell must be REACHED, or every claim below is about a path this program \
+         never took: arrivals={arrivals}"
+    );
+    assert_eq!(
+        routes, arrivals,
+        "EVERY arrival in the cell must be routed, not merely one of them. Asserted as equality \
+         rather than `> 0` so a single routed arrival cannot mask a second that fell through to \
+         the refusal: arrivals={arrivals} routes={routes}"
+    );
+    assert!(
+        !routed.contains(FIFTH_REFUSAL),
+        "the constructor-shape refusal must no longer be what stops this row: {routed}"
+    );
+
+    // ── B: the mutation at this exact root ──────────────────────────────────
+    set_sar_d2_suppress_route(true);
+    let suppressed = run("ken_sar_d3_suppressed");
+    let (mutated_arrivals, mutated_routes) = (sar_d2_cell_arrivals(), sar_d2_routes());
+    set_sar_d2_suppress_route(false);
+    // **`> 0`, NOT equality with the unmutated count**, and the difference is a
+    // fact about this cell rather than a weakening. A SUCCESSFUL route lets
+    // lowering continue and reach this consumer again, so the routed run
+    // records more arrivals than the suppressed one, which aborts at the first
+    // refusal (measured: 2 against 1). The denominator's job here is only to
+    // rule out the one alternative explanation for `routes == 0` -- that the
+    // cell was never entered -- and `> 0` discharges exactly that. Asserting
+    // equality would be asserting that the repair has no downstream effect,
+    // which is the opposite of what it is for.
+    assert!(
+        mutated_arrivals > 0,
+        "the mutation must still REACH the cell, or the missing route below could be explained \
+         by the cell never being entered rather than by the mutation: \
+         mutated_arrivals={mutated_arrivals}"
+    );
+    assert_eq!(
+        mutated_routes, 0,
+        "the mutation must suppress the ROUTING DECISION specifically, or it is mutating \
+         something else"
+    );
+    assert!(
+        suppressed.contains(FIFTH_REFUSAL),
+        "and suppressing the route must fall through to the genuine production refusal. This is \
+         what makes the A-side absence check mean something rather than pass for free: \
+         {suppressed}"
     );
 }

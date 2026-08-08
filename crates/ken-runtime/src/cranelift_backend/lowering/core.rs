@@ -464,6 +464,69 @@ fn coc_d2_suppress_continuation() -> bool {
     COC_D2_SUPPRESS_CONTINUATION.with(std::cell::Cell::get)
 }
 
+/// **`RT-SPECIALIZED-ACTIVE-RESUME` `D2` counters.**
+///
+/// **The route counter is not a convenience, it is the only thing that can
+/// tell this repair from a guard skip.** `D0` measured every member of this
+/// population at `pending.len() == 0`, and
+/// [`Lowering::resume_active_continuation`] returns its operand unchanged in
+/// that case -- so routing to the resume and simply not refusing produce
+/// IDENTICAL observable behaviour on every member that exists. A control keyed
+/// on the refusal being gone, or on the value flowing, passes either way.
+///
+/// The mechanism is chosen for what it does when `pending` is NON-empty, and
+/// nothing in this corpus exercises that. So the route itself has to be
+/// observed directly, at the decision.
+///
+/// The denominator is taken BEFORE the guard, on the chain's standing
+/// discipline, so a mutation cannot manufacture its own zero.
+#[cfg(test)]
+thread_local! {
+    /// Arrivals in the measured cell: `ProcessExitStatus` x first-`Active`.
+    static SAR_D2_CELL_ARRIVALS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// Arrivals actually handed to the resume.
+    static SAR_D2_ROUTES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn sar_d2_cell_arrivals() -> usize {
+    SAR_D2_CELL_ARRIVALS.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn sar_d2_routes() -> usize {
+    SAR_D2_ROUTES.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn reset_sar_d2_counts() {
+    SAR_D2_CELL_ARRIVALS.with(|count| count.set(0));
+    SAR_D2_ROUTES.with(|count| count.set(0));
+}
+
+/// `D3`'s mutation at the repaired root: refuse instead of routing.
+///
+/// Unlike the predecessor's, this mutation does NOT have to re-spell a deleted
+/// sentence. The fifth refusal is still live production text below this route --
+/// this repair moves a case out from under it rather than removing it -- so
+/// suppressing the route lets the arrival fall through to the genuine
+/// production refusal. The mutation therefore restores the real path, not a
+/// replica of it.
+#[cfg(test)]
+thread_local! {
+    static SAR_D2_SUPPRESS_ROUTE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn set_sar_d2_suppress_route(suppress: bool) {
+    SAR_D2_SUPPRESS_ROUTE.with(|cell| cell.set(suppress));
+}
+
+#[cfg(test)]
+fn sar_d2_suppress_route() -> bool {
+    SAR_D2_SUPPRESS_ROUTE.with(std::cell::Cell::get)
+}
+
 /// **`RT-CARRIER-BYTESPAN-OBSERVE` `D2` — the reply byte span, MASKED at the
 /// typed producer** (Architect `dec_12s3j2gj67c66`).
 ///
@@ -4038,6 +4101,79 @@ impl<'a> Lowering<'a> {
                 })
                 .collect::<Vec<_>>(),
         ));
+        // **`RT-SPECIALIZED-ACTIVE-RESUME` `D2` — ROUTE THE MEASURED
+        // ORDINARY-LIVE CELL TO ITS RESUME, AHEAD OF THE CONSTRUCTOR-ONLY
+        // DESTRUCTURE.**
+        //
+        // The destructure below demands constructor shape BEFORE it dispatches
+        // the eliminator, so an `Active` frame never reaches its resume when the
+        // value is an ordinary live one. Constructor shape is genuinely required
+        // by `Computational` and `Ordinary` elimination -- they select a case
+        // and project fields from it. **Resuming an `Active` continuation
+        // projects nothing**, and `resume_active_continuation` takes a
+        // `LoweringOperand`, so this operand is expressible at that entry by its
+        // SIGNATURE rather than by inference. No interface widens.
+        //
+        // **The key is EXACTLY the measured cell** -- `ProcessExitStatus` x
+        // first-`Active` -- and deliberately not "any non-constructor variant"
+        // nor "all first-`Active`". Two independent reasons, either sufficient:
+        //
+        // 1. **Hoisting `Active` dispatch above the shape and terminal guards is
+        //    forbidden.** `RecursiveBackedge` must PROPAGATE and `Trap` must
+        //    SEAL; neither resumes. A key over all of first-`Active` would carry
+        //    both into the resume.
+        // 2. **`AC-5`'s committed full-equality control is discharged by
+        //    DISJOINTNESS on this key, not by re-running it.** `D0` measured its
+        //    only arrival here as `Specialized(RecursiveBackedge)` with a
+        //    first-`Ordinary` frame -- different on BOTH axes. Widening either
+        //    axis reopens that discharge and it would have to be re-measured in
+        //    the same candidate.
+        //
+        // `D0` measured `RecursiveBackedge`, `Trap`, `BoundedNat`,
+        // `StructuralNat` and every other variant at ZERO in this cell, so the
+        // narrow key leaves no measured member unrouted.
+        #[cfg(test)]
+        if matches!(
+            (&scrutinee, eliminator),
+            (Lowered::ProcessExitStatus { .. }, EliminatorFrame::Active(_))
+        ) {
+            SAR_D2_CELL_ARRIVALS.with(|count| count.set(count.get() + 1));
+        }
+        if let (Lowered::ProcessExitStatus { .. }, EliminatorFrame::Active(active)) =
+            (&scrutinee, eliminator)
+        {
+            // Fail closed on a composed suffix behind the resume, exactly as the
+            // landed carried `Active` arm does and for the same reason: the
+            // resume consumes the frame's OWN pending suffix, so a remainder
+            // here would be dropped silently. Every measured member has exactly
+            // one eliminator, so this refuses only shapes outside the census.
+            if !eliminators[1..].is_empty() {
+                return Err(unsupported(
+                    "ComputationalMatch",
+                    "a specialized ordinary-live scrutinee reached an active continuation frame \
+                     with further composed eliminators behind it; the resume consumes the \
+                     frame's own pending suffix, so the remainder would be silently dropped",
+                ));
+            }
+            // `D3`'s mutation, placed AFTER the denominator above so a
+            // suppressed run still shows the cell was reached. Suppressing does
+            // not spell a replica of the refusal: it falls through to the
+            // genuine production refusal below, which this repair leaves in
+            // place for every other class.
+            #[cfg(test)]
+            let suppress_route = sar_d2_suppress_route();
+            #[cfg(not(test))]
+            let suppress_route = false;
+            if !suppress_route {
+                #[cfg(test)]
+                SAR_D2_ROUTES.with(|count| count.set(count.get() + 1));
+                return self.resume_active_continuation(
+                    builder,
+                    LoweringOperand::Specialized(scrutinee),
+                    active,
+                );
+            }
+        }
         let Lowered::Constructor {
             constructor,
             synthesized_identity,
