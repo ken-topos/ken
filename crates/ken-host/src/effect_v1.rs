@@ -212,6 +212,7 @@ pub struct HostEffectWireLayoutV1 {
     pub resource_error_release_failed: u64,
     pub resource_error_kind_mismatch: u64,
     pub resource_error_buffer_limit: u64,
+    pub resource_error_allocation_failed: u64,
     pub resource_error_invalid_offset: u64,
     pub resource_error_invalid_bounds: u64,
     pub resource_error_no_progress: u64,
@@ -395,6 +396,7 @@ pub fn host_effect_wire_layout_v1(
         resource_error_release_failed: generated_binding("error", "resource.ReleaseFailed")?,
         resource_error_kind_mismatch: generated_binding("error", "resource.ResourceKindMismatch")?,
         resource_error_buffer_limit: generated_binding("error", "resource.BufferLimit")?,
+        resource_error_allocation_failed: generated_binding("error", "resource.AllocationFailed")?,
         resource_error_invalid_offset: generated_binding("error", "resource.InvalidOffset")?,
         resource_error_invalid_bounds: generated_binding("error", "resource.InvalidBounds")?,
         resource_error_no_progress: generated_binding("error", "resource.NoProgress")?,
@@ -607,6 +609,7 @@ pub enum ResourceErrorV1 {
         io: IoErrorIdentityV1,
     },
     BufferLimit,
+    AllocationFailed,
     InvalidOffset,
     InvalidBounds,
     NoProgress,
@@ -656,12 +659,17 @@ pub struct BufferRegionV1 {
 }
 
 impl BufferRegionV1 {
-    fn new(capacity: usize) -> Self {
-        Self {
-            bytes: vec![0; capacity],
+    fn try_new(capacity: usize) -> Result<Self, ResourceErrorV1> {
+        let mut bytes = Vec::new();
+        bytes
+            .try_reserve_exact(capacity)
+            .map_err(|_| ResourceErrorV1::AllocationFailed)?;
+        bytes.resize(capacity, 0);
+        Ok(Self {
+            bytes,
             initialized_start: 0,
             initialized_len: 0,
-        }
+        })
     }
 
     pub fn capacity(&self) -> usize {
@@ -834,8 +842,9 @@ impl ResourceTableV1 {
             return Err(ResourceErrorV1::BufferLimit);
         }
         let capacity = usize::try_from(capacity).map_err(|_| ResourceErrorV1::BufferLimit)?;
+        let buffer = BufferRegionV1::try_new(capacity)?;
         let inserted = self.insert_owner(
-            ResourceOwnerV1::Buffer(BufferRegionV1::new(capacity)),
+            ResourceOwnerV1::Buffer(buffer),
             ResourceKindV1::Buffer,
             crate::RightSet::from_bits(0),
         );
@@ -3054,6 +3063,7 @@ mod tests {
             "error=io.BrokenPipe|3",
             "error=resource.ReleaseFailed|3",
             "error=resource.ResourceKindMismatch|4",
+            "error=resource.AllocationFailed|9",
             "tag=reply.error|3",
             "tag=reply.resource_error|6",
             "tag=resource_kind.FsHandle|0",
@@ -3757,6 +3767,77 @@ mod tests {
             crate::resource_write_at_v1(handle, offset, &bytes[..limit])
                 .map_err(|error| io_error_identity_v1(&error.into_io_error()))
         }
+    }
+
+    /// Durable invariant (`PX8-ERRID-ALLOC` AC-2 through AC-4): policy
+    /// rejection precedes reservation failure, and either failure is atomic.
+    ///
+    /// The permissive case reaches the production `BufferAllocate` dispatch
+    /// and `Vec::try_reserve_exact` path with a capacity that the allocator
+    /// cannot represent. The restrictive case changes only the admitted
+    /// policy, so the same request must stop earlier as `BufferLimit`.
+    #[cfg(target_pointer_width = "64")]
+    #[test]
+    fn buffer_allocation_failure_is_reachable_ordered_and_atomic() {
+        fn allocate(resources: &mut ResourceTableV1, capacity: u64) -> HostDispatchReplyV1 {
+            dispatch_host_op_v1(
+                &mut AllOpsBackend::default(),
+                &CapabilityTableV1::default(),
+                resources,
+                HostOpV1::BufferAllocate,
+                None,
+                ResourceInputsV1::None,
+                &CanonicalRequestV1::BufferAllocate { capacity },
+            )
+            .expect("BufferAllocate dispatch remains a canonical host operation")
+        }
+
+        let impossible_capacity = usize::MAX as u64;
+        let mut admitted =
+            ResourceTableV1::with_buffer_limits(BufferLimitsV1::new(u64::MAX, u64::MAX).unwrap());
+        let admitted_before = (
+            admitted.slots.len(),
+            admitted.next_acquisition_identity,
+            admitted.live_buffer_capacity,
+        );
+        let allocation_failed = allocate(&mut admitted, impossible_capacity);
+        assert_eq!(
+            allocation_failed.outcome,
+            CanonicalOutcomeV1::Error(SemanticErrorV1::Resource(ResourceErrorV1::AllocationFailed))
+        );
+        assert_eq!(
+            (
+                admitted.slots.len(),
+                admitted.next_acquisition_identity,
+                admitted.live_buffer_capacity,
+            ),
+            admitted_before
+        );
+        assert!(allocation_failed.resource_bindings.is_empty());
+        assert!(allocation_failed.resource_token.is_none());
+
+        let mut policy_rejected =
+            ResourceTableV1::with_buffer_limits(BufferLimitsV1::new(1, 1).unwrap());
+        let rejected_before = (
+            policy_rejected.slots.len(),
+            policy_rejected.next_acquisition_identity,
+            policy_rejected.live_buffer_capacity,
+        );
+        let buffer_limit = allocate(&mut policy_rejected, impossible_capacity);
+        assert_eq!(
+            buffer_limit.outcome,
+            CanonicalOutcomeV1::Error(SemanticErrorV1::Resource(ResourceErrorV1::BufferLimit))
+        );
+        assert_eq!(
+            (
+                policy_rejected.slots.len(),
+                policy_rejected.next_acquisition_identity,
+                policy_rejected.live_buffer_capacity,
+            ),
+            rejected_before
+        );
+        assert!(buffer_limit.resource_bindings.is_empty());
+        assert!(buffer_limit.resource_token.is_none());
     }
 
     #[cfg(target_os = "linux")]

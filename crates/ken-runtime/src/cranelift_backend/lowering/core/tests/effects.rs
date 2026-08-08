@@ -1124,6 +1124,119 @@ fn px8n_fs_write_at_arm_constructs_short_wrote_and_exact_no_progress() {
         "zero write reaches exact ResourceError.NoProgress"
     );
 }
+
+/// Durable invariant (`PX8-ERRID-ALLOC`): native checked-value projection uses
+/// generated wire identities, not the Ken declaration's constructor order.
+#[test]
+fn native_resource_error_projection_follows_the_generated_wire_tail() {
+    let cases: &[(
+        u64,
+        fn(&crate::NativeProcessSymbols) -> RuntimeExpr,
+        i64,
+        &str,
+    )] = &[
+        (
+            PX8_ERRPROJ_BUFFER_LIMIT,
+            px8_buffer_limit_projection_fixture,
+            75,
+            "BufferLimit",
+        ),
+        (
+            PX8_ERRPROJ_INVALID_OFFSET,
+            px8_invalid_offset_projection_fixture,
+            76,
+            "InvalidOffset",
+        ),
+        (
+            PX8_ERRPROJ_INVALID_BOUNDS,
+            px8_invalid_bounds_projection_fixture,
+            77,
+            "InvalidBounds",
+        ),
+        (
+            PX8_ERRPROJ_NO_PROGRESS,
+            px8_no_progress_projection_fixture,
+            78,
+            "NoProgress",
+        ),
+        (
+            PX8_ERRPROJ_ALLOCATION_FAILED,
+            px8_allocation_failed_projection_fixture,
+            79,
+            "AllocationFailed",
+        ),
+    ];
+
+    for &(scenario, expression, expected, name) in cases {
+        let (actual, fixture) = run_px8n_arm_fixture(scenario, expression);
+        assert_eq!(fixture.malformed_request, 0, "{name}: request/reply shape");
+        assert_eq!(fixture.call_index, 1, "{name}: one real host dispatch");
+        assert_eq!(
+            actual, expected,
+            "{name}: wire detail must project to its exact checked constructor"
+        );
+    }
+}
+
+#[test]
+fn native_nullary_resource_error_set_rejects_payloads_and_unknown_identities() {
+    let cases: &[(u64, fn(&crate::NativeProcessSymbols) -> RuntimeExpr, &str)] = &[
+        (
+            PX8_ERRPROJ_BUFFER_LIMIT,
+            px8_buffer_limit_projection_fixture,
+            "BufferLimit",
+        ),
+        (
+            PX8_ERRPROJ_INVALID_OFFSET,
+            px8_invalid_offset_projection_fixture,
+            "InvalidOffset",
+        ),
+        (
+            PX8_ERRPROJ_INVALID_BOUNDS,
+            px8_invalid_bounds_projection_fixture,
+            "InvalidBounds",
+        ),
+        (
+            PX8_ERRPROJ_NO_PROGRESS,
+            px8_no_progress_projection_fixture,
+            "NoProgress",
+        ),
+        (
+            PX8_ERRPROJ_ALLOCATION_FAILED,
+            px8_allocation_failed_projection_fixture,
+            "AllocationFailed",
+        ),
+    ];
+
+    for &(scenario, expression, name) in cases {
+        let (actual, fixture) =
+            run_px8n_arm_fixture(scenario | PX8_ERRPROJ_NONZERO_PAYLOAD, expression);
+        assert_eq!(fixture.malformed_request, 0, "{name}: request shape");
+        assert_eq!(fixture.call_index, 1, "{name}: one real host dispatch");
+        assert_eq!(
+            actual, -1,
+            "{name}: a generated nullary identity rejects nonzero payload"
+        );
+    }
+
+    let (actual, fixture) = run_px8n_arm_fixture(
+        PX8_ERRPROJ_UNKNOWN_IDENTITY,
+        px8_buffer_limit_projection_fixture,
+    );
+    assert_eq!(
+        fixture.malformed_request, 0,
+        "unknown identity: request shape"
+    );
+    assert_eq!(
+        fixture.call_index, 1,
+        "unknown identity: one real host dispatch"
+    );
+    assert_eq!(
+        actual, -1,
+        "a nonmember wire identity must not enter the shared nullary arm"
+    );
+}
+
 #[test]
 fn live_effect_emitter_inventory_and_generated_layout_mutations_are_closed() {
     assert_eq!(
@@ -1435,6 +1548,70 @@ fn px8i_big_read_start_fixture(symbols: &crate::NativeProcessSymbols) -> Runtime
         true,
     )
 }
+
+fn px8_resource_error_projection_fixture(
+    symbols: &crate::NativeProcessSymbols,
+    error_constructor: &str,
+    code: i64,
+) -> RuntimeExpr {
+    let trap = || RuntimeTrap {
+        code: RuntimeTrapCode::PatternMatchFailure,
+        message: "PX8-ERRID-ALLOC checked projection default".to_string(),
+    };
+    RuntimeExpr::Match {
+        scrutinee: Box::new(RuntimeExpr::Effect {
+            family: "FS".to_string(),
+            operation: ken_host::HostOpV1::BufferAllocate,
+            capability: None,
+            args: vec![RuntimeExpr::Value(RuntimeValue::Int((8).into()))],
+        }),
+        cases: vec![
+            crate::RuntimeMatchCase {
+                constructor: symbols.result_err.clone(),
+                binders: 1,
+                body: RuntimeExpr::Match {
+                    scrutinee: Box::new(RuntimeExpr::Var(0)),
+                    cases: vec![crate::RuntimeMatchCase {
+                        constructor: error_constructor.to_string(),
+                        binders: 0,
+                        body: px8n_failure(
+                            symbols,
+                            RuntimeExpr::Value(RuntimeValue::Int(code.into())),
+                        ),
+                    }],
+                    default: trap(),
+                },
+            },
+            crate::RuntimeMatchCase {
+                constructor: symbols.result_ok.clone(),
+                binders: 1,
+                body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int((99).into()))),
+            },
+        ],
+        default: trap(),
+    }
+}
+
+fn px8_invalid_offset_projection_fixture(symbols: &crate::NativeProcessSymbols) -> RuntimeExpr {
+    px8_resource_error_projection_fixture(symbols, &symbols.resource_invalid_offset, 76)
+}
+
+fn px8_buffer_limit_projection_fixture(symbols: &crate::NativeProcessSymbols) -> RuntimeExpr {
+    px8_resource_error_projection_fixture(symbols, &symbols.resource_buffer_limit, 75)
+}
+
+fn px8_invalid_bounds_projection_fixture(symbols: &crate::NativeProcessSymbols) -> RuntimeExpr {
+    px8_resource_error_projection_fixture(symbols, &symbols.resource_invalid_bounds, 77)
+}
+
+fn px8_no_progress_projection_fixture(symbols: &crate::NativeProcessSymbols) -> RuntimeExpr {
+    px8_resource_error_projection_fixture(symbols, &symbols.resource_no_progress, 78)
+}
+
+fn px8_allocation_failed_projection_fixture(symbols: &crate::NativeProcessSymbols) -> RuntimeExpr {
+    px8_resource_error_projection_fixture(symbols, &symbols.resource_allocation_failed, 79)
+}
+
 fn px8i_metadata_big_fixture(symbols: &crate::NativeProcessSymbols) -> RuntimeExpr {
     let trap = || RuntimeTrap {
         code: RuntimeTrapCode::PatternMatchFailure,
@@ -1871,11 +2048,28 @@ extern "C" fn px8n_scripted_host_dispatch(
         }
     };
     if expected == ken_host::HostOpV1::BufferAllocate {
-        store(wire.reply_tag_offset, wire.reply_resource_tag);
-        store(
-            wire.reply_detail_offset,
-            if fixture.call_index == 0 { 11 } else { 22 },
-        );
+        let projected_error = match fixture.scenario & PX8_ERRPROJ_SCENARIO_MASK {
+            PX8_ERRPROJ_BUFFER_LIMIT => Some(wire.resource_error_buffer_limit),
+            PX8_ERRPROJ_INVALID_OFFSET => Some(wire.resource_error_invalid_offset),
+            PX8_ERRPROJ_INVALID_BOUNDS => Some(wire.resource_error_invalid_bounds),
+            PX8_ERRPROJ_NO_PROGRESS => Some(wire.resource_error_no_progress),
+            PX8_ERRPROJ_ALLOCATION_FAILED => Some(wire.resource_error_allocation_failed),
+            PX8_ERRPROJ_UNKNOWN_IDENTITY => Some(u64::MAX),
+            _ => None,
+        };
+        if let Some(detail) = projected_error {
+            store(wire.reply_tag_offset, wire.reply_resource_error_tag);
+            store(wire.reply_detail_offset, detail);
+            if fixture.scenario & PX8_ERRPROJ_NONZERO_PAYLOAD != 0 {
+                store(wire.reply_resource_error_schema_offset, 1);
+            }
+        } else {
+            store(wire.reply_tag_offset, wire.reply_resource_tag);
+            store(
+                wire.reply_detail_offset,
+                if fixture.call_index == 0 { 11 } else { 22 },
+            );
+        }
     } else if expected == ken_host::HostOpV1::FsHandleMetadata {
         store(wire.reply_tag_offset, wire.reply_metadata_tag);
         store(wire.reply_detail_offset, PX8I_BIG_U64);
@@ -2129,6 +2323,30 @@ const PX8N_OVER_BOUND_READ: u64 = 5;
 
 #[cfg(test)]
 const PX8I_BIG_READ_START: u64 = 7;
+
+#[cfg(test)]
+const PX8_ERRPROJ_BUFFER_LIMIT: u64 = 13;
+
+#[cfg(test)]
+const PX8_ERRPROJ_INVALID_OFFSET: u64 = 9;
+
+#[cfg(test)]
+const PX8_ERRPROJ_INVALID_BOUNDS: u64 = 10;
+
+#[cfg(test)]
+const PX8_ERRPROJ_NO_PROGRESS: u64 = 11;
+
+#[cfg(test)]
+const PX8_ERRPROJ_ALLOCATION_FAILED: u64 = 12;
+
+#[cfg(test)]
+const PX8_ERRPROJ_UNKNOWN_IDENTITY: u64 = 14;
+
+#[cfg(test)]
+const PX8_ERRPROJ_SCENARIO_MASK: u64 = 0xff;
+
+#[cfg(test)]
+const PX8_ERRPROJ_NONZERO_PAYLOAD: u64 = 1 << 8;
 
 /// `RT-DECL-CLOSURE-PORT` `D7` — a REACHING fixture: drive a non-`Unit` fixed
 /// synthesized role through the ORDINARY aggregate allocation arm.

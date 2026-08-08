@@ -1049,6 +1049,7 @@ fn is_invalid_bounds (e : ResourceError) : Bool =
     ResourceHostIO io |-> False; Closed |-> False; MalformedResource |-> False;
     RightNotHeld required held |-> False; ReleaseFailed kind identity io |-> False;
     ResourceKindMismatch expected actual |-> False; BufferLimit |-> False;
+    AllocationFailed |-> False;
     InvalidOffset |-> False; InvalidBounds |-> True; NoProgress |-> False
   }
 
@@ -1057,6 +1058,7 @@ fn is_invalid_offset (e : ResourceError) : Bool =
     ResourceHostIO io |-> False; Closed |-> False; MalformedResource |-> False;
     RightNotHeld required held |-> False; ReleaseFailed kind identity io |-> False;
     ResourceKindMismatch expected actual |-> False; BufferLimit |-> False;
+    AllocationFailed |-> False;
     InvalidOffset |-> True; InvalidBounds |-> False; NoProgress |-> False
   }
 
