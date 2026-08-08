@@ -136,6 +136,42 @@ fn residual_enumeration_mutation() -> ResidualEnumerationMutation {
     RESIDUAL_ENUMERATION_MUTATION.with(std::cell::Cell::get)
 }
 
+/// **`RT-RECURSOR-TRANSPORT` `D1` — the per-variant selector exclusion.**
+///
+/// Test-only. It answers one question and no other: *if this variant did not
+/// retain the monolithic root, what would this position actually do on the
+/// functionized lane?* That is the activation probe, and it cannot be asked
+/// without temporarily removing the retention.
+///
+/// ⭐ **It is built on [`enumerate_recursive_descent_residuals`], the landed
+/// non-short-circuiting walk, and not on a second walker.** The selector's own
+/// classifier short-circuits at the first residual, so subtracting one variant
+/// from *its* answer would silently also drop every variant it never reached —
+/// the probe would then read "nothing retains this" from an instrument that
+/// stopped looking. Enumerating first and removing exactly one member is the
+/// only subtraction that means what it says.
+///
+/// ⛔ Production is unchanged: with no exclusion set, the selector takes its
+/// original path, and the `#[cfg(test)]` gate means the branch does not exist
+/// in a production build.
+#[cfg(test)]
+thread_local! {
+    static SELECTOR_VARIANT_EXCLUSION: std::cell::Cell<Option<RecursiveDescentResidual>> =
+        const { std::cell::Cell::new(None) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn set_selector_variant_exclusion(
+    excluded: Option<RecursiveDescentResidual>,
+) {
+    SELECTOR_VARIANT_EXCLUSION.with(|cell| cell.set(excluded));
+}
+
+#[cfg(test)]
+fn selector_variant_exclusion() -> Option<RecursiveDescentResidual> {
+    SELECTOR_VARIANT_EXCLUSION.with(std::cell::Cell::get)
+}
+
 /// The residual set the last compilation on this thread observed, or `None` if
 /// no compilation has run since the last reset.
 ///
@@ -974,6 +1010,25 @@ fn select_body_emission_authority(
     expr: &RuntimeExpr,
     declarations: &BTreeMap<&str, &RuntimeDeclaration>,
 ) -> BodyEmissionAuthority {
+    // `RT-RECURSOR-TRANSPORT` `D1` activation probe. Enumerate the FULL residual
+    // set, remove exactly the one variant under test, and let the remainder
+    // decide -- so a program still retained by some other variant keeps the
+    // retained lane and cannot be mistaken for this position working.
+    #[cfg(test)]
+    if let Some(excluded) = selector_variant_exclusion() {
+        let mut found = enumerate_recursive_descent_residuals(expr, declarations);
+        let was_present = found.remove(&excluded);
+        debug_assert!(
+            was_present,
+            "the D1 exclusion was set for a variant this program does not fire; the probe would \
+             then measure an ordinary functionized program rather than this position"
+        );
+        return if found.is_empty() {
+            BodyEmissionAuthority::FunctionizedUnits
+        } else {
+            BodyEmissionAuthority::RecursiveDescent
+        };
+    }
     if recursive_descent_residual(expr)
         .or_else(|| {
             declarations

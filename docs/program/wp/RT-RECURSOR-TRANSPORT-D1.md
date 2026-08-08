@@ -1,0 +1,160 @@
+# RT-RECURSOR-TRANSPORT — `D0` re-census and `D1` activation probe
+
+**Base, pinned: `f4212c2cc8a990410f6a58c48ff482b681f2e706`.** Frame blob
+`80311af5`, node blob `ed829abd`, both verified present at that base before any
+edit. Every measurement below was taken on that tree.
+
+**`D1`'s answer is asymmetric.** One position closes for free; the other does
+not and is routed as a refusal. That is the input to the Steward's re-size, and
+it is stated here rather than folded into `D2`.
+
+Citations are by grep-able phrase. Line numbers for these two variants have gone
+stale twice already in this campaign.
+
+---
+
+## D0 — the re-census
+
+### The delta-free baseline, taken before any edit
+
+```
+git rev-parse HEAD    -> f4212c2cc8a990410f6a58c48ff482b681f2e706
+git status --porcelain -> empty          (delta-free: no edit of mine exists yet)
+scripts/ken-cargo build -p ken-runtime   -> Finished, 50 warnings
+df -h /workspaces                        -> 11G available
+git rev-parse HEAD    -> f4212c2c...     (re-quoted before the suite)
+scripts/ken-cargo test -p ken-runtime --lib
+```
+
+**812 passed, 0 failed, 4 ignored.** The anchor was quoted three times in the
+one shell and the worktree was empty at the time, so this is a baseline of the
+base and not of my change.
+
+### Both variants are live and selected
+
+The `RecursiveDescentResidual` enum carries exactly two live variants, with the
+three retired siblings present only as comments recording their retirement:
+
+| variant | doc phrase it is declared under |
+|---|---|
+| `MatchScrutineeRecursor` | *"An ordinary match consuming an active computational recursor."* |
+| `LexicalCallArgumentRecursor` | *"A lexical unit call whose argument is an active computational recursor."* |
+
+Classified in `recursive_descent_residual`, by shape rather than by name:
+
+- **`MatchScrutineeRecursor`** — a `RuntimeExpr::Match` whose scrutinee is a
+  `ComputationalMatch` with any case whose `recursive_positions` is non-empty.
+- **`LexicalCallArgumentRecursor`** — a `RuntimeExpr::Call` whose callee is a
+  `LexicalClosure` and whose arguments include such a `ComputationalMatch`.
+
+**Census over the whole of `lowering/`:** `MatchScrutineeRecursor` at 10 sites,
+`LexicalCallArgumentRecursor` at 7, and **no third variant name anywhere**.
+
+### The exhaustive selector and enumerator are preserved
+
+Neither walker has a wildcard arm — checked across the whole classifier and
+enumerator span. A new `RuntimeExpr` form still cannot compile until someone
+classifies it, which is the property that keeps the instrument from silently
+under-reporting as the IR grows.
+
+`BoundaryUse`: **zero hits in `crates/`**, re-derived at this base.
+
+---
+
+## D1 — the activation probe
+
+### The mechanism, and why it is built on the enumerator
+
+A test-only per-variant selector exclusion,
+`set_selector_variant_exclusion(Some(variant))`, sitting in
+`select_body_emission_authority`. It enumerates the **full** residual set using
+the landed `enumerate_recursive_descent_residuals`, removes exactly the one
+variant under test, and lets the remainder decide the lane.
+
+**It is not a second walker, and the reason is not tidiness.** The selector's
+own classifier short-circuits at the first residual it finds. Subtracting one
+variant from *that* answer would silently also drop every variant it never
+reached, so the probe would read "nothing retains this" from an instrument that
+had stopped looking. Enumerating first and removing one member is the only
+subtraction that means what it says.
+
+The mechanism is `#[cfg(test)]`; with no exclusion set the selector takes its
+original path, and in a production build the branch does not exist. Both
+witnesses assert their program is **single-variant** before probing, so the
+remainder after removal is empty by construction rather than by luck.
+
+### Position A — `MatchScrutineeRecursor`: does NOT close for free
+
+| lane | outcome |
+|---|---|
+| retained (no exclusion) | **executes**, `Returned(Int(Small(7)))` |
+| functionized (excluded) | **compile-time refusal**, never executes |
+
+The refusal, verbatim:
+
+```
+Unsupported(UnsupportedLowering {
+  construct: "ComputationalMatch",
+  reason: "scrutinee is not a constructor value after ordinary expression lowering" })
+```
+
+**This is routed as a refusal and is NOT recorded as an outcome**, exactly as
+the frame requires: a compile-time refusal that never executes is not a
+behavioural result.
+
+**It is the position's refusal, not the fixture's, and that is measured.** The
+control is the same ordinary-`Match`-over-`ComputationalMatch` program with
+**no recursive position**: it is not a residual at all, takes the functionized
+lane with no exclusion set, and **executes**, returning `Int(Small(7))`. The
+only difference between the two programs is the recursive position, so that is
+the discriminator.
+
+Without this control the red would have been equally consistent with *"an
+ordinary match cannot consume a computational match at all"* — a different and
+much larger claim, and one that would have mis-scoped `D2`.
+
+### Position B — `LexicalCallArgumentRecursor`: CLOSES FOR FREE
+
+| lane | outcome |
+|---|---|
+| retained (no exclusion) | executes, `Returned(Constructor "ctor:fixture::rt::Leaf")` |
+| functionized (excluded) | **executes**, `Returned(Constructor "ctor:fixture::rt::Leaf")` |
+
+**The decoded observations are identical.** The landed continuation machinery
+already carries this position; there is nothing to build for it.
+
+**One difference deliberately not compared, and why.** The raw native result
+token differs — `0` on the retained lane, `517` on the functionized one. It is
+a **pre-decode, lane-internal** value: `run` returns it alongside the
+observation, and the two lanes encode the same result differently before
+decoding. Comparing tokens across lanes would manufacture a divergence where
+the semantics agree. The decoded `RuntimeObservation` is what the lanes are
+required to agree on, so that is what the witness compares. Stated rather than
+silently dropped, because a reader running the probe by hand will see the
+difference.
+
+### What the witnesses are
+
+Both are **closed and executable**. The landed `d1_*_witness` fixtures
+scrutinise a free `Var(0)`: excellent for asking the classifier a question,
+impossible to compile or run. `D1` needs an executed outcome, so the probe uses
+the same shapes closed over a real constructor.
+
+---
+
+## Consequences for sizing
+
+- **Position B needs no `D2`.** Any `D2` is for position A alone.
+- **Position A's refusal is at lowering**, on the shape of the value an ordinary
+  match receives from a computational match with a recursive position. Whether
+  the narrow binding that fixes it is available over the existing continuation
+  machinery, or requires a new planner/ABI population — hard stop 2 — is not
+  answered by `D1` and is not guessed at here.
+- **Hard stop 1 is not triggered by this evidence, and I am not claiming it is
+  cleared either.** The two positions demonstrably differ in *outcome*, but a
+  difference in outcome is not the same as *"materially different transports"* —
+  one of them needs no transport at all. Whether the remaining position's
+  transport is materially different from anything is a `D2` question.
+
+**Suite at this candidate: 814 passed, 0 failed, 4 ignored** — the 812 baseline
+plus the two `D1` witnesses.

@@ -11075,6 +11075,282 @@ fn d1_active_recursor() -> RuntimeExpr {
     }
 }
 
+/// **`RT-RECURSOR-TRANSPORT` `D1` — a CLOSED active computational recursor.**
+///
+/// The classification fixtures above scrutinise `Var(0)`, which is free at the
+/// root: they are perfectly good for asking the classifier a question and
+/// cannot be compiled or run. `D1` needs an **executed** outcome, so this is
+/// the same shape closed over a real constructor.
+#[cfg(test)]
+fn rt_closed_active_recursor() -> RuntimeExpr {
+    RuntimeExpr::ComputationalMatch {
+        scrutinee: Box::new(RuntimeExpr::Construct {
+            constructor: "ctor:fixture::rt::Node".to_string(),
+            args: vec![RuntimeExpr::LexicalClosure {
+                captures: Vec::new(),
+                params: vec!["unit".to_string()],
+                body: Box::new(RuntimeExpr::Construct {
+                    constructor: "ctor:fixture::rt::Leaf".to_string(),
+                    args: Vec::new(),
+                }),
+            }],
+        }),
+        cases: vec![
+            crate::RuntimeComputationalMatchCase {
+                constructor: "ctor:fixture::rt::Node".to_string(),
+                argument_binders: 1,
+                recursive_positions: vec![0],
+                body: RuntimeExpr::Call {
+                    callee: Box::new(RuntimeExpr::Var(0)),
+                    args: vec![RuntimeExpr::Construct {
+                        constructor: "ctor:prelude::Unit::MkUnit".to_string(),
+                        args: Vec::new(),
+                    }],
+                },
+            },
+            crate::RuntimeComputationalMatchCase {
+                constructor: "ctor:fixture::rt::Leaf".to_string(),
+                argument_binders: 0,
+                recursive_positions: Vec::new(),
+                body: RuntimeExpr::Construct {
+                    constructor: "ctor:fixture::rt::Leaf".to_string(),
+                    args: Vec::new(),
+                },
+            },
+        ],
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "rt closed active recursor".to_string(),
+        },
+    }
+}
+
+/// `D1` position A: an ordinary `Match` consuming an active recursor. Closed.
+#[cfg(test)]
+fn rt_match_scrutinee_recursor_executable() -> RuntimeExpr {
+    RuntimeExpr::Match {
+        scrutinee: Box::new(rt_closed_active_recursor()),
+        cases: vec![crate::RuntimeMatchCase {
+            constructor: "ctor:fixture::rt::Leaf".to_string(),
+            binders: 0,
+            body: RuntimeExpr::Value(RuntimeValue::Int(7.into())),
+        }],
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "rt match scrutinee recursor".to_string(),
+        },
+    }
+}
+
+/// `D1` position B: a lexical unit call whose argument is an active recursor.
+#[cfg(test)]
+fn rt_lexical_call_argument_recursor_executable() -> RuntimeExpr {
+    RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::LexicalClosure {
+            captures: Vec::new(),
+            params: vec!["x".to_string()],
+            body: Box::new(RuntimeExpr::Var(0)),
+        }),
+        args: vec![rt_closed_active_recursor()],
+    }
+}
+
+/// Runs `expr` and returns the **decoded observation** only.
+///
+/// ⛔ The raw native result token is deliberately dropped. It is a lane-internal
+/// pre-decode value -- the two lanes encode the same result differently, and
+/// `Leaf` arrives as token `0` on the retained lane and `517` on the
+/// functionized one. Comparing tokens across lanes would manufacture a
+/// difference where the semantics agree; the decoded `RuntimeObservation` is
+/// what the lanes are supposed to agree on, so that is what this returns.
+#[cfg(test)]
+fn rt_run(expr: &RuntimeExpr) -> String {
+    match crate::cranelift_backend::artifact::compile_expr_for_lowering_tests(
+        expr,
+        &NativeSeedEnvironment::empty(),
+    ) {
+        Err(error) => format!("COMPILE-ERR {error:?}"),
+        Ok(compiled) => match compiled.run(None) {
+            Err(error) => format!("RUN-ERR {error:?}"),
+            Ok((observation, _token)) => format!("OK {observation:?}"),
+        },
+    }
+}
+
+/// Runs `expr` under a `D1` per-variant selector exclusion, restoring the
+/// exclusion afterwards even if the body panics.
+#[cfg(test)]
+fn rt_run_functionized(expr: &RuntimeExpr, excluded: RecursiveDescentResidual) -> String {
+    struct Restore;
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            crate::cranelift_backend::lowering::core::set_selector_variant_exclusion(None);
+        }
+    }
+    crate::cranelift_backend::lowering::core::set_selector_variant_exclusion(Some(excluded));
+    let _restore = Restore;
+    rt_run(expr)
+}
+
+/// Control for `D1` position A: the SAME ordinary-`Match`-over-
+/// `ComputationalMatch` shape with **no recursive position**, so it is not a
+/// residual at all and takes the functionized lane with no exclusion set.
+///
+/// If this also refuses, position A's red is about consuming a computational
+/// match at all and my fixture is the wrong instrument. If it compiles, the
+/// recursive position is the discriminator and the red is the position's.
+#[cfg(test)]
+fn rt_match_over_nonrecursive_computational_match() -> RuntimeExpr {
+    let inert = RuntimeExpr::ComputationalMatch {
+        scrutinee: Box::new(RuntimeExpr::Construct {
+            constructor: "ctor:fixture::rt::Node".to_string(),
+            args: vec![RuntimeExpr::Value(RuntimeValue::Int(3.into()))],
+        }),
+        cases: vec![crate::RuntimeComputationalMatchCase {
+            constructor: "ctor:fixture::rt::Node".to_string(),
+            argument_binders: 1,
+            recursive_positions: Vec::new(),
+            body: RuntimeExpr::Construct {
+                constructor: "ctor:fixture::rt::Leaf".to_string(),
+                args: Vec::new(),
+            },
+        }],
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "rt inert computational match".to_string(),
+        },
+    };
+    RuntimeExpr::Match {
+        scrutinee: Box::new(inert),
+        cases: vec![crate::RuntimeMatchCase {
+            constructor: "ctor:fixture::rt::Leaf".to_string(),
+            binders: 0,
+            body: RuntimeExpr::Value(RuntimeValue::Int(7.into())),
+        }],
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "rt inert outer".to_string(),
+        },
+    }
+}
+
+/// **`RT-RECURSOR-TRANSPORT` `D1` position A — `MatchScrutineeRecursor` does
+/// NOT close for free. Routed as a refusal, not recorded as an outcome.**
+///
+/// Under the per-variant selector exclusion this position does not execute at
+/// all. Its first functionized result is a **compile-time refusal**:
+/// `Unsupported(ComputationalMatch)`, *"scrutinee is not a constructor value
+/// after ordinary expression lowering"*. Per the frame, a compile-time refusal
+/// that never executes **is not an outcome** — so this row records it as a
+/// refusal and claims nothing about behaviour.
+///
+/// ⭐ **The third assertion is what makes this the POSITION's refusal rather
+/// than my fixture's.** The control is the same ordinary-`Match`-over-
+/// `ComputationalMatch` shape with **no recursive position**: it is not a
+/// residual at all, takes the functionized lane with no exclusion set, and
+/// **executes**. The only difference between the two programs is the recursive
+/// position, so that is the discriminator. Without this the red would be
+/// equally consistent with "an ordinary match cannot consume a computational
+/// match at all", which is a different and much larger claim.
+///
+/// **Promise class: transition sentinel.** It reds when position A starts
+/// compiling on the functionized lane — which is exactly what `D2` is for. It
+/// retires when `D3` removes the variant.
+#[test]
+fn rt_d1_position_a_match_scrutinee_recursor_does_not_close_for_free() {
+    let empty: BTreeMap<&str, &RuntimeDeclaration> = BTreeMap::new();
+    let witness = rt_match_scrutinee_recursor_executable();
+
+    assert_eq!(
+        enumerate_recursive_descent_residuals(&witness, &empty),
+        BTreeSet::from([RecursiveDescentResidual::MatchScrutineeRecursor]),
+        "the probe requires a SINGLE-variant witness: the exclusion removes one member, so any          second variant would leave the program retained and the probe would measure nothing"
+    );
+    assert_eq!(
+        rt_run(&witness),
+        "OK Returned(Int(Small(7)))",
+        "positive control: the position executes on the RETAINED lane, so the refusal below is          about the functionized lane and not about a broken fixture"
+    );
+
+    let functionized = rt_run_functionized(
+        &witness,
+        RecursiveDescentResidual::MatchScrutineeRecursor,
+    );
+    assert!(
+        functionized.contains("scrutinee is not a constructor value after ordinary expression \
+lowering"),
+        "position A must still refuse at lowering with its own reason; if this changes, D1's \
+answer for this position has changed and D2 must be re-derived. got: {functionized}"
+    );
+    assert!(
+        functionized.starts_with("COMPILE-ERR"),
+        "the refusal must be a compile-time one that never executes -- that is precisely why it \
+is routed rather than recorded as an outcome. got: {functionized}"
+    );
+
+    let control = rt_match_over_nonrecursive_computational_match();
+    assert!(
+        enumerate_recursive_descent_residuals(&control, &empty).is_empty(),
+        "the control must not be a residual at all"
+    );
+    assert_eq!(
+        rt_run(&control),
+        "OK Returned(Int(Small(7)))",
+        "DISCRIMINATOR: the same shape without a recursive position executes on the functionized \
+lane. So position A's refusal is the recursive position's, not the shape's"
+    );
+}
+
+/// **`RT-RECURSOR-TRANSPORT` `D1` position B — `LexicalCallArgumentRecursor`
+/// CLOSES FOR FREE. This is a result, not an absence of work.**
+///
+/// With this position excluded from the selector the program takes the
+/// functionized lane, **executes**, and produces the **same decoded
+/// observation** as the retained lane. The landed continuation machinery
+/// already carries this position; nothing needs to be built for it.
+///
+/// ⛔ The raw native result token differs between the lanes (`0` retained,
+/// `517` functionized) and is deliberately not compared — see `rt_run`. It is a
+/// pre-decode lane-internal value, and the decoded observation is what the two
+/// lanes are required to agree on.
+///
+/// **Promise class: transition sentinel.** It pins that this position needs no
+/// port. It reds if the functionized lane stops carrying it — which would
+/// reopen `D2` for this position — and `D3` rewrites it when the variant and
+/// its test-only selector hook are retired together.
+#[test]
+fn rt_d1_position_b_lexical_call_argument_recursor_closes_for_free() {
+    let empty: BTreeMap<&str, &RuntimeDeclaration> = BTreeMap::new();
+    let witness = rt_lexical_call_argument_recursor_executable();
+
+    assert_eq!(
+        enumerate_recursive_descent_residuals(&witness, &empty),
+        BTreeSet::from([RecursiveDescentResidual::LexicalCallArgumentRecursor]),
+        "single-variant witness, for the same reason as position A"
+    );
+
+    let retained = rt_run(&witness);
+    assert_eq!(
+        retained,
+        "OK Returned(Constructor { constructor: \"ctor:fixture::rt::Leaf\", args: [] })",
+        "positive control on the retained lane"
+    );
+
+    let functionized = rt_run_functionized(
+        &witness,
+        RecursiveDescentResidual::LexicalCallArgumentRecursor,
+    );
+    assert_eq!(
+        functionized, retained,
+        "D1 for position B: the functionized lane must EXECUTE and agree with the retained lane. \
+A compile-time refusal here would mean this position needs a D2 port after all"
+    );
+    assert!(
+        functionized.starts_with("OK "),
+        "the outcome must be an executed one, not a refusal: {functionized}"
+    );
+}
+
 /// **`AC-2` positive control 2 — every variant is reachable by the
 /// instrument.**
 ///
