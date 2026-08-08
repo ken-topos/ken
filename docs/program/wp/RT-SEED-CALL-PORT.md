@@ -179,6 +179,33 @@ general, little or nothing remains here.
   `FunctionizedUnits`, build and run, and enumerate no `SeedClosureCall`.** The
   delta-free `D0` remains the regression complement.
 
+  ### The census residual, and why `D3` retires it rather than a ratchet
+
+  **Adversary finding on merged `06165fb7`, accepted and recorded so it is not
+  re-filed.** The `D1` census — no in-tree producer constructs
+  `Call { callee: Closure }` — was corroborated from the opposite axis by
+  enumerating every `RuntimeExpr::Call` construction and asking what supplies
+  `callee`. It converged on the same answer by a route that did not inherit the
+  premise. **The residual: nothing STRUCTURAL bounds callee position.** At
+  `erasure.rs:2452` and `:4345` the callee is whatever a general recursive
+  lowering returns, so the census is exactly as strong as its enumeration of the
+  five `Closure` construction sites and no stronger. **It would become false by
+  a sixth site being added, and I confirmed no ratchet pins that count.**
+
+  **Do NOT build one.** ⇒ **`D2`'s port is keyed on the SHAPE** — a
+  `FunctionizedUnits` `Call` whose exact callee occurrence is
+  `RuntimeExpr::Closure` — **not on a site list.** A sixth construction site is
+  therefore handled by the port, and after `D3` removes `SeedClosureCall` from
+  `RecursiveDescentResidual` there is no residual variant left for it to
+  resurrect. **A construction-count ratchet would be dead weight the day `D3`
+  lands.**
+
+  **The direction matters and it runs in our favour.** If the census is weaker
+  than claimed, that means *more* programs might construct the shape — which
+  **strengthens** the case for porting and **weakens** the case for deleting.
+  The Architect ruled port. So the residual cannot undermine the ruling; it can
+  only have made the rejected alternative worse.
+
 ## 4. Acceptance criteria
 
 - **`AC-1a` — the ceiling moved.** The selector reports
