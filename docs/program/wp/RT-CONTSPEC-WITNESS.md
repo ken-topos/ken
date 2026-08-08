@@ -6,8 +6,8 @@ Authority: Architect ownership/sizing ruling `evt_1yymw1gdszpbs`, outcome (c),
 seam 4 — the terminal seam.
 
 Seams 1-3 built and proved the mechanism. This seam **measures the result on a
-lawful assembly** and closes the campaign's held nodes. It is the only seam that
-closes anything other than itself.
+lawful assembly** and closes the campaign out. **It closes only itself** -- see
+`D6`; the inherited claim that it closes other nodes was withdrawn 2026-08-08.
 
 > ## RECUT 2026-08-03 — the census is a HISTORICAL RECORD here, not a worklist
 >
@@ -133,7 +133,7 @@ addresses move.
 | seam 3 | `RT-CONTSPEC-LEDGER`, must be `merged` before this starts; its frame selects **zero** census rows |
 | the corrected census | seam 1 `D4` — a first-refusal record of the held `1aef3192` lineage, **not** a worklist carried through seams 2 and 3 |
 | the 761 witness gate | `fs_read_at_malformed_offset_narrows_to_invalid_offset`, and its sibling at `crates/ken-cli/tests/rt_parity_native.rs:544` |
-| nodes closed on merge | **measure it, do not inherit it** -- every node in the set still open at your base. As at 2026-08-08: this node and `RT-RECURSOR-TRANSPORT`. `RT-DECL-CLOSURE-PORT` is already `merged` |
+| nodes closed on merge | **this node only, and the Steward flips it post-merge at M7.** The candidate carries no tracker `status:` change. `RT-RECURSOR-TRANSPORT` must NOT be closed -- see `D6` |
 | prior-slice surfaces | the six, frozen at their `main` blobs |
 
 ## Two preconditions on every suite run, carried from seams 1-3
@@ -314,7 +314,10 @@ Both produced a false hard stop on seam 1 (`evt_3q972fhrnsr0b`, ruled
 - **No semantic inference from a host disk failure.**
 - **No edit to any prior-slice surface** (`AC-6`).
 - **No merge, rebase, or wholesale cherry-pick of any preserved object.**
-- **No closing of any node other than the three named** (`AC-7`).
+- **No tracker `status:` change of any kind in the candidate** (`AC-7`). This
+  previously read *"no closing of any node other than the three named"*, which
+  presumed a closure set `D6` no longer has. The ring closes nothing; the
+  Steward flips this node alone, post-merge, at `merge-procedure.md` M7.
 - **No test asserting facts about source or documentation lines** (operator test
   policy). `D2`, `D4` and `D5` are review artifacts, not gates.
 
@@ -335,7 +338,8 @@ every fresh failure this seam surfaces will look like a small fix.
 
 1. `D1` native population run.
 2. `D2` and `D3` — reclassification and host rerun.
-3. `D4` discrimination, `D5` closeout record, `D6` three-node closure.
+3. `D4` discrimination and `D5` closeout record. **`D6` is not a checkpoint --
+   it owes the ring no work at all.**
 
 ## Hard stops
 
@@ -354,5 +358,8 @@ Stop and route to the Steward, do not improvise, if any of these hold:
    itself is unreadable, which is a finding about seam 1's `D4` record.
 5. **Disk capacity cannot be established** for `D3` and no seat is free to
    release it.
-6. **Closing the set reveals another node that depended on them.** The DAG
-   edge is wrong and the closure is the Steward's call.
+6. **You find a node that looks like it should be closed by this seam.** Do not
+   close it and do not propose a set. `D6` closes this node only, the Steward
+   performs it post-merge, and a DAG edge that appears wrong is the Steward's
+   call -- routing it is correct, acting on it is not. **This is how the
+   `RT-RECURSOR-TRANSPORT` error nearly landed.**
