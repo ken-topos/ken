@@ -349,6 +349,10 @@ graph LR
   SCP --> PMP[RT-PRODUCER-MATCH-PORT]
   DCP --> WIT[RT-CONTSPEC-WITNESS]
   WIT --> RXT[RT-RECURSOR-TRANSPORT]
+  RXT -.->|D2 record correction lands| MRC[RT-MATCH-RECURSOR-CONSUMERS]
+  MRC --> LRC[RT-LEXICAL-RECURSOR-CONSUMERS]
+  MRC --> RXT
+  LRC --> RXT
   RXT --> RET[RT-DESCENT-RETIRE]
   PMP --> RET
   SCP --> FNU[RT-FNUNIT-RESULT-TOKEN]
@@ -368,6 +372,9 @@ graph LR
 | 4 | `RT-SEED-CALL-PORT` | S–M | cheapest; reuses #3 directly and may close on its own `D1` |
 | 5 | `RT-PRODUCER-MATCH-PORT` | M | its **syntactic** `ProducerMatchCall` retirement only — **not** the carried-`Match` transport, which is #3's `D7` |
 | 6b | `RT-RECURSOR-TRANSPORT` | **M, provisional** | **RECUT 2026-08-08** (Architect `evt_237tbdsacqbk4`). The atomic-with-#3 assembly and the `size: L` are **withdrawn** — `D7` merged on its own, and the continuation machinery the `L` assumed this node must invent has landed. Now: re-census, one discriminating executable witness per live position, then only the narrow consumer port each failure proves necessary. Branches from post-`RT-CONTSPEC-WITNESS` `main`; `07ce6ef1` is **not** its base. Outcome **(b)** still holds |
+| 6c | `RT-MATCH-RECURSOR-CONSUMERS` | **M, provisional** | **Trap 2 again, filed 2026-08-08** (Architect partition `evt_3r4j14fv1jtj2` on census `evt_16cmej481q7ns`). Owns **row 6 (`d8d`)** and **completion of Position A**. `d8d` enumerates exactly `{MatchScrutineeRecursor}`; **A**-only exclusion reaches `FunctionizedUnits` and refuses on `RecursiveBackedge`. **Its refusal reproduces at exact `D2` `8efdfdb3` with production still on `RecursiveDescent`** — so it is a `D2` **completeness defect**, not a `D3` artifact. Goes **first** of the two, because it closes the Position-A claim the `D2` record correction narrows. `RecursiveBackedge` stays protocol-only; the repair consumes the protocol at its owner before the value boundary |
+| 6d | `RT-LEXICAL-RECURSOR-CONSUMERS` | **M, provisional** | Same routing event; **rows 1-5 only, eight expressions across five test families**, each enumerating exactly `{LexicalCallArgumentRecursor}`. **B**-only exclusion is its proven activation seam. Filed `draft` with a written frame, released the moment #6c merges — the order is ruled, not technical. **Do not fold #6c and #6d together**: distinct producer, hook, boundary and completion owner; a shared root would be a subsumption proposal routed before coding, never inferred from shared timing or syntax |
+| — | *both 6c and 6d* | | **Gate #6b's `D3`, and only its `D3`.** Unlike #6, **no quarantine**: zero new `#[ignore]`, and the six old-green controls are not disposable — they are the only probes for the guards they exercise |
 | 6 | `RT-FNUNIT-RESULT-TOKEN` | M | **Trap 2, filed 2026-08-08** — retiring `SeedClosureCall` made a shape newly reachable that the `FunctionizedUnits` lane does not support (`native result token 265 is not in the result table`). Owns `nc22`, currently `#[ignore]`d. **Gates #7**: it is the only program exercising a shape supported *only* by the lane #7 deletes. Its `M` is a **scoping** figure, not a measured one — the family width is unestablishable from a corpus holding one instance |
 | 7 | `RT-DESCENT-RETIRE` | M | delete the selector, enum, authority and lane; bank the win. Gated on **five** nodes — the four migration nodes **and #6** |
 | 8 | `RT-BACKEND-MODULE-SPLIT` | M | **operator, 2026-07-31** — split the oversized `ken-runtime` backend files. **After #7, never before** — see below |

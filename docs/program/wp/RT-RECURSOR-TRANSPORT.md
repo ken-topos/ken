@@ -141,8 +141,45 @@ necessary.**
 > **Settled, and safe to rely on:**
 >
 > - `D1` came back **asymmetric** (checkpoint `2e5e6a8b`). Position B
->   `LexicalCallArgumentRecursor` **closes for free** — the functionized lane
->   executes and yields the same decoded `RuntimeObservation`.
+>   `LexicalCallArgumentRecursor` **closes for free for the exact executable
+>   witness `D1` measured** — that witness's functionized lane executes and
+>   yields the same decoded `RuntimeObservation`, and that result stands.
+>
+>   > **WITHDRAWN 2026-08-08 AS A CLASS-WIDE CLAIM — Architect
+>   > `evt_5w09dcwbf7k70`, on `D3` hard stop 4.** This bullet previously read
+>   > *"position B closes for free"* full stop, with no scope on it, and the
+>   > Steward propagated that unscoped form into this frame, the briefing and
+>   > three watchdogs.
+>   >
+>   > **The evidence against it:** at `D3`, six previously-green semantic
+>   > controls fail closed. **Five of them — eight expressions across five test
+>   > families — enumerate exactly `{LexicalCallArgumentRecursor}`**, position
+>   > B's own population, and two of those refuse with the exact string `D2`'s
+>   > A/B reproduces.
+>   >
+>   > ⇒ **True of the one witness `D1` measured, false of the class.** Position
+>   > B's population is repaired by [[RT-LEXICAL-RECURSOR-CONSUMERS]], which
+>   > gates `D3`.
+>   >
+>   > **A SECOND WITHDRAWAL, same day — "all six reach the lane through
+>   > `host_result_closure_match`" is ALSO false**, and three seats restated it
+>   > before anyone opened the sixth fixture. Row 6 (`d8d`) builds an ordinary
+>   > `Match` whose scrutinee is `px8j_deferred_recursive_field_fixture()` —
+>   > **position A's shape** — and enumerates exactly
+>   > `{MatchScrutineeRecursor}`. It was never in position B's population, and
+>   > it is owned by [[RT-MATCH-RECURSOR-CONSUMERS]], which also gates `D3`.
+>   > Census of record `evt_16cmej481q7ns`; partition `evt_3r4j14fv1jtj2`.
+>   >
+>   > **Both withdrawals are one defect at two scales:** a summary looser than
+>   > the measurement under it, repeated by readers who did not open the
+>   > underlying object. The first generalized one green witness to a class; the
+>   > second generalized five fixtures' shared helper onto a sixth nobody read.
+>   >
+>   > **How it survived:** one green witness was read as a property of the
+>   > class. Nothing in `D1` would have caught it — a passing case cannot
+>   > report the cases it never exercised. The implementer surfaced it against
+>   > its own interest and labelled it as such, which is the only reason it was
+>   > caught before the retirement landed.
 > - **`D2` is `MatchScrutineeRecursor` alone.**
 > - **One node.** The fold survives, but its *"same mechanism / would build the
 >   same transport twice"* justification is **withdrawn** — `D1` disproved it,
@@ -188,6 +225,47 @@ necessary.**
 > currently owed by anyone.**
 
 ### `D3` — joint retirement
+
+> #### `D3` IS GATED ON TWO SUCCESSOR NODES — 2026-08-08, hard stop 4
+>
+> **Do not resume `D3` from `10369776252861e8b15e613576256a3682c70066`.** That
+> checkpoint is **held evidence only**: it is not a candidate, not the repair
+> base, and not to be continued. Architect ruling `evt_5w09dcwbf7k70`, corrected
+> at `evt_ykbnr68eb3bs`, partitioned at `evt_3r4j14fv1jtj2`.
+>
+> **What happened.** The retirement is applied and `AC-2b` is fully
+> dispositioned at 22 items, but six previously-green semantic controls then
+> fail closed across five distinct refusal boundaries. `D3` alone would turn six
+> durable controls red and spend the only probes for five guards.
+>
+> **The census (`evt_16cmej481q7ns`) partitioned them into two populations with
+> two distinct activation seams** — nine expressions measured individually, none
+> of them A+B:
+>
+> | rows | population | seam | owner |
+> |---|---|---|---|
+> | 1-5, eight expressions | exactly `{LexicalCallArgumentRecursor}` | B-only exclusion | [[RT-LEXICAL-RECURSOR-CONSUMERS]] |
+> | 6, `d8d` | exactly `{MatchScrutineeRecursor}` | **A**-only exclusion | [[RT-MATCH-RECURSOR-CONSUMERS]] |
+>
+> **The order, and `D3` is last in it:**
+>
+> 1. The `D2` **record correction** lands — a bounded child over `8efdfdb3` with
+>    no production or test-logic change, narrowing every class-wide claim to the
+>    exact `D1` witness. **`8efdfdb3` itself does not land**: its record claims
+>    *"position A closes"*, and row 6 is an A-only counterexample **on that same
+>    object**. Approval was withdrawn mid-publish, `dec_6nsrbyw1wjpb` is void,
+>    PR #1609 closed before merge, `main` never modified.
+> 2. [[RT-MATCH-RECURSOR-CONSUMERS]] — **first**, because it closes the
+>    Position-A claim that correction narrows.
+> 3. [[RT-LEXICAL-RECURSOR-CONSUMERS]] — rows 1-5.
+> 4. **`D3` resumes from the resulting `main`**, jointly retires, replays the
+>    `AC-2b` dispositions, and proves all six rows green **without** exclusion.
+>
+> **Two things `D3` may not do when it resumes, and they are the tempting
+> shortcuts:** **no new `#[ignore]`** — quarantining these six is ruled out, not
+> merely discouraged — and **no reshaping of a fixture or absorption of a
+> refusal** to make a row pass. The six rows stay enabled and unchanged in
+> meaning.
 
 **Only after both executable positions are green**, retire the two residual
 variants and their test-only selector hooks.
@@ -288,10 +366,26 @@ banned scope.
   *Control:* the handback enumerates each such control with its disposition
   (retired, rewritten to an explicit emptiness assertion, or preserved with a
   stated reason it is still probative), **and states the sweep that found them**
-  — by type, by enumerator, by mutation, and by both variant names across
-  `crates/ken-runtime/src`. **The list under `D3` is a floor, not the perimeter.**
-  A control left green over an empty population is the failure this AC exists
-  to catch, and it is invisible to a suite count.
+  — across `crates/ken-runtime/src`, on **six** axes:
+  1. by **type**;
+  2. by **enumerator**;
+  3. by **mutation**;
+  4. by **variant name**, CamelCase;
+  5. by **lane** — `BodyEmissionAuthority::RecursiveDescent`;
+  6. by **fixture spelling** — the snake_case form of each retired class.
+  **The list under `D3` is a floor, not the perimeter.** A control left green
+  over an empty population is the failure this AC exists to catch, and it is
+  invisible to a suite count.
+
+  > **Axes 5 and 6 were added 2026-08-08 because the original four missed a
+  > control and it cost a red.** `d5_c3_a_second_residual_retains_recursive_descent`
+  > matches none of the first four: it never names the type, never calls the
+  > enumerator, arms no mutation, and reaches the class **only through a
+  > snake_case fixture name that a CamelCase grep cannot match.** It was found
+  > by running the suite, which is the expensive way.
+  >
+  > **The axes are candidate selectors, not a closure argument.** Six axes miss
+  > less than four; they do not prove a perimeter. State the result as a floor.
 - **AC-3 — outcome (b) holds at every new boundary.** No invocation-local
   activation, resume or return-hole state in ABI data.
   *Control:* name the ABI payload for each new crossing and show its fields are
@@ -411,12 +505,28 @@ before starting `D2`** — that is the point at which the Steward re-sizes if
 needed.
 
 **`M` re-affirmed 2026-08-08 with `D0`-`D2` complete and the `D3` reconciliation
-applied.** `D1` came back asymmetric (position B closes for free), `D2` landed
-as a narrow guard, and the implementer reports the `D3` production retirement as
-two files and six sites, building clean. **The added `D3` work is the control
-sweep, not more mechanism** — retiring or rewriting every control whose subject
-the retirement removes. That is bounded by the existing suite and does not
-reopen sizing.
+applied.** `D1` came back asymmetric (position B closed for free **on its exact
+witness** — the class-wide reading is withdrawn, see `D2`), `D2` landed as a
+narrow guard, and the implementer reports the `D3` production retirement as two
+files and six sites, building clean. **The added `D3` work is the control sweep,
+not more mechanism** — retiring or rewriting every control whose subject the
+retirement removes. That is bounded by the existing suite and does not reopen
+sizing.
+
+> **THE RE-AFFIRMATION ABOVE IS SUPERSEDED FOR `D3`, 2026-08-08 — hard stop 4.**
+> The `D3` retirement exposed six previously-green semantic controls that fail
+> closed across five refusal boundaries, all through position B's shape. That
+> repair is **not** in this node: it is [[RT-LEXICAL-RECURSOR-CONSUMERS]], which
+> now holds a `blocks` edge onto this one.
+>
+> **`D0`-`D2` is unaffected and lands on its own** (approved object `8efdfdb3`,
+> Decision `dec_6nsrbyw1wjpb`). `D3` resumes from a `main` that already carries
+> the repair, and must then prove the same six rows green **without** any
+> exclusion hook and **without a single new `#[ignore]`.**
+>
+> The sizing statement that did not survive is *"the added `D3` work is the
+> control sweep, not more mechanism."* There is more mechanism — it is simply
+> owned by another node.
 
 **What would:** if the sweep finds a control that another node's *merged*
 evidence depends on and that cannot be honestly rewritten inside this node, that

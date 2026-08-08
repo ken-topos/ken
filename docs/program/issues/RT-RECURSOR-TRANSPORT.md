@@ -5,11 +5,41 @@ status: ready
 owner: runtime
 size: M
 gate: none
-depends_on: [RT-CONTSPEC-WITNESS]
+depends_on: [RT-CONTSPEC-WITNESS, RT-MATCH-RECURSOR-CONSUMERS, RT-LEXICAL-RECURSOR-CONSUMERS]
 blocks: [RT-DESCENT-RETIRE]
 github: null
 origin: Operator directive 2026-07-29 — prioritize replacement of RecursiveDescent, migrate the remaining residual classes, do not linger half-migrated. Campaign docs/program/16-recursive-descent-retirement.md. Steward-filed (agents cannot create tracked work per COORDINATION §2). Recut 2026-08-08 per Architect ruling evt_237tbdsacqbk4.
 ---
+
+> # `D0`-`D2` LANDS; `D3` IS GATED — 2026-08-08, hard stop 4
+>
+> **The node is split across a merge boundary and the two halves are in
+> different states.** Read both before acting on either.
+>
+> - **`D0`-`D2`'s production mechanism is sound and lands** — but **not at
+>   `8efdfdb3`**. That object's record claims *"position A closes"* and *"both
+>   lanes now agree on position A"*, and the census supplies an A-only
+>   counterexample (`d8d`) reachable **at that same object**. Architect approval
+>   was withdrawn mid-publish (`evt_38bz22cqd7e48`); **`dec_6nsrbyw1wjpb` is
+>   void**, PR #1609 was closed before merge and `main` was never modified. What
+>   lands is a **bounded child** over `8efdfdb3` narrowing every class-wide claim
+>   to the exact `D1` witness — no production or test-logic change, fresh SHA,
+>   fresh QA, fresh Architect, fresh Decision.
+> - **`D3` is blocked on TWO successor nodes** —
+>   [[RT-MATCH-RECURSOR-CONSUMERS]] (row 6, Position A completion) and
+>   [[RT-LEXICAL-RECURSOR-CONSUMERS]] (rows 1-5) — which is why this node carries
+>   `depends_on` edges onto nodes filed *after* it. The `D3` retirement exposed
+>   six previously-green semantic controls failing closed across five refusal
+>   boundaries; the census partitioned them into **two populations with two
+>   distinct activation seams**, not one.
+> - **`10369776252861e8b15e613576256a3682c70066` is held evidence only** — not a
+>   candidate, not the repair base, not to be continued.
+> - **No new `#[ignore]` on this node, ever.** The Steward ruled the six
+>   quarantinable at `evt_7vhjcstd37a50`; that ruling is **withdrawn** (Architect
+>   `evt_5w09dcwbf7k70`).
+>
+> Full sequencing and the census the repair node is held on: see
+> [[RT-LEXICAL-RECURSOR-CONSUMERS]] and the `D3` gate banner in the frame.
 
 > # RECUT 2026-08-08 — THE WHOLE PRIOR CONTRACT IS WITHDRAWN, NOT AMENDED
 >

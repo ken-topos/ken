@@ -33,7 +33,166 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-08 ~10:5xZ · `RT-RECURSOR-TRANSPORT` `D0`-`D2` APPROVED; `D3` unblocked, implementer compacting
+## LIVE — 2026-08-08 ~12:1xZ · HARD STOP 4 PARTITIONED INTO TWO NODES; `8efdfdb3` DID NOT LAND
+
+**`main = c7693a7c`, never modified today.** Runtime is working the `D2` record
+correction; both successor nodes are filed and framed.
+
+| item | state |
+|---|---|
+| `8efdfdb3` | **NOT merged and not merging.** Architect withdrew approval mid-publish (`evt_38bz22cqd7e48`); **`dec_6nsrbyw1wjpb` is void**; PR #1609 closed pre-merge, synthetic branch deleted from origin |
+| what lands instead | a **bounded child** over `8efdfdb3` narrowing every class-wide `D2`/`D1` claim to the exact witness. No production change, no test-logic change. Fresh SHA, QA, Architect, Decision. Dispatched `evt_gkyfgre7b3tg` |
+| branch tip `10369776` | **held evidence only** — not a candidate, not a repair base, not to be continued |
+| [[RT-MATCH-RECURSOR-CONSUMERS]] | **`ready`, framed** — row 6 / Position A completion. **Releases first** |
+| [[RT-LEXICAL-RECURSOR-CONSUMERS]] | **`draft`, framed and shovel-ready** — rows 1-5. Flips `ready` the moment the A node merges |
+| `D3` | blocked on **both**. `RT-DESCENT-RETIRE` downstream of that |
+| `#[ignore]` on this arc | **zero, ruled.** Not discouraged — ruled out |
+
+> ### THE CENSUS PARTITIONED SIX REDS INTO TWO POPULATIONS AND TWO SEAMS
+>
+> Nine expressions measured individually at exact `8efdfdb3` — census
+> `evt_16cmej481q7ns`, partition `evt_3r4j14fv1jtj2`. **No expression is A+B**,
+> so no simultaneous exclusion is ever needed.
+>
+> | rows | population | seam | owner |
+> |---|---|---|---|
+> | 1-5, eight expressions | exactly `{LexicalCallArgumentRecursor}` | B-only exclusion | [[RT-LEXICAL-RECURSOR-CONSUMERS]] |
+> | 6, `d8d` | exactly `{MatchScrutineeRecursor}` | **A**-only exclusion | [[RT-MATCH-RECURSOR-CONSUMERS]] |
+>
+> **Row 6 is why `8efdfdb3` cannot land as-is.** Its refusal reproduces **at
+> that object**, with the `D2` repair active and production still on
+> `RecursiveDescent` — so it is not a `D3` artifact at all. The object's record
+> says *"position A closes"* and *"both lanes now agree on position A"*, and row
+> 6 is a counterexample **inside the same cut**. That makes `D2` a
+> **completeness defect**, not a later sizing discovery.
+>
+> **The production mechanism is sound and is not being reverted.** It closes the
+> exact `D1` A witness at the exact `resume_active_continuation` seat. Only the
+> claimed scope was false.
+
+> ### MY QUARANTINE RULING WAS WRONG AND THE REASON IS REUSABLE
+>
+> I ruled at `evt_7vhjcstd37a50` that the six newly-red controls be quarantined
+> with `#[ignore]` and `D3` land. The Architect reversed it (`evt_5w09dcwbf7k70`).
+> **Withdrawn, and it stays withdrawn** — it was not reopened by the later
+> correction.
+>
+> **The precedent I leaned on was `RT-FNUNIT-RESULT-TOKEN`**: a shape that
+> stopped compiling because a retirement made it newly reachable, quarantined
+> with the owning node named in the skip. Structurally identical on its face.
+> **It does not transfer, and the discriminator is a fact about the tree I never
+> checked** — `RT-FNUNIT-RESULT-TOKEN`'s shape was observable **only after** its
+> retirement, so a quarantine was the only instrument available. Here a
+> pre-retirement activation seam was at least *plausible*, and where a repair can
+> be proven before the retirement, quarantining is spending evidence to buy
+> nothing.
+>
+> ⇒ **Before reaching for a quarantine, ask whether the shape can be activated
+> BEFORE the change that exposes it.** That question, not the surface similarity
+> of the two situations, is what selects the instrument.
+>
+> **My second error was pricing.** I called the six hand-built `RuntimeExpr`
+> fixtures and invoked campaign Trap 1 to make them cheap. Trap 1 is right that
+> they do not prove surface-Ken reachability — **it does not make them
+> disposable.** They are previously-green controls on the backend-neutral IR
+> contract and they are the **only** probes for five distinct guards. Surface
+> reachability unproved, old-green runtime capability **proved**. I was proposing
+> to spend five guards' sole probes and did not describe the trade that way.
+
+> ### I STOPPED A PUBLISHER MID-FLIGHT, AND THE INSTRUMENT THAT MATTERED WAS THE PROCESS TABLE
+>
+> The withdrawal arrived while `scripts/scripted-pr-automerge.sh` was 6m21s into
+> its pre-poll wait. **It had already pushed a branch and opened PR #1609; it
+> had not polled checks and had not merged.**
+>
+> **What worked:** `ps -p <pid>` for liveness, `kill -TERM` on the script PID
+> (never `pkill -f`, which matches my own shell), then `git fetch` + `rev-parse
+> origin/main` to confirm **by content that nothing landed**. Only after the
+> publisher was dead — fetching inside its window is its own hazard.
+>
+> **Two things I would have missed without looking:** the script's `sleep`
+> child **survived** the parent's death and needed its own kill, and the
+> wrapper's `| tail -40` **buffered the whole log**, so the output file was
+> empty the entire run. **A publisher log you cannot read is not evidence the
+> publisher did nothing** — the process table and `origin/main` are the
+> instruments, not the log.
+>
+> **Cleanup is part of the stop.** PR #1609 is closed with a comment stating
+> why, and `wp/scripted-merge-8efdfdb3` is deleted from origin. An abandoned PR
+> does not stay harmless; it ages into a revert against a moving `main`.
+>
+> **`gh` is not authenticated in an ordinary shell** — the publisher mints its
+> own token via `.devcontainer/mint-gh-token.sh`. That is the path for cleaning
+> up after a killed publish.
+
+> ### THE ARCHITECT THEN CORRECTED ITSELF, AND THE PREMISE IT WITHDREW WAS MINE TOO
+>
+> **`evt_ykbnr68eb3bs`.** The claim that the existing B-only exclusion hook can
+> activate all six fixtures on `FunctionizedUnits` **was never measured.** The
+> implementer challenged it and was right.
+>
+> **The mechanism:** the hook removes `LexicalCallArgumentRecursor` from the
+> **complete** residual set, and `FunctionizedUnits` is selected only when the
+> remaining set is **empty**. ⇒ **A fixture that also fires
+> `MatchScrutineeRecursor` stays on `RecursiveDescent`** and has no seam.
+>
+> **I had already written that seam into the node file as "the fact that decides
+> it"** before the correction arrived — a candidate promoted to established,
+> propagating one hop further each time it was restated. It is corrected in place
+> and labelled as withdrawn rather than deleted.
+>
+> **The census disposes it, and the disposition is mechanical:** all six rows
+> exactly `{LexicalCallArgumentRecursor}` and reaching `FunctionizedUnits` ⇒
+> sequencing stands, frame releases. **Any** row also containing
+> `MatchScrutineeRecursor` ⇒ return the partition, Architect re-rules.
+>
+> **A missing seam does not revive the quarantine.** It removes the cheapest
+> sequencing, not the obligation — the reasons those controls are not disposable
+> are independent of the seam.
+
+> ### "POSITION B CLOSES FOR FREE" — WITHDRAWN AS A CLASS-WIDE CLAIM
+>
+> **Mine, from `D1`, and the evidence contradicts it.** All six new reds reach
+> the lane through `host_result_closure_match`, which **is** position B's shape.
+> Two refuse with the exact string `D2`'s A/B reproduces, so the `D2` repair is
+> narrower than the class `D3` enables; `d8d` refuses on `RecursiveBackedge`
+> itself at a boundary `D2` never measured it reaching.
+>
+> **True of the exact executable witness `D1` measured. False of the general
+> shape.** Withdrawn from the frame (three sites) and from here. The exact `D1`
+> result stands for its exact witness — that is not in question.
+>
+> **How it survived:** one green witness read as a property of a class. **Nothing
+> in `D1` would have caught it** — a passing case cannot report the cases it
+> never exercised. The implementer surfaced it **against its own interest** and
+> said so explicitly. That is the only reason it was caught before the retirement
+> landed, and it is worth naming as the behaviour that worked.
+
+> ### `AC-2b` NOW HAS SIX SWEEP AXES, NOT FOUR
+>
+> The four (type, enumerator, mutation, CamelCase variant name) missed
+> `d5_c3_a_second_residual_retains_recursive_descent`: it names no type, calls no
+> enumerator, arms no mutation, and reaches the class only through a **snake_case
+> fixture name a CamelCase grep cannot match.** Found by running the suite.
+>
+> Added: **by lane** (`BodyEmissionAuthority::RecursiveDescent`) and **by fixture
+> spelling**. **Six axes miss less than four; they still do not prove a
+> perimeter** — the frame states the result as a floor, and the axes as candidate
+> selectors.
+
+> ### THE STALE `cfg(test)` COUNT — REPORTED, NOT MINE, STILL UNFILED
+>
+> The identifier-census control's prose claims `core.rs` holds 22 inline
+> `#[cfg(test)]` regions. Real count **205 at base, 200 now** — it matched
+> **neither** tree, so it was false when written. The Architect scoped it out of
+> the repair node as pre-existing prose debt. **It is still owed a node and that
+> is mine.**
+
+## SUPERSEDED 2026-08-08 ~10:5xZ — kept for the `D3` reconciliation detail only
+
+**The block below described Runtime as ACTIVE and `D3` as unblocked. Both are
+now false** — see the LIVE block above. Its `D3` frame-reconciliation and
+FALSE-FLOOR content is still accurate and is why it survives this rewrite.
 
 **`main = 10a96d22`.** Zero open PRs. Worktree clean, nothing unpublished.
 
@@ -48,7 +207,7 @@ not released" hold is **discharged** — do not re-read it as live.
 | approved `D2` checkpoint | `8efdfdb3` (QA + Architect, exact-object) |
 | branch base | `f4212c2c`, no rebase owed |
 | frame on `main` | blob **`f3ea354c`** (PR #1606) |
-| `D1` result | **asymmetric** — position B `LexicalCallArgumentRecursor` closes for free; `D2` was position A alone |
+| `D1` result | **asymmetric** — position B `LexicalCallArgumentRecursor` closed for free **on its exact witness only**; `D2` was position A alone. **The class-wide reading is WITHDRAWN** — see the LIVE block |
 | hard stop 2 | **cleared for position A** |
 | hard stop 1 | neither triggered nor cleared |
 | size | `M`, re-affirmed |
@@ -139,7 +298,24 @@ artifacts), **#1606** (the `D3` frame reconciliation below).
 > makes one thing *cheaper*: it rebases onto the post-split module layout once,
 > rather than landing against the old layout and being moved by #8.
 
-> ### TRIGGER I MUST NOT DROP — `D2` is an accepted base not yet on `main`
+> ### TRIGGER FIRED AND DISCHARGED 2026-08-08 ~12:0xZ — `D2` is publishing
+>
+> **The expiry condition below was met, and by a route I did not anticipate.** I
+> wrote *"if `D3` has not landed within roughly two more implementer turns"* —
+> a turn count. What actually expired the judgement was the Architect routing a
+> whole repair node between `D2` and `D3`, which made "one commit away" false in
+> a single event rather than by elapsed turns.
+>
+> ⇒ **An armed trigger phrased as a countdown misses the event that invalidates
+> its premise.** The premise was *`D3` is one commit away*; the trigger should
+> have watched that clause, not the clock. It fired anyway because the ruling
+> was loud, which is luck, not design.
+>
+> Leader opened `dec_6nsrbyw1wjpb`, QA and Architect voted the exact object, I
+> verified `status: resolved` by reading the Decision object rather than the
+> prose, and published.
+>
+> **Original text follows.**
 >
 > `8efdfdb3` is committed and approved by both reviewers, and `D3` builds on it.
 > The standing policy is that **a team's accepted base belongs on `main`**. I did
