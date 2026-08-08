@@ -49,18 +49,18 @@ to prove the lane was dead.
 ## Sequencing
 
 **Last** in the campaign, gated on the four migration nodes **and on
-[[RT-FNUNIT-RESULT-TOKEN]]**. ⭐ This is the only node here whose `depends_on`
+[[RT-FNUNIT-RESULT-TOKEN]]**. This is the only node here whose `depends_on`
 list is a genuine mechanism dependency rather than file contention — it cannot
 land until every class is retired.
 
-⭐ **The fifth edge is a different kind of dependency and was added 2026-08-08
+**The fifth edge is a different kind of dependency and was added 2026-08-08
 by the Steward** (sequencing call; the node was filed that morning, after this
 list and the campaign DAG were written). The four migration edges say *the lane
 is no longer selected*. `RT-FNUNIT-RESULT-TOKEN` says *the lane is no longer
 needed* — it owns `nc22`, currently the only program exercising a shape that
 **only the `RecursiveDescent` lane supports**.
 
-⛔ **Landing this node first would silently narrow what Ken can compile, and
+**Landing this node first would silently narrow what Ken can compile, and
 nothing would fail.** `nc22` is `#[ignore]`d under that node's own quarantine,
 so the one witness is already suppressed; deleting the lane under a skipped row
 retires the fallback and the detector together. Un-skipping `nc22` green on the

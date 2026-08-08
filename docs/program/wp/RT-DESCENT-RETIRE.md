@@ -11,11 +11,11 @@ directive names, so this is a required node, not a tidy-up.**
 
 ⛔ **Read `docs/program/16-recursive-descent-retirement.md` first.**
 
-⛔ **Gated on five nodes, not four.** ⛔ Do not start until
+**Gated on five nodes, not four.** Do not start until
 [[RT-DECL-CLOSURE-PORT]], [[RT-SEED-CALL-PORT]], [[RT-PRODUCER-MATCH-PORT]],
 [[RT-RECURSOR-TRANSPORT]] **and [[RT-FNUNIT-RESULT-TOKEN]]** have merged.
 
-⛔ **The fifth is not a migration node and its gate is not "the class is
+**The fifth is not a migration node and its gate is not "the class is
 retired."** `RT-FNUNIT-RESULT-TOKEN` owns `nc22`, the only program exercising a
 shape that **only the lane you are deleting supports**. It is `#[ignore]`d under
 that node's quarantine — so if you delete the lane first, the capability
@@ -226,7 +226,7 @@ the proof is unavailable and any argument for it is circular.
 
 ## 6. ⛔ Banned scope
 
-- ⛔ **Starting before all five gating nodes merge** — the four migration nodes
+- **Starting before all five gating nodes merge** — the four migration nodes
   and [[RT-FNUNIT-RESULT-TOKEN]]. A partial deletion is strictly worse than
   none: it removes the fallback while a class can still select it, or while a
   shape still has no other lane to run on.
