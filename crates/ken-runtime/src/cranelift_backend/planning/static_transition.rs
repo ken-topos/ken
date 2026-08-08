@@ -4145,7 +4145,7 @@ fn host_effect_recipe_tree(operation: ken_host::HostOpV1) -> SynthesizedHostResu
         ]));
     const IO_ERRORS: SynthesizedAggregateNode = N::Dynamic(SynthesizedDynamicSet::IoErrors);
 
-    /// The ten-alternative resource surface, in the emitter's own order.
+    /// The eleven-alternative resource surface, in the emitter's own order.
     const RESOURCE_SURFACE: SynthesizedAggregateNode =
         N::Dynamic(SynthesizedDynamicSet::Alternatives(&[
             N::Fixed {
@@ -4167,6 +4167,7 @@ fn host_effect_recipe_tree(operation: ken_host::HostOpV1) -> SynthesizedHostResu
                 children: &[RESOURCE_KIND, RESOURCE_KIND],
             },
             N::nullary(R::ResourceBufferLimit),
+            N::nullary(R::ResourceAllocationFailed),
             N::nullary(R::ResourceInvalidOffset),
             N::nullary(R::ResourceInvalidBounds),
             N::nullary(R::ResourceNoProgress),
@@ -20094,7 +20095,7 @@ mod tests {
         let field = SynthesizedAggregateStep::Field;
         let alt = SynthesizedAggregateStep::Alternative;
 
-        // The ten resource-surface alternatives, in the emitter's order.
+        // The eleven resource-surface alternatives, in the emitter's order.
         let surface: Vec<(SynthesizedAggregatePath, SynthesizedConstructorRole)> = [
             R::ResourceHostIo,
             R::ResourceClosed,
@@ -20103,6 +20104,7 @@ mod tests {
             R::ResourceReleaseFailed,
             R::ResourceKindMismatch,
             R::ResourceBufferLimit,
+            R::ResourceAllocationFailed,
             R::ResourceInvalidOffset,
             R::ResourceInvalidBounds,
             R::ResourceNoProgress,
@@ -20628,7 +20630,7 @@ mod tests {
 
     /// **The PLANNER owns the alternative population, count included.**
     ///
-    /// MEASURED: at a real `FsWriteAt` seat the resource surface reports ten
+    /// MEASURED: at a real `FsWriteAt` seat the resource surface reports eleven
     /// ordered roles, `ResourceKind` reports its two, and a reachable `IOError`
     /// set reports the whole closed inventory. A path that names a constructor,
     /// an `IOError` alternative, or nothing at all is refused rather than
@@ -20673,6 +20675,7 @@ mod tests {
                 Fixed(R::ResourceReleaseFailed),
                 Fixed(R::ResourceKindMismatch),
                 Fixed(R::ResourceBufferLimit),
+                Fixed(R::ResourceAllocationFailed),
                 Fixed(R::ResourceInvalidOffset),
                 Fixed(R::ResourceInvalidBounds),
                 Fixed(R::ResourceNoProgress),
