@@ -163,7 +163,12 @@ shared root may not be inferred from shared retirement timing or shared syntax.
 > **If closing both rows requires BUILDING the reduced-predecessor merge shape,
 > stop and return before building it.**
 >
-> `D1` attributed the owner to `carried_join_arm` (`core.rs:10842`) and flagged
+> `D1` attributed the owner to **`carried_join_arm`** in `core.rs` — the
+> function name is the handle, and it is the only handle this frame states,
+> because `D2` moves that file and any line number here rots on contact. (`D1`
+> first reported `core.rs:10842`, read off an instrumented worktree that
+> displaced the file by a uniform +78; corrected to **`10764` at `89aa1550`** in
+> `cf70db86`, with the attribution unchanged.) `D1` flagged
 > that its existing `Trap` arm documents that shape as **not built by this
 > route**. `Trap` can decline it because `Trap` **refuses**; a `RecursiveBackedge`
 > arm has to **succeed**, so it cannot borrow that escape.
