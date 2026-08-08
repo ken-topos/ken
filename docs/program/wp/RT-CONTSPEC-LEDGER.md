@@ -2,140 +2,124 @@
 
 Node: `docs/program/issues/RT-CONTSPEC-LEDGER.md`. Campaign:
 `docs/program/16-recursive-descent-retirement.md`. Owner: runtime ring.
-Authority: Architect ownership/sizing ruling `evt_1yymw1gdszpbs`, outcome (c),
-seam 3.
+Authority: Architect ruling `evt_1v9m7t4m9dmj7` (2026-08-08), sustaining hard
+stop 7 and recutting this seam. Position in the four-seam sequence is unchanged:
+after `RT-CONTSPEC-ACTIVATE`, before `RT-CONTSPEC-WITNESS`.
 
-Seam 2 turns continuation emission on. This seam makes the **boundary-use
-ledger** record something: today it carries four compile-time constants in every
-production build, so it distinguishes no two continuation inputs from each
-other.
+**This seam deletes the four `BoundaryUse*` axes from the
+continuation-specialization contract.** They are an unowned schema fragment: no
+lowering, ABI, selection, lifetime, or emission consumer reads any of them.
 
-> ## RECUT NOTICE — the 17-row census selection is RETIRED as this seam's subject
+> ## RECUT 2026-08-08 — THE WHOLE PRIOR CONTRACT IS RETIRED, NOT AMENDED
 >
-> **Steward, 2026-08-02.** The previous cut told you to select exactly 17
-> D7-owned rows from the corrected census and make them pass. That instruction
-> carried the same defect found and withdrawn on seam 2
-> (`evt_2zhx69f2fw07w`, Architect confirmation `evt_66t42tapvdbsj`).
+> Every deliverable and acceptance criterion in the previous version of this
+> frame is withdrawn. The prior frame told you to make the four second variants
+> production-reachable and to prove the distinct-tuple count moves off 1. **That
+> is now forbidden, not merely unnecessary.**
 >
-> The 138-row census is a **first-refusal record from the held `1aef3192`
-> lineage** — a tree carrying a mechanism that was never merged and may not be.
-> It can say what once failed and why. It **cannot name a current source
-> authority**, and its rows are green on the lawful base.
+> Architect, `evt_1v9m7t4m9dmj7`: *"Making the second variants reachable would
+> manufacture semantically duplicate units and then call the duplication
+> evidence that the ledger works."*
 >
-> ⇒ **Selecting from the census is retired as a scoping mechanism for this
-> campaign.** This seam's subject is now stated positively, from what the lawful
-> base does and does not do, with a discriminator that can fail on the
-> candidate. The census is not an input to any deliverable or AC below.
+> **Specifically withdrawn**, so that no reader hunts for them: the old
+> `AC-1` tuple-count discriminator (1 on base, greater than 1 on candidate); the
+> old `AC-2` ungating requirement; the old `D2` production-reachable vocabulary;
+> the old `D5` boundary-use census; the old `D7` four-axis collapse control and
+> its `AC-5`. **The old `D1`-`D7` numbering is retired wholesale.** The
+> deliverables below are a fresh `D1`-`D5` and do not correspond to it.
+>
+> The old `D1` re-measurement accepted at `5d430082` measured a base three
+> merges old and a subject that no longer exists. **A fresh `D1` is owed.**
+
+> ## SUPERSEDED — `RT-DECL-CLOSURE-PORT` `D7` IS NOT THIS SEAM'S AUTHORITY
+>
+> The previous frame said the boundary-use mapping would come from
+> `RT-DECL-CLOSURE-PORT` `D7`, and named that node a `depends_on`. **The
+> Architect superseded that claim in `evt_1v9m7t4m9dmj7`, correcting their own
+> prior ruling `evt_40ra70t92mjd2`:**
+>
+> *"Its positive ownership claim was wrong: `RT-DECL-CLOSURE-PORT D7` did not
+> owe one global boundary-use record for every continuation input. The landed
+> D7 correctly derived the narrower `PlannedEffectSeat` population from actual
+> host-effect consumers and explicitly kept its vocabulary separate."*
+>
+> `evt_40ra70t92mjd2` **remains correct in its negative parts**: no mapping
+> existed, the four literals were not a classifier, and coercion into the binary
+> enums was forbidden. Only its ownership assignment is withdrawn.
+>
+> ⇒ **There is no mapping authority to wait for, and none to build.** The
+> already-merged `D7` is historical context. It has been removed from this
+> node's `depends_on`. `PlannedEffectSeat` is a host-operation semantic seat,
+> not a continuation ABI-slot contract; it cannot be projected or reused here.
 
 > ## The `46d29783` lineage remains an ORACLE
 >
 > `46d29783`, `1aef3192`, `9d58df12`, and
 > `refs/preserved/rt-contspec-lower-held-core-rs = 88972207` are preserved and
 > **may not be merged, rebased onto, or cherry-picked wholesale.** This seam
-> branches from `main` after seam 2 lands and carries only its own delta.
+> branches from `main` and carries only its own delta. The 138-row census is not
+> an input to any deliverable or AC.
 
-## The subject, measured
+## The subject, measured at `main = 0fd9f6e8`
 
-All line numbers below are at `main = cef564f1`, in
+All anchors are in
 `crates/ken-runtime/src/cranelift_backend/planning/static_transition.rs`.
+**The deletion surface is that one file.** Measured by the Steward at
+`0fd9f6e80685126f3c3c47466bb40429b4925ab5`:
 
-> **Re-verified by the Steward at `main = 20162242` and at seam 2's QA-approved
-> candidate `c6268ce1`, 2026-08-03.** The load-bearing property is intact on
-> both: one construction site, four `#[cfg(test)]` second variants, the same
-> production tuple, and `continuation_keys_equal_under_mutation` still present.
-> **The addresses did move** — `exact_continuation_projection` is at `:2742` on
-> `20162242` and `:3080` on the candidate. Read every line number below as an
-> anchor to re-find, never as an assertion to check.
-
-`ContinuationInputProjection` (`:450`) carries 15 fields. Four of them are the
-boundary-use ledger:
-
-| field | enum | variants | production-reachable |
-|---|---|---|---|
-| `boundary_phase` | `BoundaryUsePhase` `:417` | `OperationalCarrier`, `SpecializedValue` | **`OperationalCarrier` only** |
-| `boundary_operation` | `BoundaryUseOperation` `:424` | `Forward`, `Retain` | **`Forward` only** |
-| `boundary_need` | `BoundaryUseNeed` `:431` | `PreserveValue`, `PreserveCallableIdentity` | **`PreserveValue` only** |
-| `boundary_avail` | `BoundaryUseAvail` `:438` | `Value`, `Callable` | **`Value` only** |
-
-In each of the four enums **the second variant is `#[cfg(test)]`**. It does not
-exist in a production build.
-
-`ContinuationInputProjection` has **exactly one construction site**:
-`exact_continuation_projection` (`:2754`). It hardcodes all four fields to the
-one non-test variant (`:2764-2767`):
-
-```rust
-boundary_phase:     BoundaryUsePhase::OperationalCarrier,
-boundary_operation: BoundaryUseOperation::Forward,
-boundary_need:      BoundaryUseNeed::PreserveValue,
-boundary_avail:     BoundaryUseAvail::Value,
+```
+grep -rn "BoundaryUse" crates/ --include=*.rs        # 27 hits, all in static_transition.rs
+grep -rn "boundary_phase\|boundary_operation\|\
+boundary_need\|boundary_avail" crates/ --include=*.rs # 28 hits, all in static_transition.rs
 ```
 
-⇒ **Every continuation input the planner produces carries the same boundary-use
-tuple.** The ledger has one row shape and records no distinction.
+| what | anchor |
+|---|---|
+| the four enum declarations | `:878`, `:885`, `:892`, `:899` |
+| the four fields on `ContinuationInputProjection` | `:923-926` |
+| the four fields on `ContinuationInputView` | `:2296-2299` |
+| the view-copy path | `:2272-2275` |
+| the one production construction site, all four hardcoded | `:7491-7494` |
+| the omission copy-back cases | `:7649-7658` |
+| a test-side construction of the same tuple | `:22914-22917` |
+| the `mutate_projection_field` flips to the second variants | `:23453-23462` |
 
-**The Adversary reached the same measurement independently** — `evt_5mzgtka54nd03`,
-2026-08-02: *"four of fifteen `ContinuationInputProjection` key fields are
-production constants."* Steward triage: confirmed defect, **already sequenced —
-it is this node's subject**, so it is folded here rather than filed anew. Do not
-re-derive it; `D5`'s census is what closes it.
+In each of the four enums the **second variant is `#[cfg(test)]`** and does not
+exist in a production build. Every continuation input the planner produces
+therefore carries the identical tuple `OperationalCarrier / Forward /
+PreserveValue / Value`.
 
-### What the existing control does and does not prove
+**Read every line number as an anchor to re-find, never as a value to check.**
 
-There is already a discrimination control over these fields
-(`continuation_keys_equal_under_mutation` `:2832`, driven from the omission
-harness at `:12355-12405`). It proves, per field, that the interning key
-separates two units differing only in that field, and that suppressing the field
-conflates them. **That proof is real and it must keep passing.**
+### Why this is deletion and not population
 
-But `ContinuationProjectionOmission` (`:531`) is itself `#[cfg(test)]`, and
-`mutate_projection_field` reaches the distinct value by flipping to the
-`#[cfg(test)]` variant (`:12312-12321`). So the control proves the key
-discriminates **over a value production cannot construct.**
+The occurrence census is closed, and it is closed in the direction that matters:
+**nothing consumes these fields.** Architect, `evt_1v9m7t4m9dmj7`: *"no lowering,
+ABI, selection, lifetime, or emission consumer reads any of them. The only
+production consequence of changing a tuple would be to intern another
+specialization key whose emitted semantics are otherwise identical."*
 
-⇒ ⭐ **The discrimination is proved and unreachable.** That is this seam's whole
-subject: not a missing mechanism, but an instantiated key over an
-uninstantiated vocabulary. Do not read the green control as evidence the ledger
-works — read it as the harness this seam finally gives a production population
-to.
+⇒ This is not a dormant authority waiting to be populated. Widening the
+vocabulary would split interned units without changing emitted semantics, and
+the resulting extra units would then be offered as evidence the ledger
+discriminates. **That is the vacuity trap inverted** — not a proof over an empty
+population, but a population manufactured to satisfy a proof.
 
-## Fixed inputs, and the re-measurement you owe before any edit
+The existing control `continuation_keys_equal_under_mutation` proves, per field,
+that the interning key separates two units differing only in that field. **That
+proof is real and it is about a distinction production cannot make.** Removing
+its four boundary rows is removal of tests for nonexistent distinctions, not a
+weakening of a production guarantee. The rest of that matrix stays and stays
+green.
 
-Measured at `main = cef564f1`. **Seam 2 is permitted to edit
-`static_transition.rs`, so these line numbers and possibly the construction site
-may move under you.** The four-constants property is what matters, not the
-addresses.
+## Fixed inputs
 
 | input | measured value |
 |---|---|
-| seam 2 | `RT-CONTSPEC-ACTIVATE`, must be `merged` before this starts |
-| the ruled authorities | the graph-derived D7 authorities already ruled; this seam cites and applies them, it does not reopen them |
-| the ledger's production tuple | `OperationalCarrier / Forward / PreserveValue / Value`, at the single construction site |
-| the discrimination harness | `continuation_keys_equal_under_mutation`, retained and kept green |
+| base | `main = 0fd9f6e8`, seams 1 and 2 merged |
+| the deletion surface | `planning/static_transition.rs` only, per the census above |
 | prior-slice surfaces | `planning/static_transition/abi.rs`, `planning/static_transition/semantic_ir.rs`, `boundary_value.rs`, `boundary_value_clif.rs` — frozen at their `main` blobs |
-| baseline suite | `scripts/ken-cargo test -p ken-runtime --lib` |
-
-**Run this first and quote its output as `D1`. If it disagrees with the table
-above, stop and route — do not adapt the frame yourself.**
-
-```sh
-git rev-parse HEAD
-F=crates/ken-runtime/src/cranelift_backend/planning/static_transition.rs
-# TWO hits, and they are different things: the struct declaration, then the
-# one construction site. Read the hits, do not count them.
-grep -n "ContinuationInputProjection {" $F
-grep -c "^struct ContinuationInputProjection {" $F         # expect 1 (the decl)
-grep -c "Ok(ContinuationInputProjection {" $F              # expect 1 (the site)
-grep -n -A3 "enum BoundaryUse" $F | grep -c "cfg(test)"    # expect 4
-```
-
-> ⛔ **The earlier form of this probe was `grep -n "ContinuationInputProjection
-> {" $F  # expect ONE construction site`. It returns 2 — the declaration at
-> `:450` and the construction at `:2754` — so an implementer comparing the count
-> to "ONE" takes hard stop 1 on its first act, on a frame whose subject is
-> entirely intact.** Measured by the Steward at `20162242` and `c6268ce1`,
-> 2026-08-03. The two hits are the expected reading; the property is that
-> exactly one of them constructs.
+| baseline suite | `scripts/ken-cargo build -p ken-runtime` then `scripts/ken-cargo test -p ken-runtime --lib` |
 
 ## Two preconditions on every suite run, carried from seams 1 and 2
 
@@ -150,131 +134,139 @@ Both produced a false hard stop on seam 1 (`evt_3q972fhrnsr0b`, ruled
    `libken_runtime.a`, and without it `ken_runtime_staticlib()` fails ~40 rows
    with a `Toolchain` error whose text names ken-host.
 
-   ```sh
-   scripts/ken-cargo build -p ken-runtime
-   scripts/ken-cargo test  -p ken-runtime --lib
-   ```
-
-> ## THE TRAP THIS SEAM SITS ON — and it is already realized here
->
-> **A proof over an incomplete population is vacuous, and every control over it
-> passes.** That is what rejected `RT-JOIN-DISPOSITION`'s `27f9dca2`: one
-> production site bypassed the recording call, so a class proved over an empty
-> list and every assertion was green.
->
-> ⇒ **This seam does not merely risk that shape — it inherits it.** The four
-> boundary controls are green today over a population of one constant tuple.
-> Adding a ledger claim above them without widening the population would leave
-> every new assertion green for the same reason.
->
-> **So every population this seam proves over owes a control that REDS when a
-> member is dropped from it**, and the boundary-use population owes, in
-> addition, a control that reds when the vocabulary collapses back to one value.
-
 ## Deliverables
 
-- **D1 — the re-measurement**, per the block above: the construction-site count,
-  the four `cfg(test)` gates, and `git rev-parse HEAD`, quoted. Written before
-  any edit.
-- **D2 — the production-reachable vocabulary.** Remove the `#[cfg(test)]` gate
-  from the four second variants and have the planner **issue** them from real
-  planner facts at the construction site.
+- **`D1` — the re-measurement, written before any edit.** `git rev-parse HEAD`,
+  plus the two greps from the census block above with their full output. State
+  the domain you ran them over beside the result. **If any `BoundaryUse` or
+  boundary-field hit appears outside `static_transition.rs`, or if any
+  non-`cfg(test)` site reads one of the four fields, stop** — see hard stop 1.
 
-  > ⛔⛔ **HELD 2026-08-03 — hard stop 2 fired and was SUSTAINED. Architect
-  > ruling `evt_40ra70t92mjd2`: no current lawful mapping authority exists.**
-  >
-  > The prior text said the mapping *"comes from the ruled D7 authorities — you
-  > apply them, you do not invent the mapping."* **That instruction could not be
-  > followed.** Those authorities deliberately supply only the consumer-first law
-  > `Need(e) ⊆ Avail(e)`, the six-disposition semantic codomain, and **the
-  > obligation to re-derive a closed domain**. They explicitly withdrew the
-  > mechanism that once claimed to close it. ⇒ **None of the four plausible
-  > mappings is authorized, and no exhaustive lookup from a six-way disposition
-  > to one four-field tuple is authorized either.**
-  >
-  > **The four fields are a PROJECTION of an already-classified exact record,
-  > not a classifier and not four independent syntax guesses:**
-  >
-  > - `boundary_phase` — the **planned** representation phase at the continuation
-  >   input seat. ⛔ Never a lowering-time observation.
-  > - `boundary_operation` — the planned edge's forward/retain obligation.
-  > - `boundary_need` — the exact consumer operation's `Need`, derived **before**
-  >   selection.
-  > - `boundary_avail` — the selected representation's guarantee, which must
-  >   satisfy that `Need`.
-  >
-  > **The authority that must exist first is `RT-DECL-CLOSURE-PORT` `D7`**, which
-  > is the authority that withdrew the old domain and already names the
-  > replacement derivation. It is now a `depends_on` of this node. This seam may
-  > **consume** the landed exact-record projection; its own banned scope forbids
-  > planner repair and D7 re-derivation, so **it may not build that authority
-  > itself.**
-  >
-  > ⚠ **A disposition need not determine a unique tuple** — a semantic eliminator
-  > may lawfully consume in either phase. **If the current binary enums cannot
-  > total-project every real event without coercion, that is a fresh hard stop.
-  > ⛔ Do not collapse the domain to fit the enum.**
-  >
-  > `D1` is delivered and accepted at `5d430082` and does **not** need redoing on
-  > resume.
-- **D3 — the ledger closure** over the now-distinguishable inputs: the exact
-  source and synthesized-aggregate ledger rows, closed from those same ruled
-  authorities.
-- **D4 — the representation and lifetime controls**, applied from the same ruled
-  authorities.
-- **D5 — the boundary-use census on the candidate.** Over a fixed fixture, the
-  distinct boundary-use tuples the planner actually issues, with a count. This
-  is the discriminator: **1 on the base, greater than 1 on the candidate.**
-- **D6 — the omission controls.** For each population `D3` or `D4` proves over,
-  one control that reds when a member is dropped from it. **One per population,
-  not one for the seam.**
-- **D7 — the collapse control.** One control that reds if the four fields revert
-  to a single tuple across the fixture — the failure this seam exists to fix,
-  stated so a later change cannot silently undo it.
+- **`D2` — delete the schema.** The four enums; the four fields from
+  `ContinuationInputProjection` and `ContinuationInputView`; the constructor
+  literals at the single construction site; and the view-copy path.
+
+- **`D3` — delete the test-only apparatus for the deleted distinctions.** The
+  corresponding `ContinuationProjectionOmission` variants, their mutation cases,
+  their copy-back cases, and the four boundary rows from the key-discrimination
+  control. **Only those four rows.** The surviving exact-key omission matrix
+  stays and stays green.
+
+- **`D4` — the prose and intra-doc sweep. This is a named deliverable because
+  two production comment sites reference the deleted vocabulary and neither is
+  in the Architect's deletion list.** Both were found by the Steward's census;
+  assume there are others and sweep rather than fix these two.
+
+  1. **`:4729` is a broken intra-doc link waiting to happen.** The doc comment on
+     `EffectSeatPhase` reads *"Deliberately its own type rather than a reuse of
+     [`BoundaryUsePhase`]."* Deleting the target breaks the rustdoc link.
+     **Preserve the rationale and drop the dead reference** — that comment is
+     the record of exactly the domain confusion this ruling turns on, and it is
+     the one piece of the old vocabulary's story worth keeping.
+  2. **`:6304-6305` is a load-bearing impossibility premise.** An arm leaves the
+     IH prefix `Open` and justifies it partly by *"an IH is a callable, whose
+     continuation-input vocabulary (`BoundaryUseAvail::Callable`,
+     `BoundaryUseNeed::PreserveCallableIdentity`) exists only under
+     `#[cfg(test)]`."* After `D2` those types do not exist, so the justification
+     names nothing. **The arm's behaviour must not change** — leaving it `Open`
+     is still correct, and `evt_9krmbv834z9p` still forbids a default carrier.
+     Restate the reason without the deleted names.
+
+  ⇒ **This is the campaign's standing shape and no test catches it:** a claim
+  that counts or names a member of a population your delta changes is falsified
+  by that delta, and prose cannot go red. Sweep for every place the four enums
+  or four fields are **named or described**, including comments and string
+  literals, and state the selector you ran.
+
+- **`D5` — the preservation evidence.** That the real continuation-input
+  authorities are untouched: `ContinuationSourceCoordinate`,
+  `ContinuationSourceSlotAuthority` (carrier / ownership / storage / affinity),
+  ordinal and ABI position, and the finalized `ContinuationAvailabilityViews`
+  publication gate. Show that no other key field and no behavioural path moved.
 
 ## Acceptance criteria
 
-- **AC-1 — `D5` shows strictly more than one distinct boundary-use tuple on the
-  candidate, and exactly one on the base.**
-  *Control:* the census run on both trees, with `git rev-parse HEAD` in each
-  block. ⛔ **A candidate census of 1 fails the seam** — it means the vocabulary
-  is still unreachable and every ledger claim above it is vacuous.
-- **AC-2 — no `#[cfg(test)]` gate remains on any of the four second variants**,
-  and each is constructed on a non-test path.
-  *Control:* the four declarations, plus the construction site showing each
-  variant issued from a planner fact rather than a literal.
-- **AC-3 — the existing discrimination harness still passes**, unmodified in
-  what it asserts.
-  *Control:* `continuation_keys_equal_under_mutation` green, and its assertions
-  byte-unchanged. Widening its reachability must not weaken its claim.
-- **AC-4 — every `D6` omission control reds under its own omission.** Drop one
-  member from the population; the control must go red. Restore it; green.
-  *Control:* each omission run shown red, then reverted. **A control that stays
-  green under its own omission fails this AC and, with it, the seam's central
-  claim.** Commit the real fix before any mutation proof, and reset after.
-- **AC-5 — the `D7` collapse control reds when the four fields are forced back
-  to the base tuple.**
-  *Control:* the forced-collapse mutation shown red, then reverted. This is the
-  positive control for `AC-1`.
-- **AC-6 — no test asserts a fact about source, catalog, or documentation
-  lines.** `D1` and `D5` are review artifacts, not gates (operator test policy).
-  *Control:* a read of the added tests.
-- **AC-7 — the prior-slice surfaces are blob-identical to the merge base.**
+- **`AC-1` — the schema is gone.** No `BoundaryUsePhase`,
+  `BoundaryUseOperation`, `BoundaryUseNeed`, `BoundaryUseAvail`, or the four
+  field names survive anywhere in `crates/`, in production or test code, in
+  identifiers or in prose.
+  *Control:* the `D1` greps re-run on the candidate, returning zero, with the
+  domain stated. This is a **review** obligation on the QA seat and a compile
+  consequence — **not** a grep oracle committed as a test (operator: source-text
+  oracles are an invitation for failure and delay).
+
+- **`AC-2` — nothing else in the key moved.** `ContinuationInputProjection` and
+  `ContinuationInputView` differ from the base **only** by the removal of the
+  four fields. No field added, renamed, reordered relative to the survivors, or
+  retyped.
+  *Control:* a field-by-field diff of both declarations against the merge base,
+  in the handback.
+
+- **`AC-3` — the surviving discrimination matrix is intact and green.**
+  `continuation_keys_equal_under_mutation` passes, and its non-boundary
+  assertions are **byte-unchanged**. Exactly four rows removed.
+  *Control:* the diff of that control, plus the green run.
+
+- **`AC-4` — emitted behaviour is unchanged.** The activation and emission
+  controls landed by seams 1 and 2 stay green.
+  *Control:* `scripts/ken-cargo build -p ken-runtime` then
+  `test -p ken-runtime --lib`, with `git rev-parse HEAD` quoted in the same
+  shell.
+
+  **This is the AC that carries the seam's real risk.** The four fields
+  participate in an interning key. Removing them can only **merge** units that
+  were previously distinct — which is the intended correction, since their
+  emitted semantics were identical by construction. **If any unit count or
+  emitted artifact changes in a way that is not that merge, stop** (hard stop 3).
+
+- **`AC-5` — the prior-slice surfaces are blob-identical to the merge base.**
   *Control:* `git rev-parse <candidate>:<path>` against
   `git rev-parse <merge-base>:<path>` for each of the four surfaces.
-- **AC-8 — CI green** on the merge. Workspace-green means green in CI, never a
-  local `--workspace` run.
+
+- **`AC-6` — no test asserts a fact about source, catalog, or documentation
+  lines.** `D1` and `D4` are review artifacts, not gates (operator test policy).
+  *Control:* a read of the added tests.
+
+- **`AC-7` — CI green** on the merge. Workspace-green means green in CI, never a
+  local `--workspace` run (`COORDINATION §12`).
 
 ## Banned scope
 
-- **No planner or ABI repair.** A planner- or ABI-worded refusal on the lawful
-  assembly is a new interface fact and routes back as an exact hard stop.
-- **No re-derivation of the D7 authorities.** They are ruled. This seam applies
-  them; disagreeing with one is a hard stop, not an edit.
+- **No new classifier, no widened record, no split-phase ledger.** The Architect
+  ruled out all three by name. If you believe a continuation consumer needs a
+  phase, retention, or Need/Avail contract, that is a future node owned by that
+  consumer, which must derive a domain-specific checked record and **prove the
+  record changes validation or emission**. It is not anticipated in this key.
+- **No promotion of the `Callable` / `PreserveCallableIdentity` pair.** That
+  pair belongs to `RT-CONTSRC-CALLABLE-CONTRACT`, whose ruled shape is a closed
+  sum **beside** `ContinuationSourceSlotAuthority` — value source versus
+  static-callable source with no value carrier. This seam deletes the test-only
+  pair along with the rest of the schema; it must neither pre-implement that
+  node's contract nor obstruct it. See the downstream note below.
+- **No planner or ABI repair, and no planner reordering.** A planner- or
+  ABI-worded refusal on the deletion is a new interface fact and routes back as
+  an exact hard stop. `PlannedEffectSeat`'s construction after `join_results` is
+  required by the effect seat's own result-representation dependency and is not
+  an invitation to move or split continuation interning.
+- **No re-derivation of `RT-DECL-CLOSURE-PORT` `D7`.** It is merged, it is
+  correct, and it is not this seam's authority.
 - **No lowering activation work.** That was seam 2 and it is merged.
-- **No edit to any prior-slice surface** (`AC-7`).
-- **No census selection.** The 138-row census is not an input here.
+- **No edit to any prior-slice surface** (`AC-5`).
 - **No merge, rebase, or wholesale cherry-pick of any preserved object.**
+
+## Downstream note — `RT-CONTSRC-CALLABLE-CONTRACT`
+
+That node is `status: ready` and does **not** depend on this one, so the two can
+be picked up in either order. Its `D0` and its first hard stop are currently
+stated in terms of `BoundaryUseAvail::Callable` and
+`BoundaryUseNeed::PreserveCallableIdentity` — the exact variants this seam
+deletes. **The Steward has amended that frame in the same change that lands this
+recut**, so that its `D0` is answerable and its hard stop is not silently
+vacuous after the deletion. The mechanism it owns is unaffected: its ruled shape
+is a new closed sum, never a promotion of these variants.
+
+**If you are the implementer and that frame still reads as though the variants
+exist, the amendment did not land — stop and route it.**
 
 ## Contention
 
@@ -285,53 +277,31 @@ and conformance run in CI.
 
 ## Sizing
 
-**Size `M`.** The authorities are ruled, so `D3`/`D4` are application rather
-than design. The two things that can inflate it are `D2` — if the ruled
-authorities turn out not to settle the variant mapping — and `D6`, which is one
-omission control per population, not per seam.
+**Size `S`.** This is a single-file deletion with a closed census and no design
+left in it. The two things that can inflate it are `D4`, if the prose sweep
+finds more than the two known sites, and `AC-4`, if the interning-key change
+moves an emitted artifact.
 
-⇒ **Commit at these three checkpoints and post the exact SHA at each:**
-
-1. `D1` re-measurement plus `D2` production-reachable vocabulary, with the `D5`
-   census showing the count move off 1. No ledger claims yet.
-2. `D3` plus `D4` closure.
-3. `D6` omission controls and `D7` collapse control with their mutation proofs.
-
-**Expect to end your turn at each checkpoint.** Post the SHA and wait for the
-leader rather than assuming one turn spans all three. If any checkpoint runs
-past an hour, stop and route; the recut is the Steward's.
+**One checkpoint, not three.** Commit `D1`-`D5` together and post the exact SHA.
+The deletion is not meaningfully separable: `D2` alone does not compile, since
+`D3`'s mutation cases reference the deleted variants. If the work runs past an
+hour, stop and route; the recut is the Steward's.
 
 ## Hard stops
 
 Stop and route to the Steward, do not improvise, if any of these hold:
 
-1. **The `D1` re-measurement disagrees with the fixed-inputs table** — more than
-   one site *constructs* a `ContinuationInputProjection`, or the four
-   `cfg(test)` gates are not there. Seam 2 moved something this frame depends
-   on. ⛔ **A moved line number is not this hard stop, and neither is a raw
-   grep count of 2** — that count includes the struct declaration. Re-find the
-   construction site and check the property.
-2. ✅ **FIRED AND SUSTAINED 2026-08-03 — do not re-raise it, and do not treat it
-   as still open against you.** The ruled D7 authorities do not determine which
-   planner condition selects which boundary-use variant. Architect
-   `evt_40ra70t92mjd2` confirmed no current lawful mapping authority exists, and
-   the re-derivation is `RT-DECL-CLOSURE-PORT` `D7`'s, now a `depends_on` of this
-   node. ⛔ Do not pick a plausible mapping to keep moving. **On resume, the
-   mapping is read off the landed exact-record projection**, and if that
-   projection cannot total-project every real event without coercion, that is a
-   *new* stop under item 7 below.
-3. **The vocabulary cannot be made production-reachable** without touching a
-   prior-slice surface or the planner. Interface fact, exactly as at seams 1
-   and 2.
-4. **A `D6` omission control cannot be written for some population** — meaning
-   the population has no observable membership. That is the vacuity trap in its
-   original form and it is a design question.
-5. **A ruled D7 authority appears wrong.** Route it; do not apply an authority
-   you believe is incorrect, and do not silently correct it.
-6. **A planner- or ABI-worded refusal appears.** New interface fact.
-7. **The landed exact-record projection cannot total-project every real
-   boundary-use event into the four binary enums without coercion.** Architect
-   `evt_40ra70t92mjd2` names this explicitly as a fresh stop rather than a
-   modelling choice. ⛔ **Do not collapse the domain to fit the enum**, and do
-   not widen an enum to make a coercion unnecessary — either is a design change
-   and neither is yours.
+1. **`D1` finds a consumer.** Any non-`cfg(test)` site reads one of the four
+   fields, or any occurrence appears outside `static_transition.rs`. The
+   ruling's central premise is that no consumer exists; a consumer falsifies it
+   and the seam is a different node.
+2. **The deletion cannot complete without touching a prior-slice surface or the
+   planner.** Interface fact, exactly as at seams 1 and 2.
+3. **`AC-4` moves.** An emitted artifact or a unit count changes in any way
+   other than the merging of units whose emitted semantics were already
+   identical. That would mean the fields were load-bearing after all, which
+   contradicts hard stop 1's premise from the other direction.
+4. **A planner- or ABI-worded refusal appears.** New interface fact.
+5. **The `D4` sweep finds a comment whose claim is load-bearing and whose
+   correct restatement you cannot derive.** Do not guess at why an arm refuses;
+   the reason is the arm's contract.

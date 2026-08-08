@@ -82,14 +82,22 @@ from the node's execution-order table instead.
    `plan_static_transition_graph_with_symbols` that is **not a field of
    `StaticTransitionPlan`**. So `(case body, ordinal)` does not determine the
    IH contract, and the walk cannot reach the fact that would.
-3. **Production continuation inputs have no callable domain at all.**
-   `BoundaryUseAvail::Callable` and `BoundaryUseNeed::PreserveCallableIdentity`
-   exist solely as `#[cfg(test)]` mutations; every production projection is
-   `Value` / `PreserveValue`.
+3. **Production continuation inputs have no callable domain at all.** As
+   measured when this frame was written, `BoundaryUseAvail::Callable` and
+   `BoundaryUseNeed::PreserveCallableIdentity` existed solely as `#[cfg(test)]`
+   mutations; every production projection was `Value` / `PreserveValue`.
 
-**Measurement 3 is the one that decides the shape of the work.** A callable
-arm that exists only under `cfg(test)` cannot be the authority for a production
-contract — that would make the test suite the source of truth for what
+   > **The instance is dated; the measurement is not.** `RT-CONTSPEC-LEDGER`
+   > (recut 2026-08-08, Architect `evt_1v9m7t4m9dmj7`) **deletes those two
+   > enums and their two siblings outright.** Measurement 3 then holds more
+   > strongly than when it was written — there is no callable domain because
+   > there is no domain. Re-derive it at your base per `D0` question 1, and
+   > state which world you measured in.
+
+**Measurement 3 is the one that decides the shape of the work**, and its force
+does not depend on the enums surviving. A callable arm that exists only under
+`cfg(test)` — or not at all — cannot be the authority for a production
+contract; that would make the test suite the source of truth for what
 production may represent. See AC-4.
 
 ### The witness edge
@@ -134,10 +142,12 @@ was written** — on `RT-CONTSRC-PRODUCER-LOCAL`'s branch at `89e36ec1`, both in
 
 ⇒ **The obligation this node exists to house already has a checked production
 home twice over — just not on the continuation-source surface.** Measurement 3
-still holds where it is stated: the only sites setting `BoundaryUseAvail::
-Callable` / `BoundaryUseNeed::PreserveCallableIdentity` are inside
-`mutate_projection_field`, a `cfg(test)` projection-mutation helper. Verified
-at `89e36ec1`, not inherited from `e6d4f085`.
+still holds where it is stated: at `89e36ec1` the only sites setting
+`BoundaryUseAvail::Callable` / `BoundaryUseNeed::PreserveCallableIdentity` were
+inside `mutate_projection_field`, a `cfg(test)` projection-mutation helper.
+Verified there, not inherited from `e6d4f085`. **`RT-CONTSPEC-LEDGER` deletes
+that helper's boundary cases along with the enums** — which removes the setters
+rather than adding one, so the measurement survives the deletion.
 
 **Why this changes how the node is built rather than whether it is.** `D1`
 says the callable arm's identity comes from "the existing planned
@@ -170,15 +180,34 @@ Section 2's table records two production static-callable sums that landed in
 which is a claim about the continuation-source projection vocabulary. So `D0`
 answers two questions, separately:
 
-1. **On the projection surface** — are `BoundaryUseAvail::Callable` and
-   `BoundaryUseNeed::PreserveCallableIdentity` still reachable only from
-   `cfg(test)` mutation helpers? Answer by enumerating their setters, not by
-   grepping the names: **when this frame was written**, at `89e36ec1`, the sole
-   setters sat in `mutate_projection_field`, and a comment elsewhere *restated*
-   the property without being a setter. **That is where to look first, not what
-   to conclude** — re-enumerate the setters at your actual base, since the `D8`
-   series has since worked the emission and projection machinery. **A grep hit
-   on a comment that asserts the measurement is not a measurement.**
+1. **On the projection surface** — is there a production callable domain? Ask
+   it that way, because **the vocabulary the question used to name is being
+   deleted.**
+
+   > **Amended 2026-08-08 by the Steward.** `RT-CONTSPEC-LEDGER` was recut to
+   > schema retirement (Architect `evt_1v9m7t4m9dmj7`) and **deletes
+   > `BoundaryUseAvail`, `BoundaryUseNeed`, and their two sibling enums
+   > outright**, along with the `mutate_projection_field` cases that flip them.
+   > That node does not gate this one and the two may land in either order.
+   >
+   > **So answer by enumerating setters of a production callable domain on the
+   > continuation-source projection surface, and record which world you are
+   > in:**
+   >
+   > - **The enums still exist** (LEDGER has not landed): the original question
+   >   stands unchanged. At `89e36ec1` the sole setters sat in
+   >   `mutate_projection_field`, and a comment elsewhere *restated* the
+   >   property without being a setter. **That is where to look first, not what
+   >   to conclude** — re-enumerate at your actual base, since the `D8` series
+   >   has worked the emission and projection machinery since.
+   > - **The enums are gone** (LEDGER has landed): measurement 3 holds **a
+   >   fortiori** — a domain that does not exist is not production-reachable.
+   >   **Record it as discharged by absence and say so explicitly.** Do not
+   >   report a zero-hit grep as if you had enumerated setters; those are
+   >   different claims and only one of them is true here.
+   >
+   > **A grep hit on a comment that asserts the measurement is not a
+   > measurement** — and after the deletion, neither is a grep miss.
 2. **On the lowering surface** — are the two sums still as section 2 records
    them, and did either grow a value carrier, ownership or storage field?
 
@@ -312,9 +341,22 @@ Stop and hand back, without repairing, if:
 
 - `D0` finds measurement 3 changed **on the projection surface** — a
   production callable domain already existing there changes what this node is.
-  ⛔ **The two `lowering/` sums in section 2 do not trip this**; they were
-  measured and are expected. Tripping it means a non-`cfg(test)` setter of
-  `BoundaryUseAvail::Callable` or `BoundaryUseNeed::PreserveCallableIdentity`;
+  **The two `lowering/` sums in section 2 do not trip this**; they were
+  measured and are expected. Tripping it means **any production-reachable
+  callable domain on the continuation-source projection surface**, by whatever
+  name.
+
+  > **Amended 2026-08-08 by the Steward, and the amendment is the point.** This
+  > stop previously read *"a non-`cfg(test)` setter of
+  > `BoundaryUseAvail::Callable` or `BoundaryUseNeed::PreserveCallableIdentity`."*
+  > `RT-CONTSPEC-LEDGER` deletes both enums, after which **no such setter can
+  > exist and the stop could never fire** — it would pass for the reason it was
+  > written to detect, and read as "measured and clear" when it was
+  > unmeasurable.
+  >
+  > **Stated by property it still fires**, on any successor vocabulary as well
+  > as on the deleted one. If you discharge it by absence, say absence — see
+  > `D0` question 1;
 - closing the IH edge requires a `ResultPhase`-to-carrier bridge, or any of
   section 5's banned shapes;
 - the consumer enumeration in `D2` cannot be shown complete — an unbounded
