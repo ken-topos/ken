@@ -183,11 +183,13 @@ observations — has a test for that closure-free case. The
 [native parity test](../../../crates/ken-cli/tests/rt_parity_native.rs)
 contains six `assert_narrowed_alike` cases that run the same fixture through
 both executors and assert on the exact result variant, not merely `is_err`.
-All six are currently ignored: five await
-`RT-CARRIER-BYTESPAN-OBSERVE`, and one awaits
-`RT-CLOSURE-BOUNDARY-LANE`. The file's only live test calls `elaborates()`, a
-source-scope rejection check that does not run either executor and is not a
-differential.
+All six are currently ignored. The five rows formerly waiting on
+the byte-span repair did not re-arm: byte-span observation now succeeds, but
+each path seat is also read as `SiteOperand(0)`, which still requires a
+compile-time `Lowered` template. The sixth remains quarantined because a
+runtime-local closure has no durable boundary lane. The file's only live test
+calls `elaborates()`, a source-scope rejection check that does not run either
+executor and is not a differential.
 
 The binary remains excluded from the **sharded** test run, and a separate
 `native-rt-parity` job still runs it. The required `build + test` job depends
@@ -195,8 +197,8 @@ on that job and checks its result. Read the resulting green precisely: it
 shows that the dedicated job ran and that the live source-scope check passed.
 It carries no current evidence that the interpreter and native backend agree
 on the six narrowing cases. The differential is therefore **unavailable**
-until both owner nodes re-arm their rows; un-ignoring either node alone would
-leave it partial.
+while all six remain ignored. Re-arming one cause would make it partial; only
+re-arming every row makes it live.
 
 Chapter [04](04-effects-capabilities-and-authority.md) now shows a checked
 filesystem authority exemplar: an explicit `Cap a` parameter beside `[FS]`,
