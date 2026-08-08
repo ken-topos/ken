@@ -17,30 +17,66 @@ because of that campaign's Trap 2, and the frame does not repeat the traps.
 
 ## 1. Fixed inputs
 
-Measured at `origin/main = ddddb48d`.
+Measured at `ddddb48d`, **re-verified at `origin/main = 464cb446`
+(2026-08-08): all three blobs are unchanged between those two commits.**
 
 | path | blob |
 |---|---|
-| `crates/ken-runtime/src/cranelift_backend/surface.rs` | `99b9b5070e5c2780e73bfec6c4bac2a55764af40` |
-| `crates/ken-runtime/src/cranelift_backend/artifact/api/tests.rs` | `f96a0b0bd1d7ed21ce228b9157346f89c1bb7f01` |
+| `crates/ken-runtime/src/cranelift_backend/surface.rs` | `99b9b507` |
+| `crates/ken-runtime/src/cranelift_backend/artifact/api/tests.rs` | `f96a0b0b` |
+| `crates/ken-runtime/src/cranelift_backend/compiled.rs` | `31e5c149` |
 
-**Re-pin at pickup.** `RT-PRODUCER-MATCH-PORT` is in flight and rewrites this
-region's neighbours. These are recorded so the derivation below can be checked
-against what changed, not so the numbers can be trusted.
+`RT-PRODUCER-MATCH-PORT` was in flight when this frame was written and has
+since **merged**; it did not touch any of the three.
+
+**Re-pin at pickup anyway.** These are recorded so the derivation below can be
+checked against what changed — not so the numbers can be trusted.
 
 ## 2. What is known, and how it was established
 
 - The failing row is `nc22_cranelift_agrees_with_runtime_ir_report_for_broad_starter_shapes`
   (`artifact/api/tests.rs`), currently `#[ignore]`d with this node named as owner.
-- The error is `BackendFailure::NativeResultDecode { token }`
-  (`surface.rs:192`, rendered at `:251`/`:315`). **Its producers are five sites in
-  `cranelift_backend/compiled.rs`** — `:135`, `:168`, `:194`, `:197`, `:200` —
-  each an `ok_or_else` on a failed lookup.
+- The error is `BackendFailure::NativeResultDecode { token }`, declared in
+  `surface.rs` and rendered there by a single `write!`.
 - **The port is NOT the cause, and this was measured rather than argued.**
   Flipping `nc22`'s callee from `RuntimeExpr::Closure` to
   `RuntimeExpr::LexicalClosure` — an arm live since [[RT-DECL-CLOSURE-PORT]] and
   untouched by [[RT-SEED-CALL-PORT]]'s `D2`/`D3` — reproduces the **identical**
   error. The shape was already unsupported on the functionized lane.
+
+> #### CORRECTED 2026-08-08 — this frame previously named FIVE producers and the
+> #### enumeration was wrong when written, not stale
+>
+> It said: *"Its producers are five sites in `cranelift_backend/compiled.rs` —
+> `:135`, `:168`, `:194`, `:197`, `:200` — each an `ok_or_else` on a failed
+> lookup."* **`compiled.rs` raises it at eight sites, and the blob is identical
+> at `ddddb48d` and `464cb446`** — nothing moved; the count was simply short.
+>
+> **The omission is not arbitrary. The one site the error message actually
+> names — the `Table` arm's `result_table.get(&token)` miss, the only literal
+> result-table lookup of the eight — is among the three that were missing.**
+>
+> ```sh
+> git grep -n 'NativeResultDecode' -- crates/ken-runtime/src/cranelift_backend/compiled.rs
+> ```
+>
+> **The authoritative arm-by-arm table is [[RT-WORKER-FIXTURE-DECODE]] §1e, and
+> it is not repeated here** — that frame had all eight correct on 2026-08-07,
+> a day before this one contradicted it with five. One table, one place to
+> maintain. Read §1e, then come back.
+>
+> Two consequences, both binding on `D2`:
+>
+> 1. **"each an `ok_or_else` on a failed lookup" is false for two of the eight.**
+>    An unconditional `return Err` on a reached path is not a lookup miss — it
+>    says the decoder was *selected* wrongly, or the artifact declared it returns
+>    only a trap. Those route to **production**, not registration, so the false
+>    uniformity biased `D2`'s own discrimination toward one of its two answers.
+> 2. **The message does not localize the fault.** One variant, one `write!`, eight
+>    raise sites — *every* one of them prints `native result token N is not in the
+>    result table`, and that wording is literally accurate for exactly one. **Do
+>    not infer the site from the text.** Discriminate by which `ResultDecoder`
+>    arm was selected for `nc22`.
 
 **Discounted evidence, recorded so nobody re-counts it:** an earlier smaller
 record-returning probe failed on both arms with a *different* error
@@ -77,10 +113,25 @@ Do not silently absorb it.
   the failure is one shape or a family, and state **what authoring that answer
   cost or would cost.** Report before building. **A `D1` that concludes the node
   is mis-sized is a success.**
-- **`D2` — locate the gap.** Which of the five `compiled.rs` producers raises it
-  for `nc22`, what token 265 denotes, and **whether the gap is the token's
-  PRODUCTION or its REGISTRATION** — those route differently and the answer
-  determines `D3`'s shape.
+- **`D2` — locate the gap.** Which of the **eight** `compiled.rs` producers
+  raises it for `nc22`, and **whether the gap is the token's PRODUCTION or its
+  REGISTRATION** — those route differently and the answer determines `D3`'s
+  shape.
+
+  **Establish the site by observation, not by the message** — see the correction
+  in §2: all eight render the same text. Name which `ResultDecoder` arm `nc22`
+  selects and say how you determined it; [[RT-WORKER-FIXTURE-DECODE]] §1e lists
+  the decoder-selection sites to look at. **If the arm is `TrapOnly` or an
+  unrecognized `Boundary` tag, the fault is upstream of the decode table
+  entirely** and §7's hard stop is likely live.
+
+  **Do not re-derive what 265 "denotes" as an open question.**
+  [[RT-WORKER-FIXTURE-DECODE]] §1d settles the general form: `token` is the
+  **native return value** — literally what the compiled code returned — not an
+  error code, an arm tag, or an index into anything. So `265` carries no
+  information until you have named the selected decoder. **An inference drawn
+  from the numeral before that point is unfounded**, which is the trap this
+  frame walked into by calling the message a result-table fact.
 - **`D3` — the repair.** Cut against `D2`'s finding.
 - **`D4` — un-skip `nc22` and prove it green on the functionized lane.**
   **This node closes on the row running, not on the skip being tidied.**
@@ -96,10 +147,18 @@ Do not silently absorb it.
   that fixes `nc22` alone while a family exists must say so.**
 - **`AC-3` (no-regression).** Workspace green **in CI** — never a local
   `--workspace` run (`COORDINATION §12`).
-- **`AC-4` — the decode surface stays fail-closed.** A token genuinely absent
-  from the table must still raise `NativeResultDecode` rather than being
-  defaulted, silently mapped, or widened away. **Making the error disappear is
-  the failure mode, not the fix.**
+- **`AC-4` — the decode surface stays fail-closed, on the arm the repair
+  actually touches.** A value the decoder genuinely cannot interpret must still
+  raise `NativeResultDecode` rather than being defaulted, silently mapped, or
+  widened away. **Making the error disappear is the failure mode, not the fix.**
+
+  **State the guard on the path `nc22`'s value takes**, named by the
+  `ResultDecoder` arm `D2` identified — not on the table lookup by default.
+  Seven of the eight producers are not table lookups, so an `AC-4` discharged
+  against `result_table` **passes vacuously** for a repair that widened the
+  `Boundary` `_ =>` arm or the `TrapOnly` arm. Those two are the dangerous ones:
+  each is an unconditional refusal on a reached path, and the cheap way to make
+  either stop firing is to accept what it was built to reject.
 
 ## 6. Banned scope
 
