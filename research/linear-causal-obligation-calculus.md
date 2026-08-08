@@ -4,7 +4,7 @@
 ruling
 
 **Grounding:** `origin/main` at
-`8c6ab6f9f42e5e4d63740fe87d943b9f7928fa4c`
+`8c6ab6f9719de28ecb31d65c30ee9e9db7597835`
 
 **Date:** 2026-08-08
 
