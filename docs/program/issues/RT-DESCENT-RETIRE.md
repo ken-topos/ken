@@ -11,11 +11,11 @@ github: null
 origin: Operator directive 2026-07-29 — "we should not let it linger in a half-migrated state. That just carries tech debt for no benefit." Campaign docs/program/16-recursive-descent-retirement.md. Steward-filed (agents cannot create tracked work per COORDINATION §2).
 ---
 
-> # ⛔⛔ RETIRING ALL FIVE RESIDUAL CLASSES IS NOT THE FINISH LINE
+> # RETIRING ALL FIVE RESIDUAL CLASSES IS NOT THE FINISH LINE
 >
 > With every class retired, the selector still exists, still evaluates on every
 > compilation, and the `RecursiveDescent` emission lane is still compiled in —
-> **dead**. ⭐ **That residue IS the tech debt the directive names.** So this is
+> **dead**. **That residue IS the tech debt the directive names.** So this is
 > a required node, not a tidy-up, and it is the node that actually banks the
 > efficiency win.
 >
@@ -26,24 +26,24 @@ origin: Operator directive 2026-07-29 — "we should not let it linger in a half
 
 ## Why it is its own node and not a coda on the last migration
 
-⛔ **Because a deletion this wide has a different risk profile than a port**, and
+**Because a deletion this wide has a different risk profile than a port**, and
 folding it into [[RT-RECURSOR-TRANSPORT]] would let "the last class is retired"
 be reported as "the lane is gone." Those are different claims, and only the
 second is the directive.
 
 The lane's surface at `origin/main = 14c3c5f7` spans **five production files** —
 `lowering/core.rs`, `lowering/mod.rs`, `planning/static_transition.rs`,
-`object_linker_packaging.rs`, and the `core/tests/` control modules. ⚠ A
+`object_linker_packaging.rs`, and the `core/tests/` control modules. A
 deletion that misses a file leaves a dead branch that still compiles.
 
-## ⚠ The dead-code oracle is spent by the commit that clears it
+## The dead-code oracle is spent by the commit that clears it
 
 Once the last residual class is retired, **nothing in the tree can any longer
 distinguish "the lane is unreachable" from "the lane was deleted."** The
 evidence that the lane is dead exists only *before* this node lands.
 
-⇒ ⭐ **`D1` captures that evidence first**, while it is still capturable, and the
-acceptance criteria are written against it. ⛔ Do not start deleting and then try
+⇒ **`D1` captures that evidence first**, while it is still capturable, and the
+acceptance criteria are written against it. Do not start deleting and then try
 to prove the lane was dead.
 
 ## Sequencing
@@ -69,6 +69,6 @@ release gate.
 
 ## ▶ THE FRAME IS WRITTEN
 
-`docs/program/wp/RT-DESCENT-RETIRE.md`. ⭐ Campaign context, the binding traps that
+`docs/program/wp/RT-DESCENT-RETIRE.md`. Campaign context, the binding traps that
 bind every node in this arc, and the full schedule:
 `docs/program/16-recursive-descent-retirement.md` — **read it before the frame.**

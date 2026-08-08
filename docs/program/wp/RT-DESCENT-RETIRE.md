@@ -9,7 +9,7 @@ directive names, so this is a required node, not a tidy-up.**
 **Risk:** medium — a wide deletion across five production files, with a
 **one-shot** oracle.
 
-⛔ **Read `docs/program/16-recursive-descent-retirement.md` first.**
+**Read `docs/program/16-recursive-descent-retirement.md` first.**
 
 **Gated on five nodes, not four.** Do not start until
 [[RT-DECL-CLOSURE-PORT]], [[RT-SEED-CALL-PORT]], [[RT-PRODUCER-MATCH-PORT]],
@@ -35,8 +35,8 @@ was filed after this frame was written.
 | `crates/ken-runtime/src/cranelift_backend/planning/static_transition.rs` | `f9d7fc1025bfa80cb5eaf66284252d3bdd59c28c` |
 | `crates/ken-runtime/src/object_linker_packaging.rs` | `59d2940576894f516494c28c5b8d66a8260337f8` |
 
-⚠ **Every one of these is stale by pickup** — four nodes run first. **Re-pin at
-pickup.** ⛔ These are recorded to bound the *surface*, not to be trusted as
+**Every one of these is stale by pickup** — four nodes run first. **Re-pin at
+pickup.** These are recorded to bound the *surface*, not to be trusted as
 values.
 
 ## 2. The surface
@@ -54,19 +54,19 @@ occurrences span **five production files plus three test modules**:
 
 Plus `core/tests/constructors.rs` and `core/tests/effects.rs`.
 
-⚠ **A deletion that misses a file leaves a dead branch that still compiles.**
-The count above is the pre-campaign surface and will have moved; ⛔ **re-derive
+**A deletion that misses a file leaves a dead branch that still compiles.**
+The count above is the pre-campaign surface and will have moved; **re-derive
 it, do not re-pin it.**
 
-## 3. ⛔⛔ THE ORACLE IS SPENT BY THE COMMIT THAT CLEARS IT
+## 3. THE ORACLE IS SPENT BY THE COMMIT THAT CLEARS IT
 
 Once the last residual class is retired, **nothing in the tree can distinguish
 "the lane is unreachable" from "the lane was deleted."** The evidence that the
 lane is genuinely dead exists **only before this node lands**, and this node
 destroys it.
 
-⇒ ⭐ **`D1` captures that evidence first, while it is still capturable.**
-⛔ Do not begin deleting and then attempt to prove the lane was dead — by then
+⇒ **`D1` captures that evidence first, while it is still capturable.**
+Do not begin deleting and then attempt to prove the lane was dead — by then
 the proof is unavailable and any argument for it is circular.
 
 ## 4. Deliverables
@@ -75,11 +75,11 @@ the proof is unavailable and any argument for it is circular.
   pre-deletion tree, with all five classes retired: run the full-residual
   enumeration over every measured program and the whole test corpus, and record
   that **no residual fires anywhere** and **no program selects
-  `BodyEmissionAuthority::RecursiveDescent`**. ⛔ Post this before `D2`.
+  `BodyEmissionAuthority::RecursiveDescent`**. Post this before `D2`.
 - **`D2` — A positive control on `D1`'s instrument.** Reintroduce one residual
   temporarily and confirm the enumeration **reports it** and the authority
   **flips to `RecursiveDescent`**. Restore byte-identically.
-  ⭐ **Without this, `D1` is a negative check that passes for any reason** —
+  **Without this, `D1` is a negative check that passes for any reason** —
   including a broken instrument.
 - **`D3` — Delete the classifiers**: `recursive_descent_residual`,
   `declaration_recursive_descent_residual`, `RecursiveDescentResidual`, and
@@ -88,10 +88,10 @@ the proof is unavailable and any argument for it is circular.
   and, if the enum is then a single variant, the enum itself and every branch on
   it across all five files.
 - **`D5` — Delete the recursive-descent emission lane** it selected.
-- **`D6` — Retire or re-home the lane's tests.** ⚠ Tests that exercised the
-  `RecursiveDescent` lane are testing deleted code. ⛔ Do not delete a test that
+- **`D6` — Retire or re-home the lane's tests.** Tests that exercised the
+  `RecursiveDescent` lane are testing deleted code. Do not delete a test that
   is actually asserting a *semantic* property reachable on the surviving lane —
-  re-home those. ⛔ Do not keep a test green by keeping dead code alive for it.
+  re-home those. Do not keep a test green by keeping dead code alive for it.
 - **`D6b` — ANSWER THE COVERAGE QUESTION THE ADVERSARY LEFT OPEN.** Folded here
   2026-08-08 rather than filed as its own node: it is a coverage-accounting
   question, `AC-5` already forbids a silent net loss, and this node performs the
@@ -199,21 +199,21 @@ the proof is unavailable and any argument for it is circular.
 ## 5. Acceptance criteria
 
 - **`AC-1`.** The whole test corpus **compiles and passes** with the lane
-  deleted. Workspace green **in CI** — ⛔ never a local `--workspace` run
+  deleted. Workspace green **in CI** — never a local `--workspace` run
   (`COORDINATION §12`).
 - **`AC-2`.** `D1`'s evidence and `D2`'s positive control are both in the tree.
-  ⛔ `D1` without `D2` does not discharge this AC.
+  `D1` without `D2` does not discharge this AC.
 - **`AC-3` — the deletion is complete.** No `BodyEmissionAuthority`,
   `RecursiveDescentResidual`, or recursive-descent lane symbol survives in
-  `crates/ken-runtime/src/`. ⭐ This is a **review** obligation on the QA seat
-  and a compile consequence — ⛔ **not** a grep oracle committed as a test
+  `crates/ken-runtime/src/`. This is a **review** obligation on the QA seat
+  and a compile consequence — **not** a grep oracle committed as a test
   (operator: source-text oracles are an invitation for failure and delay).
 - **`AC-4`.** `D7`'s closing figures are recorded next to
-  `RT-DECL-CLOSURE-PORT.AC-6`'s opening figures. ⛔ Report; do not tune, and
-  ⛔ do not pin a threshold — a size number rots at the next merge.
+  `RT-DECL-CLOSURE-PORT.AC-6`'s opening figures. Report; do not tune, and
+  do not pin a threshold — a size number rots at the next merge.
 - **`AC-5`.** Every test removed under `D6` is accounted for: retired as
   lane-specific, or re-homed with its semantic property intact.
-  ⛔ A silent net loss of coverage fails this.
+  A silent net loss of coverage fails this.
 
   **`D6b` is inside this AC, and it extends the accounting backwards.** The
   coverage that can go silently missing is not only what *this* node removes —
@@ -224,22 +224,22 @@ the proof is unavailable and any argument for it is circular.
   to route, not a failure of this AC** — the AC fails when the question is left
   unanswered, not when the answer is unwelcome.
 
-## 6. ⛔ Banned scope
+## 6. Banned scope
 
 - **Starting before all five gating nodes merge** — the four migration nodes
   and [[RT-FNUNIT-RESULT-TOKEN]]. A partial deletion is strictly worse than
   none: it removes the fallback while a class can still select it, or while a
   shape still has no other lane to run on.
-- ⛔ **Keeping the lane "just in case."** That is the half-migrated state the
-  directive rules out. If a case still needs it, ⛔ **stop** — the campaign is
+- **Keeping the lane "just in case."** That is the half-migrated state the
+  directive rules out. If a case still needs it, **stop** — the campaign is
   not finished and the missing class is a node, not a retained fallback.
-- ⛔ **Deleting a test that asserts a property still reachable** on the
+- **Deleting a test that asserts a property still reachable** on the
   surviving lane.
 
 ## 7. Hard stop
 
 Stop and report if `D1` finds any residual still firing, if `D2`'s positive
 control fails to flip the authority, or if the deletion cannot complete without
-retaining a `RecursiveDescent` branch. ⭐ **Any of those means the campaign is
+retaining a `RecursiveDescent` branch. **Any of those means the campaign is
 not done, and the honest outcome is to name the surviving class and hand it back
-to the Steward as a node** — ⛔ not to delete around it.
+to the Steward as a node** — not to delete around it.
