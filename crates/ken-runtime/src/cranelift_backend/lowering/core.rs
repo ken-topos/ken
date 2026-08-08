@@ -110,47 +110,6 @@ pub(in crate::cranelift_backend) fn producer_match_unit_ports() -> usize {
     PRODUCER_MATCH_UNIT_PORTS.with(std::cell::Cell::get)
 }
 
-/// **`RT-PRODUCER-MATCH-PORT` `D2` — the selector witness, and why one is needed
-/// at all.**
-///
-/// `D2` builds the producer-call port but is forbidden from retiring
-/// `ProducerMatchCall`; that is `D3`. While the classification still fires, every
-/// program carrying this shape selects `RecursiveDescent`, so **the ported path
-/// is unreachable in production for the whole of `D2`** and no control could
-/// otherwise execute it.
-///
-/// This cell suppresses the classification in the **selector only**. The
-/// non-short-circuiting enumerator is deliberately left alone, so `D1`'s census
-/// keeps reporting the class exactly as it did before — the witness changes which
-/// authority is chosen, never what the population is measured to be.
-///
-/// It is the same instrument `RT-SEED-CALL-PORT` `D2` used and `D3` deleted with
-/// its variant. **It is scaffolding with a named retirement event**, not a
-/// mechanism: `D3` removes it, at which point every control it gates reaches the
-/// port the way production does.
-#[cfg(test)]
-thread_local! {
-    static PRODUCER_MATCH_CALL_SELECTOR_WITNESS: std::cell::Cell<bool> =
-        const { std::cell::Cell::new(false) };
-}
-
-#[cfg(test)]
-pub(in crate::cranelift_backend) fn set_producer_match_call_selector_witness(armed: bool) {
-    PRODUCER_MATCH_CALL_SELECTOR_WITNESS.with(|cell| cell.set(armed));
-}
-
-#[cfg(test)]
-fn producer_match_call_selector_witness() -> bool {
-    PRODUCER_MATCH_CALL_SELECTOR_WITNESS.with(std::cell::Cell::get)
-}
-
-/// Production never has a witness: the classification is unconditional outside
-/// the test profile, so `D2` cannot change which authority a compiled program
-/// selects.
-#[cfg(not(test))]
-fn producer_match_call_selector_witness() -> bool {
-    false
-}
 
 /// The mutation `D1a` proves its exact-set control against.
 ///
@@ -628,8 +587,6 @@ enum FrameScopeHarnessMutation {
 /// not an asymptotic verdict about those rows.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum RecursiveDescentResidual {
-    /// An ordinary producer match whose scrutinee is directly a call.
-    ProducerMatchCall,
     /// An ordinary match consuming an active computational recursor.
     MatchScrutineeRecursor,
     /// A lexical unit call whose argument is an active computational recursor.
@@ -657,6 +614,27 @@ enum RecursiveDescentResidual {
     // `D3` removed one. A count in prose next to the thing it counts goes stale
     // the first time the population moves, which is why it is now stated as a
     // relation instead.)
+
+    // **`RT-PRODUCER-MATCH-PORT` `D3` RETIRED `ProducerMatchCall`.**
+    //
+    // An ordinary producer `Match` whose scrutinee is directly a `Call` is now
+    // lowered as a separately owned callable unit whose typed result crosses the
+    // unit boundary into the match. `D2` built that port, and it is a delegation
+    // to `lower_carried_match` rather than a second transport: the same
+    // elimination the direct `RuntimeExpr::Match` route already used for a
+    // carried scrutinee.
+    //
+    // The `D2` selector witness is gone with the variant. It existed only to
+    // make the ported arm reachable while this classification still fired, so
+    // every `D2` control now reaches that arm exactly as production does.
+    //
+    // ⚠ **The port carries three conservative refusals**, for frame states the
+    // carried elimination cannot express: a retained scrutinee index, a deferred
+    // constructor case, and a trailing composed eliminator. Retiring the class
+    // makes those refusals **live in production for the first time**. They fail
+    // closed, so the direction is over-strict rather than unsound, and they have
+    // no shape-reaching control — stated at the `D2` control block rather than
+    // implied here.
 
     // **`RT-SEED-CALL-PORT` `D3` RETIRED `SeedClosureCall`.**
     //
@@ -712,19 +690,14 @@ fn recursive_descent_residual(expr: &RuntimeExpr) -> Option<RecursiveDescentResi
         }
         RuntimeExpr::Match {
             scrutinee, cases, ..
-        } => (matches!(scrutinee.as_ref(), RuntimeExpr::Call { .. })
-            && !producer_match_call_selector_witness())
-        .then_some(RecursiveDescentResidual::ProducerMatchCall)
-        .or_else(|| {
-            matches!(
-                scrutinee.as_ref(),
-                RuntimeExpr::ComputationalMatch { cases, .. }
-                    if cases
-                        .iter()
-                        .any(|case| !case.recursive_positions.is_empty())
-            )
-            .then_some(RecursiveDescentResidual::MatchScrutineeRecursor)
-        })
+        } => matches!(
+            scrutinee.as_ref(),
+            RuntimeExpr::ComputationalMatch { cases, .. }
+                if cases
+                    .iter()
+                    .any(|case| !case.recursive_positions.is_empty())
+        )
+        .then_some(RecursiveDescentResidual::MatchScrutineeRecursor)
         .or_else(|| recursive_descent_residual(scrutinee))
         .or_else(|| {
             cases
@@ -864,11 +837,8 @@ fn collect_recursive_descent_residuals(
         RuntimeExpr::Match {
             scrutinee, cases, ..
         } => {
-            // ⛔ BOTH classifications, then BOTH walks. The twin stops after
-            // whichever fires first.
-            if matches!(scrutinee.as_ref(), RuntimeExpr::Call { .. }) {
-                found.insert(RecursiveDescentResidual::ProducerMatchCall);
-            }
+            // The classification, then BOTH walks. The twin stops after
+            // whichever fires first; this one records and keeps walking.
             if matches!(
                 scrutinee.as_ref(),
                 RuntimeExpr::ComputationalMatch { cases, .. }

@@ -5096,17 +5096,23 @@ fn the_body_authority_selector_narrows_only_completed_ports_and_stays_fail_close
     let declarations = BTreeMap::new();
 
     // Promise class: durable invariant. Any new RuntimeExpr form must be
-    // classified explicitly, while these two completed ports and the retained
-    // producer-Match residual remain part of the migration boundary.
+    // classified explicitly, while the completed ports and the SURVIVING
+    // residuals remain part of the migration boundary.
     //
-    // MEASURED: recursive computational positions and a source Trap select
-    // functionized emission, while an otherwise ordinary Match whose producer
-    // is a Call selects recursive descent.
-    // CLAIMED: D3 removed only the two predicates backed by D1 and D2 and did
-    // not turn absence from a functionized allow-list into admission.
-    // THE GAP: this pin measures the source-only selector. S1 and S2 separately
-    // prove the declared-unit and terminal-CFG mechanisms behind the two green
-    // selections; D4 will exercise the complete governed n=3..7 family.
+    // MEASURED: recursive computational positions, a source Trap, and -- since
+    // `RT-PRODUCER-MATCH-PORT` `D3` -- an ordinary Match whose producer is a
+    // Call all select functionized emission, while a Match consuming an active
+    // computational recursor still selects recursive descent.
+    // CLAIMED: `RT-FNSPLIT-RECUR-PORT`'s `D3` removed only the two predicates
+    // backed by ITS `D1` and `D2`, and did not turn absence from a functionized
+    // allow-list into admission. That clause is that node's and predates this
+    // one; it is qualified because the paragraph above now names a different
+    // node's `D3`, and an unqualified `D3` beside it reads as this node -- which
+    // retired ONE predicate, not two.
+    // THE GAP: this pin measures the source-only selector. `S1` and `S2`
+    // separately prove the declared-unit and terminal-CFG mechanisms behind
+    // that node's two green selections; its `D4` exercises the complete
+    // governed n=3..7 family.
     assert_eq!(
         select_body_emission_authority(
             &RuntimeExpr::Value(RuntimeValue::Bool(true)),
@@ -5177,7 +5183,7 @@ fn the_body_authority_selector_narrows_only_completed_ports_and_stays_fail_close
         "a completed terminal-trap port still selected retained authority"
     );
 
-    let unported_producer_match = RuntimeExpr::Match {
+    let ported_producer_match = RuntimeExpr::Match {
         scrutinee: Box::new(RuntimeExpr::Call {
             callee: Box::new(RuntimeExpr::LexicalClosure {
                 captures: Vec::new(),
@@ -5195,10 +5201,19 @@ fn the_body_authority_selector_narrows_only_completed_ports_and_stays_fail_close
             message: "selector producer default".to_string(),
         },
     };
+    // `RT-PRODUCER-MATCH-PORT` `D3`: the producer `Match` is PORTED now, so it
+    // is the paired negative. The fail-closed property under test was never
+    // about this particular shape -- it is that an UNPORTED shape is refused by
+    // default -- so it moves to a surviving one rather than being dropped.
     assert_eq!(
-        select_body_emission_authority(&unported_producer_match, &declarations),
+        select_body_emission_authority(&ported_producer_match, &declarations),
+        BodyEmissionAuthority::FunctionizedUnits,
+        "a completed producer-Match port still selected retained authority"
+    );
+    assert_eq!(
+        select_body_emission_authority(&d1_match_scrutinee_recursor_witness(), &declarations),
         BodyEmissionAuthority::RecursiveDescent,
-        "an unported producer Match was admitted by default"
+        "an unported recursor-scrutinee Match was admitted by default"
     );
 
     let seed_closure_call = RuntimeExpr::Call {
@@ -5249,13 +5264,13 @@ fn retained_authority_residual_is_the_typed_selector_accounting() {
             message: "D5 producer-Match default".to_string(),
         },
     };
-    assert_eq!(
-        recursive_descent_residual(&producer_match),
-        Some(RecursiveDescentResidual::ProducerMatchCall)
-    );
+    // `RT-PRODUCER-MATCH-PORT` `D3` retired `ProducerMatchCall`, so this shape
+    // is now the paired NEGATIVE: a producer `Match` over a `Call` retains
+    // nothing and selects the functionized lane.
+    assert_eq!(recursive_descent_residual(&producer_match), None);
     assert_eq!(
         select_body_emission_authority(&producer_match, &BTreeMap::new()),
-        BodyEmissionAuthority::RecursiveDescent
+        BodyEmissionAuthority::FunctionizedUnits
     );
 
     // `RT-SEED-CALL-PORT` `D3` — this pair used to carry a seed-closure call,
@@ -5263,17 +5278,17 @@ fn retained_authority_residual_is_the_typed_selector_accounting() {
     // propagation of a child's retained reason, not the particular reason, so
     // the fixture moves to a surviving variant rather than the row being
     // dropped. A retirement should cost the class, not the coverage.
-    let wrapped_producer_match = RuntimeExpr::Let {
+    let wrapped_recursor = RuntimeExpr::Let {
         value: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(false))),
-        body: Box::new(d1_producer_match_call_witness()),
+        body: Box::new(d1_match_scrutinee_recursor_witness()),
     };
     assert_eq!(
-        recursive_descent_residual(&wrapped_producer_match),
-        Some(RecursiveDescentResidual::ProducerMatchCall),
+        recursive_descent_residual(&wrapped_recursor),
+        Some(RecursiveDescentResidual::MatchScrutineeRecursor),
         "a wrapper failed to propagate its child's retained reason"
     );
     assert_eq!(
-        select_body_emission_authority(&wrapped_producer_match, &BTreeMap::new()),
+        select_body_emission_authority(&wrapped_recursor, &BTreeMap::new()),
         BodyEmissionAuthority::RecursiveDescent
     );
 
@@ -5683,14 +5698,31 @@ fn typed_trap_exit_identity_and_caller_protocol_mutations_are_discriminating() {
 }
 
 #[test]
-fn recursive_descent_root_translates_a_runtime_reached_trap_exactly() {
+fn the_generated_root_translates_a_runtime_reached_trap_exactly() {
     let trap = RuntimeTrap {
         code: RuntimeTrapCode::PatternMatchFailure,
-        message: "retained producer Match root trap".to_string(),
+        message: "generated root Match trap".to_string(),
     };
     let fixture = RuntimeExample {
-        name: "recursive-descent-root-trap".to_string(),
-        checked_core_shape: "D2 retained root trap translation fixture".to_string(),
+        name: "generated-root-trap".to_string(),
+        checked_core_shape: "generated root trap translation fixture".to_string(),
+        // `RT-PRODUCER-MATCH-PORT` `D3` CHANGED WHAT THIS ROW MEASURES, and
+        // the change is a real coverage loss reported rather than papered over.
+        //
+        // The program is unchanged and still reaches its trap. What moved is the
+        // LANE: its producer-`Call` scrutinee is ported, so it now translates the
+        // trap through the FUNCTIONIZED root instead of the retained one.
+        //
+        // I could not retarget it onto a surviving residual. The two closed
+        // shapes I tried both refused for unrelated reasons -- a free `Var(0)` in
+        // the shared active-recursor helper, then a non-constructor scrutinee --
+        // and `run_example_with_seed_observation` takes no declaration map, so
+        // the lane cannot be retained by an unevaluated declaration either.
+        //
+        // ⇒ **Runtime-reached trap translation on the RETAINED root now has no
+        // witness here.** `RT-DESCENT-RETIRE` deletes that root, so the gap is
+        // bounded by that node; it is stated so nobody reads the rename as
+        // coverage moving when it is coverage ending.
         ir: RuntimeExpr::Match {
             scrutinee: Box::new(RuntimeExpr::Call {
                 callee: Box::new(RuntimeExpr::LexicalClosure {
@@ -5710,10 +5742,10 @@ fn recursive_descent_root_translates_a_runtime_reached_trap_exactly() {
     };
     assert_eq!(
         select_body_emission_authority(&fixture.ir, &BTreeMap::new()),
-        BodyEmissionAuthority::RecursiveDescent
+        BodyEmissionAuthority::FunctionizedUnits
     );
     let report = run_example_with_seed_observation(&fixture, &NativeSeedEnvironment::empty())
-        .expect("the retained source root translates its planner trap identity");
+        .expect("the functionized root translates its planner trap identity");
     assert_eq!(report.observation, fixture.observation);
 }
 
@@ -10704,7 +10736,8 @@ fn ac1b_the_executable_lowering_witness_closes_its_one_token_population() {
 
 /// `Match` whose scrutinee is directly a `Call`. The callee is a
 /// `DeclarationRef` rather than a closure, so this witness fires
-/// `ProducerMatchCall` and nothing else.
+/// `ProducerMatchCall` until `RT-PRODUCER-MATCH-PORT` `D3` retired it, and
+/// nothing at all now. Kept as the paired negative for that retirement.
 fn d1_producer_match_call_witness() -> RuntimeExpr {
     RuntimeExpr::Match {
         scrutinee: Box::new(RuntimeExpr::Call {
@@ -10807,10 +10840,6 @@ fn d1_each_residual_variant_is_observable() {
     let empty: BTreeMap<&str, &RuntimeDeclaration> = BTreeMap::new();
     for (witness, expected) in [
         (
-            d1_producer_match_call_witness(),
-            RecursiveDescentResidual::ProducerMatchCall,
-        ),
-        (
             d1_match_scrutinee_recursor_witness(),
             RecursiveDescentResidual::MatchScrutineeRecursor,
         ),
@@ -10902,7 +10931,6 @@ fn d1_the_enumerator_reports_every_variant_not_the_first() {
     // and it now contributes nothing, so this row keeps witnessing the retired
     // shape rather than forgetting it existed.
     let expected: BTreeSet<RecursiveDescentResidual> = [
-        RecursiveDescentResidual::ProducerMatchCall,
         RecursiveDescentResidual::MatchScrutineeRecursor,
         RecursiveDescentResidual::LexicalCallArgumentRecursor,
     ]
@@ -10931,15 +10959,17 @@ fn d1_the_enumerator_reports_every_variant_not_the_first() {
 #[cfg(test)]
 const SEED_CALL_PORT_SOME: &str = "ctor:fixture::Core::Option::Some";
 
-/// A compiling program whose `Match` scrutinee is directly a `Call`, so it fires
-/// `ProducerMatchCall` -- and whose callee is a non-lexical closure seed, which
-/// fired a second variant until `RT-SEED-CALL-PORT` `D3` retired it.
+/// A compiling program whose `Match` scrutinee is directly a `Call` and whose
+/// callee is a non-lexical closure seed. Both of those were residual classes
+/// once: `SeedClosureCall` until `RT-SEED-CALL-PORT` `D3`, `ProducerMatchCall`
+/// until this node's `D3`.
 ///
-/// **It fired exactly two variants at `D1` and fires exactly one now**, which is
-/// why `D1a`'s exact-set discrimination moved off it: a one-variant program
-/// cannot separate the enumerator from its short-circuiting twin, because both
-/// answer identically on it. The fixture is kept for the production-site row,
-/// where what matters is that it genuinely compiles.
+/// **It fired two variants at `D1` and fires NONE now.** `D1a`'s exact-set
+/// discrimination moved off it while it still fired one, because a one-variant
+/// program cannot separate the enumerator from its short-circuiting twin. The
+/// fixture is kept for the production-site row, where what matters is that it
+/// genuinely compiles -- and it is now the paired negative for two retirements
+/// rather than a firing member of either.
 #[cfg(test)]
 fn seed_call_port_producer_match_example() -> RuntimeExample {
     RuntimeExample {
@@ -11090,19 +11120,20 @@ fn d3_the_seed_corpus_fires_no_residual_at_all() {
 /// retargeted because its own subject was retired.**
 ///
 /// At `D1` this ran on a program firing `{ProducerMatchCall, SeedClosureCall}`.
-/// `D3` removes the second, so that program now fires ONE variant -- and a
+/// `RT-SEED-CALL-PORT` `D3` removed the second, leaving one variant -- and a
 /// one-variant program cannot separate the enumerator from its short-circuiting
 /// twin, which was the entire point. **Leaving it pointed at the same fixture
-/// would have kept it green while silently ceasing to discriminate.**
+/// would have kept it green while silently ceasing to discriminate.** This
+/// node's `D3` then retired the first as well, so that program now fires none.
 ///
-/// So it moves to the three surviving variants. Three later campaign nodes
+/// So it moves to the two surviving variants. Three later campaign nodes
 /// consume this instrument, and `RT-DESCENT-RETIRE`'s "no residual fires
 /// anywhere" becomes vacuous at exactly the moment it authorises deleting the
 /// lane if this walk has a gap.
 ///
 /// The three rows are one argument, and the third is load-bearing:
 ///
-/// 1. a compound firing all three surviving variants reports the EXACT set;
+/// 1. a compound firing all two surviving variants reports the EXACT set;
 /// 2. under `ShortCircuitLikeTheSelector` it reports strictly less;
 /// 3. a ONE-variant program reports the same set either way -- the measured
 ///    reason a reachability control cannot discharge this, and why every
@@ -11125,7 +11156,6 @@ fn d3_the_exact_set_control_still_reds_under_short_circuiting() {
         }),
     };
     let exact = BTreeSet::from([
-        RecursiveDescentResidual::ProducerMatchCall,
         RecursiveDescentResidual::MatchScrutineeRecursor,
         RecursiveDescentResidual::LexicalCallArgumentRecursor,
     ]);
@@ -11152,8 +11182,8 @@ fn d3_the_exact_set_control_still_reds_under_short_circuiting() {
     );
 
     // Row 3 -- on a ONE-variant program the mutation is undetectable.
-    let single = d1_producer_match_call_witness();
-    let single_expected = BTreeSet::from([RecursiveDescentResidual::ProducerMatchCall]);
+    let single = d1_match_scrutinee_recursor_witness();
+    let single_expected = BTreeSet::from([RecursiveDescentResidual::MatchScrutineeRecursor]);
     assert_eq!(
         enumerate_recursive_descent_residuals(&single, &empty),
         single_expected,
@@ -11178,8 +11208,8 @@ fn d3_the_exact_set_control_still_reds_under_short_circuiting() {
 /// residual set is read back from where `compile_expr_into_module_with_root_
 /// projection` selects the authority.
 ///
-/// The fixture used to fire two variants and now fires one, which is the
-/// retirement showing up as a changed number rather than as a deletion.
+/// The fixture fired two variants at `D1` and fires none now, which is two
+/// retirements showing up as a changed number rather than as a deletion.
 #[test]
 fn d3_the_production_site_hook_still_observes_a_real_compiled_program() {
     set_residual_enumeration_mutation(ResidualEnumerationMutation::None);
@@ -11191,10 +11221,10 @@ fn d3_the_production_site_hook_still_observes_a_real_compiled_program() {
     assert_eq!(report.observation, example.observation);
     assert_eq!(
         observed_recursive_descent_residuals(),
-        Some(BTreeSet::from([RecursiveDescentResidual::ProducerMatchCall])),
-        "D3: the hook must still record at the production selector site, and this program now \
-         carries only its producer-Match reason -- RT-PRODUCER-MATCH-PORT's population, which \
-         this node was masking"
+        Some(BTreeSet::new()),
+        "RT-PRODUCER-MATCH-PORT D3: the hook must still record at the production selector site, \
+         and this program now carries NO reason at all -- asserted as the empty set rather than \
+         the variant's absence, so a reclassification into a surviving variant reds this"
     );
 }
 
@@ -11384,7 +11414,7 @@ fn d2_ac6_3_the_ported_unit_receives_parameters_before_captures() {
 
 // ─── RT-PRODUCER-MATCH-PORT D1 — the population, and what this class masks ──
 
-/// A single `Match` that fires `ProducerMatchCall` at its own node and carries
+/// A single `Match` that FIRED `ProducerMatchCall` at its own node and carries
 /// one later-firing class in each of the two places the selector never reaches.
 ///
 /// The frame's section 3 says this class short-circuits "before
@@ -11394,10 +11424,10 @@ fn d2_ac6_3_the_ported_unit_receives_parameters_before_captures() {
 /// carries an active-recursor `Match` among its arguments, and the one case body
 /// carries a lexical call whose argument is an active recursor.
 ///
-/// Both hidden classes sit strictly below the `.then_some(ProducerMatchCall)`
-/// arm. That is why a program firing only the outer class cannot distinguish
-/// "the later checks did not fire" from "the later checks never ran" -- the
-/// distinction this node has to measure before it retires anything.
+/// Both classes sat strictly below the `.then_some(ProducerMatchCall)` arm that
+/// `D3` removed. That is why, while the class fired, a program could not
+/// distinguish "the later checks did not fire" from "the later checks never
+/// ran" -- the distinction this node had to measure before retiring anything.
 fn d1_producer_match_call_masking_witness() -> RuntimeExpr {
     RuntimeExpr::Match {
         scrutinee: Box::new(RuntimeExpr::Call {
@@ -11418,80 +11448,63 @@ fn d1_producer_match_call_masking_witness() -> RuntimeExpr {
     }
 }
 
-/// **`D1` -- both successor classes CAN be masked, at the two positions the
-/// mechanism names.**
+/// **`D3` -- the masking is gone. This row establishes POST-RETIREMENT
+/// capability only, and is NOT `D4`'s number.**
 ///
-/// **What this row is evidence for, stated narrowly on purpose.** Its subject is
-/// a hand-built `RuntimeExpr`, and the campaign doc's Trap 1 is explicit that
-/// such a witness establishes what the instrument and the classifier can see --
-/// never that any real program exhibits it. So this proves the *capability*: a
-/// `ProducerMatchCall` at a `Match` node hides a later class sitting in its
-/// scrutinee `Call` and another sitting in a case body.
+/// An earlier draft computed a "before/after delta" here by subtracting
+/// `{MatchScrutineeRecursor}` from what the program carries, and labelled that
+/// subtrahend the pre-retirement selector result. **It was not.** Before
+/// retirement the selector reported `ProducerMatchCall` and stopped, so the
+/// subtraction compared two POST-retirement facts and understated the successor
+/// population by half.
 ///
-/// **It is NOT the successor population, and not `D4`'s number.** `D4` owes a
-/// measured before/after over real programs, and that is the only thing that may
-/// be handed to `RT-RECURSOR-TRANSPORT` as its population delta. An earlier draft
-/// of this comment called the two-member set exactly that, which was the same
-/// hand-built-witness-as-population overclaim Trap 1 names.
+/// **The reconstructed pre-retirement fact, stated as reconstruction:** while the
+/// class fired, the selector answered `ProducerMatchCall` alone on this witness,
+/// which means BOTH surviving classes were hidden from it, not one. That cannot
+/// be re-measured here -- the variant no longer exists to name -- so it is
+/// asserted about nothing and only written down.
 ///
-/// Three statements:
+/// **`D4` IS this post-retirement capability evidence.** The Steward withdrew
+/// the before-figure and restated the deliverable: no before/after successor
+/// handoff is owed by anyone, and `RT-RECURSOR-TRANSPORT` measures its own
+/// population against its own named base rather than inheriting a number. So
+/// nothing here is a placeholder for a measurement someone still has to take.
 ///
-/// 1. the selector reports `ProducerMatchCall` and stops -- the answer the
-///    authority is actually chosen on;
-/// 2. the program in fact carries all three surviving classes;
-/// 3. the masked set is derived from 1 and 2 by set difference, and then
-///    independently pinned to the two classes it should equal.
+/// The subject is a hand-built `RuntimeExpr`, so by campaign Trap 1 it
+/// establishes what the classifier can see and never what any program exhibits.
+/// That bounds what is proved below -- with the class retired, the selector
+/// walks past the `Match` node and both remaining classes are visible.
 ///
-/// Point 3 carries both halves deliberately. The derivation is what makes the
-/// set track the program rather than a remembered literal; the independent pin
-/// is what makes the row fail if the derivation itself starts producing the
-/// wrong answer. An earlier draft claimed the literal had been avoided, while
-/// the assertion below spelled it out -- the claim was wrong, not the code.
-///
-/// **Promise class: durable invariant.** It pins that the selector's answer is a
-/// strict subset of what the program carries whenever this class fires. It stays
-/// true until the class is retired, and `RT-DESCENT-RETIRE` removes the enum
-/// that gives it a subject.
+/// **Promise class: durable invariant.** It pins that no reason is hidden behind
+/// a retired class on this shape. `RT-DESCENT-RETIRE` removes the enum that
+/// gives it a subject.
 #[test]
-fn d1_producer_match_call_masks_every_later_check_in_its_own_arm() {
+fn d3_the_previously_masked_classes_are_now_reported_directly() {
     set_residual_enumeration_mutation(ResidualEnumerationMutation::None);
     let empty: BTreeMap<&str, &RuntimeDeclaration> = BTreeMap::new();
     let witness = d1_producer_match_call_masking_witness();
 
-    let selector_reported = recursive_descent_residual(&witness);
+    // The selector no longer stops at the retired class, so what it reports is
+    // now one of the classes it used to hide.
     assert_eq!(
-        selector_reported,
-        Some(RecursiveDescentResidual::ProducerMatchCall),
-        "D1: the selector must report this class and stop -- if it reports anything else the \
-         masking measurement below is about a different mechanism"
+        recursive_descent_residual(&witness),
+        Some(RecursiveDescentResidual::MatchScrutineeRecursor),
+        "D3: with ProducerMatchCall retired the selector must walk into the scrutinee Call and \
+         report a class that was previously hidden behind it"
     );
 
-    let carried = enumerate_recursive_descent_residuals(&witness, &empty);
+    // Both survivors are visible to the enumeration. No set difference is taken:
+    // there is no pre-retirement operand available in this tree to subtract, and
+    // manufacturing one from post-retirement values is the defect this row
+    // carried before.
     assert_eq!(
-        carried,
-        BTreeSet::from([
-            RecursiveDescentResidual::ProducerMatchCall,
-            RecursiveDescentResidual::MatchScrutineeRecursor,
-            RecursiveDescentResidual::LexicalCallArgumentRecursor,
-        ]),
-        "D1: the program carries all three surviving classes -- one at the Match node, one \
-         inside the scrutinee Call, one in a case body"
-    );
-
-    let masked: BTreeSet<RecursiveDescentResidual> = carried
-        .iter()
-        .copied()
-        .filter(|residual| Some(*residual) != selector_reported)
-        .collect();
-    assert_eq!(
-        masked,
+        enumerate_recursive_descent_residuals(&witness, &empty),
         BTreeSet::from([
             RecursiveDescentResidual::MatchScrutineeRecursor,
             RecursiveDescentResidual::LexicalCallArgumentRecursor,
         ]),
-        "D1: on this witness both later classes are invisible to the selector while this one \
-         fires. That is a capability of the mechanism, not a population: what RT-RECURSOR-\
-         TRANSPORT is owed is D4's measured before/after over real programs"
+        "D3: the program still carries both surviving classes -- retiring a class must not \
+         change what the program contains, only what the selector stops at"
     );
 }
 
@@ -11525,7 +11538,8 @@ fn d1_census_insert(
 /// **`D1` / `AC-2` -- the measured population, enumerated at its gates.**
 ///
 /// One production gate -- `nc5_seed_examples()` -- plus the one in-tree program
-/// that genuinely compiles while firing this class. Each member is enumerated
+/// that compiles and fired this class until `D3` retired it. Each member is
+/// enumerated
 /// with the non-short-circuiting walk, so a member firing a second class is
 /// reported rather than hidden, and each is added through [`d1_census_insert`]
 /// so a name collision fails loudly instead of shrinking the population.
@@ -11595,13 +11609,10 @@ fn d1_the_measured_population_and_the_classes_each_member_fires() {
 
     assert_eq!(
         firing,
-        BTreeMap::from([(
-            "seed-call-port-producer-match".to_string(),
-            BTreeSet::from([RecursiveDescentResidual::ProducerMatchCall]),
-        )]),
-        "D1: across the nc5 gate and the compiling witness, exactly one program fires anything, \
-         and what it fires is this node's class alone. A new member here is a program nobody has \
-         attributed to a residual-class owner -- report it rather than widening this expectation"
+        BTreeMap::new(),
+        "D3: with ProducerMatchCall retired, neither the nc5 gate nor the compiling witness \
+         fires anything at all. A member here is a program nobody has attributed to a \
+         residual-class owner -- report it rather than widening this expectation"
     );
 }
 
@@ -12108,15 +12119,15 @@ fn d5_c3_a_second_residual_retains_recursive_descent() {
     let carrier = d5_frame_carrier();
     // A second residual, and the authority must stay on RecursiveDescent.
     //
-    // `RT-SEED-CALL-PORT` `D3`: this was a seed-closure call until that variant
-    // was retired. The property under test is that a SECOND residual keeps the
-    // authority on `RecursiveDescent` -- it was never about which residual, so
-    // the fixture moves to a surviving variant rather than the control being
-    // dropped. A producer-`Match` is the cheapest one that still fires.
+    // The property under test is that a SECOND residual keeps the authority on
+    // `RecursiveDescent` -- it was never about which residual, so the fixture
+    // moves to a surviving variant rather than the control being dropped. It has
+    // now moved twice: a seed-closure call until `RT-SEED-CALL-PORT` `D3`, a
+    // producer-`Match` until this node ported that too.
     let second = RuntimeDeclaration {
         symbol: "decl:fixture::d5::second".to_string(),
         kind: RuntimeDeclarationKind::Transparent {
-            body: d1_producer_match_call_witness(),
+            body: d1_match_scrutinee_recursor_witness(),
         },
         metadata: RuntimeSymbolMetadata {
             lowerability: Some(RuntimeLowerabilityStatus::Supported),
@@ -26129,15 +26140,18 @@ fn d3_generated_context_arity_sentinel_edge_is_reached() {
 // rather than unsound. That bounds the risk; it does not discharge the coverage,
 // and it is not offered as if it did.
 
-/// **`D2` positive — the producer-call scrutinee crosses into the match through
-/// the EXISTING transport.**
+/// **`D2`'s port, now reached the way PRODUCTION reaches it.**
 ///
-/// `match ((\x . Some x) 4) with Some y => y`. The scrutinee `Call` is lowered as
-/// a separately owned callable unit by the arm `RT-SEED-CALL-PORT` `D3`
-/// activated, so its result crosses as a carried word; this node's delegation
-/// then eliminates that word with `lower_carried_match` -- the same function the
-/// direct `RuntimeExpr::Match` route already used for a carried scrutinee. **No
-/// second transport was built, and that is the deliverable.**
+/// `match ((\x . Some x) 4) with Some y => y`. The scrutinee `Call` is lowered
+/// as a separately owned callable unit, and this node's delegation eliminates
+/// the resulting carried word with `lower_carried_match` -- the same function
+/// the direct `RuntimeExpr::Match` route already used for a carried scrutinee.
+/// No second transport was built, and that is the deliverable.
+///
+/// **`D3` deleted the selector witness along with the variant**, so this row no
+/// longer arms anything: the program selects the functionized lane because the
+/// classification is gone, not because a test-only mask suppressed it. That is a
+/// strictly stronger route than the one `D2` was accepted on.
 ///
 /// **What the two assertions prove TOGETHER, and neither alone.** The count is
 /// taken before `lower_carried_match`, which can still refuse, so a count of 1
@@ -26145,79 +26159,38 @@ fn d3_generated_context_arity_sentinel_edge_is_reached() {
 /// that returns the program's declared observation, it does.
 ///
 /// **Promise class: durable invariant.** The ported shape must produce its
-/// declared observation. `D3` removes the witness, not the property.
+/// declared observation.
 #[test]
-fn d2_the_producer_call_scrutinee_crosses_into_the_match_through_the_existing_transport() {
+fn d3_the_ported_producer_call_scrutinee_runs_unhooked_on_the_functionized_lane() {
     set_residual_enumeration_mutation(ResidualEnumerationMutation::None);
     let example = seed_call_port_producer_match_example();
 
     reset_producer_match_unit_ports();
-    set_producer_match_call_selector_witness(true);
-    let authority = select_body_emission_authority(&example.ir, &BTreeMap::new());
-    let outcome = run_example_with_seed_observation(&example, &NativeSeedEnvironment::empty());
-    set_producer_match_call_selector_witness(false);
-
+    // `AC-1a`, asserted rather than inferred from the empty residual set.
     assert_eq!(
-        authority,
+        select_body_emission_authority(&example.ir, &BTreeMap::new()),
         BodyEmissionAuthority::FunctionizedUnits,
-        "D2: with the classification suppressed this program must select the functionized lane, \
-         or the run below is not exercising the port at all"
+        "AC-1a: the ceiling moved -- the D1 firing population now selects FunctionizedUnits"
     );
-    let report = outcome.expect("D2: the ported producer-call scrutinee compiles and runs");
+    assert_eq!(
+        enumerate_recursive_descent_residuals(&example.ir, &BTreeMap::new()),
+        BTreeSet::new(),
+        "D3: this program must now enumerate NO residual at all. Asserting the empty set rather \
+         than the variant's absence -- a reclassification into a surviving variant would satisfy \
+         the weaker check while still retaining the lane"
+    );
+
+    let report = run_example_with_seed_observation(&example, &NativeSeedEnvironment::empty())
+        .expect("AC-1b: the D1 firing population must still build and run");
     assert_eq!(
         report.observation, example.observation,
-        "D2: the ported elimination must produce the program's declared observation"
+        "AC-1b: the ported elimination must produce the program's declared observation"
     );
     assert!(report.verifier_passed);
     assert_eq!(
         producer_match_unit_ports(),
         1,
-        "D2: the port must reach its handoff exactly once. With the successful run asserted \
-         above, this pair is the evidence for a completed carried elimination"
-    );
-}
-
-/// **`D2` is PRODUCTION-INERT, and this is the control that says so.**
-///
-/// `D2` builds the port but must not retire `ProducerMatchCall`. With no witness
-/// armed -- which is every production compile, since the accessor's
-/// `cfg(not(test))` twin returns `false` unconditionally -- the same program
-/// still selects `RecursiveDescent` and the ported arm is never taken.
-///
-/// The count of `0` is the load-bearing half: it distinguishes "production still
-/// routes this shape to the old lane" from "the port happens to agree with it".
-///
-/// **Promise class: transition sentinel.** `D3` is the event that retires it:
-/// once the variant is gone this program selects the functionized lane
-/// unconditionally and the authority asserted here inverts.
-#[test]
-fn d2_with_no_witness_armed_production_still_selects_the_recursive_descent_lane() {
-    set_residual_enumeration_mutation(ResidualEnumerationMutation::None);
-    let example = seed_call_port_producer_match_example();
-
-    reset_producer_match_unit_ports();
-    set_producer_match_call_selector_witness(false);
-    let authority = select_body_emission_authority(&example.ir, &BTreeMap::new());
-
-    assert_eq!(
-        authority,
-        BodyEmissionAuthority::RecursiveDescent,
-        "D2 must not change which authority production selects -- that flip is D3's"
-    );
-    assert_eq!(
-        enumerate_recursive_descent_residuals(&example.ir, &BTreeMap::new()),
-        BTreeSet::from([RecursiveDescentResidual::ProducerMatchCall]),
-        "D2: the witness suppresses the SELECTOR only. The enumerator must still report the \
-         class, so D1's census keeps measuring the same population it measured before"
-    );
-
-    let report = run_example_with_seed_observation(&example, &NativeSeedEnvironment::empty())
-        .expect("the program still compiles on the retained lane");
-    assert_eq!(report.observation, example.observation);
-    assert_eq!(
-        producer_match_unit_ports(),
-        0,
-        "D2: with no witness armed the ported arm must not be taken at all. A non-zero here \
-         means D2 changed production, which is exactly what it is forbidden to do"
+        "D3 is an ACTIVATION: the program must reach the port's handoff with no selector witness \
+         in the tree. A zero here means the variant was removed while the port stayed dead"
     );
 }
