@@ -83,6 +83,46 @@ the proof is unavailable and any argument for it is circular.
   `RecursiveDescent` lane are testing deleted code. ⛔ Do not delete a test that
   is actually asserting a *semantic* property reachable on the surviving lane —
   re-home those. ⛔ Do not keep a test green by keeping dead code alive for it.
+- **`D6a` — SWEEP THE REACHABILITY-PREMISED "CANNOT OCCUR" ARGUMENTS.** Added
+  2026-08-08 from a measured falsification, folded here rather than filed as its
+  own node because **this node makes the largest reachability change in the
+  campaign** and the sweep is worthless before it.
+
+  **The measurement that demands it.** During `RT-PRODUCER-MATCH-PORT` `D2` an
+  arm was found refusing with an argument that had become false:
+
+  > *"a deforestable producer is by construction one whose shape was read at
+  > compile time. So a carried scrutinee cannot arrive here from today's
+  > corpus."*
+
+  **`RT-SEED-CALL-PORT` `D3` falsified it** — `requires_heterogeneous_deforestation`
+  classifies on the **source** shape while the callee is now lowered as a
+  separately owned unit. Nobody was looking for it; the implementer hit it
+  building the next node, and it was **the same implementer who had landed the
+  commit that broke it.**
+
+  ⇒ **The campaign's entire purpose is changing which lane a program takes, and
+  an in-code argument premised on the old reachability goes false SILENTLY.** A
+  stale "cannot occur" is not merely wrong prose — **it is the justification for
+  an arm that may now be reachable and wrong.** No test reds.
+
+  **The population is real, not hypothetical:** a grep for
+  `cannot (arrive|occur|reach|happen)` / `never reaches` / `unreachable in
+  practice` / `by construction` across
+  `cranelift_backend/lowering/*.rs` and `planning/*.rs`, excluding tests,
+  returned **46 hits at `origin/main = 1699e0a3`.** Most will be unrelated. The
+  sweep's job is to separate them.
+
+  **Scope it by the premise, not by the phrase.** The at-risk class is any claim
+  resting on *which values can reach a point* — carried versus compile-time
+  shape, which authority a program selects, which lane an arm sits behind.
+  A claim resting on a type or a structural invariant is not at risk.
+
+  **Report the classification, not just the fixes.** For each hit: at-risk or
+  not, and if at-risk, still-true or falsified. **A hit dismissed without a
+  stated reason is not swept.** Re-run the grep at your own base and state its
+  domain beside the result — the previous node's sweep failed by running a
+  narrower domain than the claim it made.
 - **`D7` — The closing measurement**: emitted function count and per-function
   code-size distribution across the measured programs, against
   `RT-DECL-CLOSURE-PORT.AC-6`'s opening figures.
