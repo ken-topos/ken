@@ -265,6 +265,32 @@ per §10⁻a.
 > is ever proven, is a **subsumption proposal routed to me before coding** —
 > never inferred from shared timing, shared syntax, or a shared refusal arm.
 
+> ### OPERATOR INSTRUCTION 2026-08-08 — the research reports have a VENUE now
+>
+> **When framing [[RT-BACKEND-MODULE-SPLIT]] (#8), consult and reference for the
+> Architect both `research/compiler-obligation-ir-refactor.md` and
+> `research/compiler-refactoring-program.md`.** Written onto the node itself, in
+> a block addressed to whoever frames it — **not only here**, because that frame
+> is four nodes out and this file is a resume pointer, not the record.
+>
+> **This resolves something I had parked.** I twice declined to route the IR
+> architecture recommendation, on the grounds that the runtime ring holds the
+> same lowering surface and raising it would contend with active work. **That
+> reasoning was about timing, and the operator has now named the place.** The
+> recommendation is triaged inside #8's frame review, by the Architect, at the
+> moment someone is actually about to restructure those files.
+>
+> **Reference is not adoption, and the node says so.** Both reports are marked
+> advisory; the program report concedes the node graph to the Steward and
+> Architect outright. #8 stays a **behavior-preserving split** unless the
+> Architect rules otherwise.
+>
+> **Do not let the reports substitute for the measurement.** The node's standing
+> rule — the frame is owed *after* #7 merges, measured on the post-retirement
+> tree, today's line counts not carried forward — is **unchanged**. The program
+> report's own structural arc begins with a post-retirement remeasure, so it
+> reinforces that rule rather than relaxing it.
+
 > ### PENDING OPERATOR DECISION — carried, NOT mine to decide
 >
 > **Charter a research-only formalization of the owner-indexed causal-obligation
