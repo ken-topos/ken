@@ -293,6 +293,49 @@ fn rt_d2_suppress_propagation() -> bool {
     RT_D2_SUPPRESS_PROPAGATION.with(std::cell::Cell::get)
 }
 
+/// `RT-MATCH-RECURSOR-CONSUMERS` `D2` — the carried-join counterpart of the
+/// `RT-RECURSOR-TRANSPORT` `D2` counters above, and counted the same way and for
+/// the same reason.
+#[cfg(test)]
+thread_local! {
+    /// The DENOMINATOR: backedge arms SEEN at `carried_join_arm`, counted
+    /// **before** the representation arm, so suppression cannot drive it to
+    /// zero and "no inert word was produced" can be read as "the arm declined"
+    /// rather than "the seat was never reached".
+    static MRC_D2_BACKEDGE_ARMS_SEEN: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// Inert words actually produced for a backedge arm.
+    static MRC_D2_INERT_WORDS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// `D3`'s mutation: suppress the representation and let the arm fall through
+    /// to the value transfer, which must recreate the exact attributed refusal.
+    static MRC_D2_SUPPRESS_INERT_WORD: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn mrc_d2_backedge_arms_seen() -> usize {
+    MRC_D2_BACKEDGE_ARMS_SEEN.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn mrc_d2_inert_words() -> usize {
+    MRC_D2_INERT_WORDS.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn reset_mrc_d2_counts() {
+    MRC_D2_BACKEDGE_ARMS_SEEN.with(|count| count.set(0));
+    MRC_D2_INERT_WORDS.with(|count| count.set(0));
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn set_mrc_d2_suppress_inert_word(suppress: bool) {
+    MRC_D2_SUPPRESS_INERT_WORD.with(|cell| cell.set(suppress));
+}
+
+#[cfg(test)]
+fn mrc_d2_suppress_inert_word() -> bool {
+    MRC_D2_SUPPRESS_INERT_WORD.with(std::cell::Cell::get)
+}
+
 #[cfg(test)]
 fn selector_variant_exclusion() -> Option<RecursiveDescentResidual> {
     SELECTOR_VARIANT_EXCLUSION.with(std::cell::Cell::get)
@@ -10769,6 +10812,21 @@ recursive_position={:?} returned[{}] still_installed_top={:?}",
         required_kind: Option<ScalarMergeKind>,
         join: &'static str,
     ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
+        // Counted BEFORE the representation arm and deliberately not folded into
+        // it: the arm's guard short-circuits on `!suppress_inert_word`, so under
+        // the `D3` mutation the pattern would never be evaluated and a zero
+        // would be an artifact of the mutation rather than a measurement.
+        #[cfg(test)]
+        if matches!(
+            lowered,
+            LoweringOperand::Specialized(Lowered::RecursiveBackedge)
+        ) {
+            MRC_D2_BACKEDGE_ARMS_SEEN.with(|count| count.set(count.get() + 1));
+        }
+        #[cfg(test)]
+        let suppress_inert_word = mrc_d2_suppress_inert_word();
+        #[cfg(not(test))]
+        let suppress_inert_word = false;
         match lowered {
             LoweringOperand::Carried(word) => {
                 #[cfg(test)]
@@ -10791,6 +10849,46 @@ recursive_position={:?} returned[{}] still_installed_top={:?}",
                     trap.message
                 ),
             )),
+            // **`RT-MATCH-RECURSOR-CONSUMERS` `D2` — REPRESENT THE ARM THAT HAS
+            // ALREADY LEFT, HERE, BEFORE THE GUARD.**
+            //
+            // `Lowered::RecursiveBackedge` is not a value and never becomes one.
+            // It says the tail-recursive edge was ALREADY emitted as a CFG jump
+            // and this block is predecessor-free, so the arm contributes no
+            // value to the merge -- only a predecessor edge that is itself
+            // unreachable. The caller still jumps, so the merge keeps its
+            // predecessor count and its single `I64` block parameter, and the
+            // word below is never read at run time because no control ever
+            // arrives here.
+            //
+            // This does NOT relax `emit_carrier_transfer`. That guard is
+            // correct and untouched: protocol machinery is still never a source
+            // value at a boundary. What was wrong was ASKING it -- the arm was
+            // reaching a value transfer it should never have entered, because
+            // this match keyed on the operand's REPRESENTATION (`Carried` vs
+            // `Specialized`) when the property that decides whether an arm can
+            // be a join predecessor is whether control already departed.
+            //
+            // This is the carried mirror of a landed representation, not a
+            // new mechanism. The scalar lane already does exactly this: a
+            // backedge arm yields an inert pair and then ABSTAINS from result
+            // kind agreement (`record_scalar_merge_kind` returns early), and the
+            // `JumpToJoin` scalar branch exempts it from the planned-kind check
+            // before jumping. The carried lane has one word and no kind to
+            // agree on, so representing the arm is the whole of its share.
+            //
+            // ⇒ No reduced-predecessor merge is built or needed. The `Trap` arm
+            // above still refuses because a trap RETURNS instead of jumping and
+            // so genuinely removes a predecessor; a backedge still jumps.
+            LoweringOperand::Specialized(Lowered::RecursiveBackedge) if !suppress_inert_word => {
+                #[cfg(test)]
+                MRC_D2_INERT_WORDS.with(|count| count.set(count.get() + 1));
+                // A null word, deliberately: if this ever were read, a zero is a
+                // fail-fast null rather than a plausible arena address.
+                Ok(CarriedBoundaryWord {
+                    word: builder.ins().iconst(types::I64, 0),
+                })
+            }
             LoweringOperand::Specialized(lowered) => {
                 #[cfg(test)]
                 D8_SPECIALIZED_JOIN_PRODUCTIONS.with(|count| count.set(count.get() + 1));
