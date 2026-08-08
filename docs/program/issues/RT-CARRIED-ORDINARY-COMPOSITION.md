@@ -1,7 +1,7 @@
 ---
 id: RT-CARRIED-ORDINARY-COMPOSITION
 title: "Carried ordinary elimination consumes exactly one frame — a composed suffix behind an ordinary carried eliminator is refused rather than continued"
-status: active
+status: merged
 owner: runtime
 size: M
 gate: none
