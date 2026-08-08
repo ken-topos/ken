@@ -141,16 +141,43 @@ general, little or nothing remains here.
   **No earlier validation transfers here.** That node rewrites `core.rs` and
   retires a class between then and now, and its instrument never landed. **Prove
   it on this tree, at the point of use.**
-- **`D2` — Callee-position seed units.** A `Call` whose callee is a closure seed
-  reaches a separately owned callable unit, reusing
-  [[RT-DECL-CLOSURE-PORT]]'s transport rather than a parallel one.
-  **If a second transport mechanism appears necessary, stop and report** —
-  that is a finding about the first one's generality, and it re-cuts this node.
-  **If this unit synthesizes a `Constructor`/`Record` capture environment, the
-  campaign doc's Trap 5 binds that site before its first allocation** — and if it
-  allocates no aggregate, record that fact rather than minting a token.
+- **`D2` — Callee-position seed units. THE MECHANISM IS RULED; BUILD TO IT.**
+  Architect ruling `evt_7p8dmg1rez02c`, 2026-08-08, after `D1` established a
+  fixture-only population. **`D2` is a PORT of the published capability — not a
+  deletion, not a deferral.** The ruling's grounds, so nobody re-opens it:
+  `RuntimeExpr::Closure` and `LexicalClosure` are **different capture-authority
+  forms** — seed symbols resolved from the explicit seed environment versus
+  expressions evaluated in the lexical environment. The seed form is a live
+  member of the public backend-neutral IR, has evaluator semantics, and is
+  exercised green through the native backend today. **Deleting only
+  `Call { callee: Closure }` would make the same closure value callable after a
+  `DeclarationRef` but unlawful written directly, purely by source position.**
+
+  The six binding points:
+
+  1. For a `FunctionizedUnits` `Call` whose **exact callee occurrence** is
+     `RuntimeExpr::Closure`, use **that callee's planner-owned body unit**.
+  2. Check `params.len() == args.len()` **before emission**.
+  3. Lower and carry arguments from the call's child origins **in parameter
+     order**. Resolve seed symbols **only** through `lower_seed_capture`, retain
+     **capture source order**, and pass exactly **`Parameter ++ Capture`** to the
+     existing typed `call_declared_unit` path.
+  4. **Do NOT route through `DeclarationClosure` identity or checked-recursion
+     validation.** A literal callee has no declaration-reference occurrence, no
+     symbol identity, and no checked-call template to validate. Reuse the **unit
+     transport**, not the declaration-specific identity join.
+  5. **No `Constructor`/`Record` capture environment is needed. Trap 5 is
+     VACUOUS — record it as such and mint no token.** If an aggregate, or a
+     second codec or transport, appears: hard-stop.
+  6. **Hard-stop** if the planner does not already own the exact callee-body
+     unit, or the existing call path cannot accept the seed captures. Do not
+     create a parallel mechanism.
 - **`D3` — Remove `SeedClosureCall`** from `RecursiveDescentResidual`, and only
   then re-run `AC-1a` and `AC-1b`.
+
+  **After `D3`, the exact `D1` firing population must select
+  `FunctionizedUnits`, build and run, and enumerate no `SeedClosureCall`.** The
+  delta-free `D0` remains the regression complement.
 
 ## 4. Acceptance criteria
 
@@ -183,6 +210,21 @@ general, little or nothing remains here.
 - **`AC-5`.** Emitted function count and per-function code-size distribution
   recorded for the affected programs, as at `RT-DECL-CLOSURE-PORT.AC-6`.
   **Report; do not tune, do not pin a threshold.**
+- **`AC-6` — `D2`/`D3` evidence, set by the Architect's ruling
+  (`evt_7p8dmg1rez02c`). Three controls, and the third is not optional.**
+  1. The **canonical explicit-seed-env positive**.
+  2. The **missing-capture loud refusal**.
+  3. **An ORDER-SENSITIVE `Parameter ++ Capture` control.**
+
+  **Why the third exists, and it is a live blindness in the current corpus, not
+  a hypothetical.** The existing seed computes `5 + 2 = 7`. **Addition is
+  commutative, so that witness returns 7 whether the port passes
+  `Parameter ++ Capture` or `Capture ++ Parameter`** — it cannot see the one
+  ordering defect point 3 of `D2` exists to prevent.
+
+  ⇒ **The smallest discriminating witness is a direct seed closure using
+  `sub_int` with argument `5` and capture `2`, expecting `3`. A swap yields
+  `-3`.** Do not discharge this AC with a commutative operator.
 
 ## 5. Banned scope
 
@@ -191,12 +233,31 @@ general, little or nothing remains here.
 - **Retiring any other residual class.** Each is its own node.
 - **Deleting the selector or the `RecursiveDescent` lane** — that is
   [[RT-DESCENT-RETIRE]], and it is gated on all four migrations.
-- **Manufacturing a population** to justify the node if `D1` comes back empty.
+- **DELETING OR NARROWING the `Call { callee: Closure }` capability.** Ruled out
+  by the Architect (`evt_7p8dmg1rez02c`): a lawful delete is a separate
+  structural IR redesign that removes seed closures from general expression
+  position and recuts evaluator, corpus and public API together — and it would
+  additionally owe the **executed** elaborator proof that the PORT branch does
+  not. `D1` establishes no intrinsic reason for that redesign.
+- **Routing the port through `DeclarationClosure` identity or checked-recursion
+  validation** (`D2` point 4).
+- **Minting a Trap 5 capture-environment token.** Trap 5 is vacuous here; record
+  that it is, rather than discharging it.
+- ~~**Manufacturing a population** if `D1` comes back empty.~~ **MOOT — `D1`
+  came back non-empty.** `SeedClosureCall` fires; kept only so a reader does not
+  think the ban was dropped.
 
 ## 6. Hard stop
 
-Stop and report if `D1` shows the class fires only through shapes that also fire
-a class owned by a later node, or if `D2` cannot reuse the existing transport.
+Stop and report if:
+
+- `D1` shows the class fires only through shapes that also fire a class owned by
+  a later node — **not triggered; `D1` measured exactly `{SeedClosureCall}`** on
+  the firing seed;
+- `D2` cannot reuse the existing transport;
+- **the planner does not already own the exact callee-body unit**, or the
+  existing call path **cannot accept the seed captures** (`D2` point 6);
+- **an aggregate, or a second codec or transport, appears** (`D2` point 5).
 Per the campaign's Trap 2, a newly reachable program shape tripping a
 fail-closed invariant is **expected** here — route it as its own node; do not
 absorb it and do not work around it.
