@@ -19,6 +19,78 @@ thread_local! {
         const { std::cell::Cell::new(0) };
 }
 
+/// **`RT-SEED-CALL-PORT` `D1` — the residual set observed at the PRODUCTION
+/// selector site, per compilation.**
+///
+/// `enumerate_recursive_descent_residuals` landed with `RT-DECL-CLOSURE-PORT`
+/// and is exercised only on hand-built `RuntimeExpr` witnesses. That answers
+/// *"can the instrument see variant V?"* and **not** the question every node in
+/// this campaign actually asks: *"which variants fire on the programs this
+/// repository really compiles?"* A witness is authored to exhibit the variant it
+/// is named for, so a walk with a gap still reports it.
+///
+/// This cell closes that distance by recording the enumeration where
+/// `compile_expr_into_module_with_root_projection` selects the authority — the
+/// one gate every compiled program passes. The population is therefore defined
+/// by the gate, not by the set of programs someone thought to enumerate.
+///
+/// **Domain, stated so it can be checked:** this observes every program compiled
+/// **within `ken-runtime`'s own test profile**. Programs reached only from
+/// `ken-cli` integration tests are outside it, because `cfg(test)` is not set
+/// for this crate when it is built as a dependency. `D1` reports a NON-empty
+/// population, so widening the domain can only add members — it cannot change
+/// the answer. A close-on-absence would have needed the wider domain first.
+#[cfg(test)]
+thread_local! {
+    static OBSERVED_RESIDUALS: std::cell::RefCell<Option<BTreeSet<RecursiveDescentResidual>>> =
+        const { std::cell::RefCell::new(None) };
+    static RESIDUAL_ENUMERATION_MUTATION: std::cell::Cell<ResidualEnumerationMutation> =
+        const { std::cell::Cell::new(ResidualEnumerationMutation::None) };
+}
+
+/// The mutation `D1a` proves its exact-set control against.
+///
+/// `ShortCircuitLikeTheSelector` is not a synthetic perturbation: it makes the
+/// enumerator return exactly what its short-circuiting twin returns, which is
+/// the one regression the instrument exists to prevent and the one a
+/// reachability control cannot see.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(in crate::cranelift_backend) enum ResidualEnumerationMutation {
+    None,
+    ShortCircuitLikeTheSelector,
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn set_residual_enumeration_mutation(
+    mutation: ResidualEnumerationMutation,
+) {
+    RESIDUAL_ENUMERATION_MUTATION.with(|cell| cell.set(mutation));
+}
+
+#[cfg(test)]
+fn residual_enumeration_mutation() -> ResidualEnumerationMutation {
+    RESIDUAL_ENUMERATION_MUTATION.with(std::cell::Cell::get)
+}
+
+/// The residual set the last compilation on this thread observed, or `None` if
+/// no compilation has run since the last reset.
+///
+/// `None` and `Some(empty)` are deliberately distinct: *"the instrument never
+/// ran"* and *"the instrument ran and found nothing"* are the two readings a
+/// close-on-absence must never conflate, and this node's whole `D1a` gate exists
+/// because the second is the predicted answer.
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn observed_recursive_descent_residuals(
+) -> Option<BTreeSet<RecursiveDescentResidual>> {
+    OBSERVED_RESIDUALS.with(|cell| cell.borrow().clone())
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn reset_observed_recursive_descent_residuals() {
+    OBSERVED_RESIDUALS.with(|cell| *cell.borrow_mut() = None);
+}
+
 /// **`RT-CARRIER-BYTESPAN-OBSERVE` `D2` — the reply byte span, MASKED at the
 /// typed producer** (Architect `dec_12s3j2gj67c66`).
 ///
@@ -599,6 +671,21 @@ fn enumerate_recursive_descent_residuals(
     expr: &RuntimeExpr,
     declarations: &BTreeMap<&str, &RuntimeDeclaration>,
 ) -> BTreeSet<RecursiveDescentResidual> {
+    // `RT-SEED-CALL-PORT` `D1a`: revert to the short-circuiting twin's answer.
+    // This is the regression the instrument exists to prevent, injected at the
+    // instrument itself rather than at a convenient downstream point, so a
+    // control that stays green under it is measuring something else.
+    #[cfg(test)]
+    if residual_enumeration_mutation() == ResidualEnumerationMutation::ShortCircuitLikeTheSelector {
+        return recursive_descent_residual(expr)
+            .or_else(|| {
+                declarations
+                    .values()
+                    .find_map(|declaration| declaration_recursive_descent_residual(declaration))
+            })
+            .into_iter()
+            .collect();
+    }
     let mut found = BTreeSet::new();
     collect_recursive_descent_residuals(expr, &mut found);
     for declaration in declarations.values() {
@@ -905,6 +992,15 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
         &declarations,
         oriented_subcontinuation_plan.as_ref(),
     )?;
+    // `RT-SEED-CALL-PORT` `D1` — observe the FULL residual set on the real
+    // program, at the same site and from the same inputs the selector consumes.
+    // Recording it anywhere else would measure a reconstruction of the program
+    // rather than the one about to be compiled.
+    #[cfg(test)]
+    {
+        let observed = enumerate_recursive_descent_residuals(expr, &declarations);
+        OBSERVED_RESIDUALS.with(|cell| *cell.borrow_mut() = Some(observed));
+    }
     let body_emission_authority = select_body_emission_authority(expr, &declarations);
     // Boundary A of RT-NATIVE-FNSPLIT: close and validate the factored static
     // graph before Cranelift sees any semantic body. The plan's positional
