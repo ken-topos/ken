@@ -1,7 +1,7 @@
 ---
 id: RT-CONTINUATION-CALL-DISCHARGE
 title: "A planned continuation call is neither directly emitted nor compositionally consumed once the Active resume path goes live — attribution, not repair"
-status: ready
+status: active
 owner: runtime
 size: M
 gate: none
