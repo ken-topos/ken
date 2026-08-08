@@ -6,9 +6,44 @@ edit. **`D0` and `D1`'s measurements were taken on that tree; `D2`'s were taken
 at the `D2` evidence checkpoint `392e883a`**, a different object — **every
 count in this document names the object it was measured on, never a role.**
 
-**`D1`'s answer is asymmetric.** One position closes for free; the other does
-not and is routed as a refusal. That is the input to the Steward's re-size, and
-it is stated here rather than folded into `D2`.
+**`D1`'s answer is asymmetric ON ITS TWO WITNESSES.** One witness carries
+without a port; the other does not and is routed as a refusal. That is the input
+to the Steward's re-size, and it is stated here rather than folded into `D2`.
+
+> ### CORRECTION 2026-08-08 — EVERY CLASS-WIDE CLAIM IN THIS DOCUMENT IS WITHDRAWN
+>
+> **Authority: Architect `evt_3r4j14fv1jtj2`, Steward `evt_gkyfgre7b3tg`, on the
+> nine-expression census at exact `8efdfdb3`.**
+>
+> This document originally generalized from each position's **one executable
+> witness** to that position's **whole residual class**. Both generalizations are
+> false, and the counterexamples are measurable **on this same object**:
+>
+> - **Position A does NOT close.** `d8d_the_composed_binding_site_is_live_and_-`
+>   `neither_landed_population_installs_a_target` enumerates exactly
+>   `{MatchScrutineeRecursor}`; under A-only exclusion it reaches
+>   `FunctionizedUnits` and refuses with `Unsupported(RecursiveBackedge,
+>   "protocol machinery is never a source value at a boundary")`.
+> - **Position B does NOT close for free.** Eight expressions across five `px8j`
+>   test families each enumerate exactly `{LexicalCallArgumentRecursor}` and each
+>   refuse on the functionized lane under B-only exclusion, across four distinct
+>   boundaries.
+>
+> ⇒ **`D2` is a safe PARTIAL position-A increment**: it closes the exact `D1`
+> witness at the exact repaired `resume_active_continuation` seat. **It is not
+> completion of position A.** The A population is **still open at `d8d`** and is
+> owned by `RT-MATCH-RECURSOR-CONSUMERS`; the B population is owned by
+> `RT-LEXICAL-RECURSOR-CONSUMERS`. Both block `D3`.
+>
+> **The production repair is sound and is not revised by this correction** — only
+> the scope claimed for it. Nothing about what the object *does* changed; what
+> changed is what it is allowed to *say*.
+>
+> **Why this correction exists at all, stated as a method failure rather than a
+> fact.** A one-witness measurement was exact and was reported exactly; the step
+> from *"this witness"* to *"this position"* was taken silently, in prose, at a
+> point where nothing re-checked it. Each heading below now names its subject as
+> a witness, so the step cannot be taken again by reading a heading.
 
 Citations are by grep-able phrase. Line numbers for these two variants have gone
 stale twice already in this campaign.
@@ -85,11 +120,17 @@ original path, and in a production build the branch does not exist. Both
 witnesses assert their program is **single-variant** before probing, so the
 remainder after removal is empty by construction rather than by luck.
 
-### Position A — `MatchScrutineeRecursor`: does NOT close for free
+### Position A's witness — `MatchScrutineeRecursor`: does NOT carry without a port
 
 ⚠ **This section is the `D1` finding, measured at `2e5e6a8b`. It is HISTORY.**
-`D2` repairs this position and both lanes now execute — see the `D2` section.
-The refusal below is what `D1` measured, not what the current object does.
+`D2` repairs **this witness** and both of its lanes now execute — see the `D2`
+section. The refusal below is what `D1` measured, not what the current object
+does.
+
+⛔ It read *"`D2` repairs this position and both lanes now execute."* **That is
+withdrawn**: `D2` repairs this witness at one seat, and `d8d` is an A-population
+program on this same object that still refuses. See the correction at the head
+of this document.
 
 | lane | outcome |
 |---|---|
@@ -108,7 +149,11 @@ Unsupported(UnsupportedLowering {
 the frame requires: a compile-time refusal that never executes is not a
 behavioural result.
 
-**It is the position's refusal, not the fixture's, and that is measured.** The
+**It is the recursive position's refusal and not the fixture's, and that much is
+measured — but it is measured OF THIS WITNESS, not of the class.** The original
+sentence read *"the position's refusal, not the fixture's"*, where "the
+position" was read class-wide; the control below separates *this program's*
+recursive position from *this program's* shape and does nothing more. The
 control is the same ordinary-`Match`-over-`ComputationalMatch` program with
 **no recursive position**: it is not a residual at all, takes the functionized
 lane with no exclusion set, and **executes**, returning `Int(Small(7))`. The
@@ -119,7 +164,7 @@ Without this control the red would have been equally consistent with *"an
 ordinary match cannot consume a computational match at all"* — a different and
 much larger claim, and one that would have mis-scoped `D2`.
 
-### Position B — `LexicalCallArgumentRecursor`: CLOSES FOR FREE
+### Position B's witness — `LexicalCallArgumentRecursor`: CARRIES WITHOUT A PORT
 
 | lane | outcome |
 |---|---|
@@ -127,7 +172,13 @@ much larger claim, and one that would have mis-scoped `D2`.
 | functionized (excluded) | **executes**, `Returned(Constructor "ctor:fixture::rt::Leaf")` |
 
 **The decoded observations are identical.** The landed continuation machinery
-already carries this position; there is nothing to build for it.
+already carries **this witness**.
+
+⛔ It read *"already carries this position; there is nothing to build for it."*
+**Withdrawn as a class-wide claim** — eight `px8j` expressions in this same
+population refuse on the functionized lane across four distinct boundaries, so
+there is a great deal to build for the class. `RT-LEXICAL-RECURSOR-CONSUMERS`
+owns it. See the correction at the head of this document.
 
 **One difference deliberately not compared, and why.** The raw native result
 token differs — `0` on the retained lane, `517` on the functionized one. It is
@@ -150,7 +201,13 @@ the same shapes closed over a real constructor.
 
 ## Consequences for sizing
 
-- **Position B needs no `D2`.** Any `D2` is for position A alone.
+- **Position B's WITNESS needs no `D2`.** Any `D2` in *this node* is for
+  position A alone.
+  ⛔ It read *"Position B needs no `D2`"* — withdrawn as a class-wide claim.
+  Eight `px8j` expressions in B's population refuse on the functionized lane;
+  `RT-LEXICAL-RECURSOR-CONSUMERS` is the repair node B does need, and it blocks
+  `D3`. What survives is the narrower and still-true statement: **this node's**
+  `D2` is scoped to position A.
 - **Position A's refusal is at lowering**, on the shape of the value an ordinary
   match receives from a computational match with a recursive position. Whether
   the narrow binding that fixes it is available over the existing continuation
@@ -163,8 +220,16 @@ the same shapes closed over a real constructor.
   transport is materially different from anything is a `D2` question.
 
 **Suite at the `D1` checkpoint `2e5e6a8b`: 814 passed, 0 failed, 4 ignored** —
-the 812 delta-free baseline plus exactly the two `D1` witnesses
-(`rt_d1_position_a_...`, `rt_d1_position_b_...`).
+the 812 delta-free baseline plus exactly the two `D1` witnesses, which carried
+the names `rt_d1_position_a_...` and `rt_d1_position_b_...` **at that object**.
+
+⚠ **Both have since been renamed, and an elided citation cannot show that.**
+`D2` renamed the position-A witness, and this correction renamed the
+position-B one to `rt_d1_the_exact_position_b_witness_carries_without_a_port` —
+because its old name asserted the class-wide claim being withdrawn. A reader
+grepping `rt_d1_position_b_` against the current tree will find nothing and has
+no way to tell a rename from a deletion, so the mapping is stated here rather
+than left to be reconstructed.
 
 ⛔ **That figure is bound to `2e5e6a8b` and is not a current-candidate count.**
 `D2` adds controls, so the population moves; the count for whatever object you
@@ -174,7 +239,17 @@ line previously had.
 
 ---
 
-## D2 — position A closes, by propagating the backedge protocol marker
+## D2 — a safe PARTIAL position-A increment: the exact `D1` witness closes
+
+The mechanism is unchanged: propagating the backedge protocol marker.
+
+⛔ **This heading read "`D2` — position A closes".** It is withdrawn and
+narrowed: `D2` closes **the exact `D1` position-A witness at the exact repaired
+`resume_active_continuation` seat**. The A population is **still open at
+`d8d`**, which reaches `FunctionizedUnits` under A-only exclusion on this same
+object and refuses with `Unsupported(RecursiveBackedge, "protocol machinery is
+never a source value at a boundary")`. `RT-MATCH-RECURSOR-CONSUMERS` owns
+closing it, and it blocks `D3`. See the correction at the head of this document.
 
 Architect disposition `evt_bqg3gjwkp350`: hard stop 2 **not triggered**, node
 stays `M`, and the repair is a narrow protocol-marker propagation.
@@ -205,7 +280,13 @@ allocation, call, claim or occurrence-plan consumption. It matches
 `rt_d2_exact_counts_and_the_suppression_ab`, not as a lower bound.** A
 duplicated seat consumption would satisfy `> 0` while this table claimed one.
 
-**Both lanes now agree on position A's executed answer.**
+**Both lanes now agree on the exact `D1` position-A WITNESS's executed answer.**
+
+⛔ This sentence read *"both lanes now agree on position A's executed answer"* —
+withdrawn as a class-wide claim. The table above is exact, and every row of it
+is about **one program**. `d8d` is an A-population program on this same object
+whose lanes do not agree, because the functionized one refuses. See the
+correction at the head of this document.
 
 ### Two corrections to my own earlier readings, kept rather than overwritten
 

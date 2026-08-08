@@ -11234,23 +11234,39 @@ fn rt_match_over_nonrecursive_computational_match() -> RuntimeExpr {
     }
 }
 
-/// **`RT-RECURSOR-TRANSPORT` `D2` control 1 — position A now EXECUTES on the
-/// functionized lane and agrees with the retained lane.**
+/// **`RT-RECURSOR-TRANSPORT` `D2` control 1 — THE EXACT `D1` POSITION-A WITNESS
+/// executes on both lanes and agrees, after the repair at the exact
+/// `resume_active_continuation` seat.**
 ///
-/// `D1` recorded this position refusing at lowering. `D2`'s protocol-marker
-/// propagation at `resume_active_continuation` repairs it: both lanes execute
-/// and produce the same decoded observation.
+/// ⛔⛔ **THE SUBJECT IS THIS WITNESS, NOT THE POSITION.** This doc and this
+/// control's name previously said *"position A now EXECUTES on the functionized
+/// lane and agrees with the retained lane"* — a claim about the whole
+/// `MatchScrutineeRecursor` class. **That claim is false and is withdrawn.**
+///
+/// The counterexample is on this same object. `d8d_the_composed_binding_site_-`
+/// `is_live_and_neither_landed_population_installs_a_target` builds an
+/// A-population program — its complete residual set is exactly
+/// `{MatchScrutineeRecursor}` — and under an A-only selector exclusion it
+/// reaches `FunctionizedUnits` and **refuses**, with
+/// `Unsupported(RecursiveBackedge, "protocol machinery is never a source value
+/// at a boundary")`. That is measurable here, at `D2`, with this repair active.
+///
+/// ⇒ **`D2` is a safe PARTIAL position-A increment, not completion of position
+/// A.** It closes the exact `D1` witness at the exact repaired seat. The rest of
+/// the A population is **still open**, and `RT-MATCH-RECURSOR-CONSUMERS` owns
+/// closing it. Read a green run here as *"this witness, this seat"* and nothing
+/// wider.
 ///
 /// ⭐ The third assertion is the same discriminator `D1` used and it is kept:
 /// the non-recursive same-shape control was never a residual and executes
 /// unaided, so this row's subject remains the recursive position rather than
 /// the shape.
 ///
-/// **Promise class: durable invariant.** The subject is that the two lanes
-/// agree on this position's executed answer. Every extension preserving the
+/// **Promise class: durable invariant.** The subject is that **this witness's**
+/// two lanes agree on its executed answer. Every extension preserving the
 /// backedge protocol keeps it green.
 #[test]
-fn rt_d2_position_a_executes_on_both_lanes_and_agrees() {
+fn rt_d2_the_exact_position_a_witness_executes_on_both_lanes_and_agrees() {
     let empty: BTreeMap<&str, &RuntimeDeclaration> = BTreeMap::new();
     let witness = rt_match_scrutinee_recursor_executable();
 
@@ -11267,8 +11283,10 @@ fn rt_d2_position_a_executes_on_both_lanes_and_agrees() {
         rt_run_functionized(&witness, RecursiveDescentResidual::MatchScrutineeRecursor);
     assert_eq!(
         functionized, retained,
-        "D2: the functionized lane must EXECUTE and agree with the retained lane; a compile-time \
-         refusal here means the repair regressed"
+        "D2, FOR THIS WITNESS ONLY: the functionized lane must EXECUTE and agree with the \
+         retained lane; a compile-time refusal here means the repair regressed. This does NOT \
+         say position A is closed -- d8d is an A-population counterexample on this same object, \
+         and RT-MATCH-RECURSOR-CONSUMERS owns the rest of the population"
     );
 
     let control = rt_match_over_nonrecursive_computational_match();
@@ -11407,25 +11425,44 @@ reason: \"scrutinee is not a constructor value after ordinary expression lowerin
     );
 }
 
-/// **`RT-RECURSOR-TRANSPORT` `D1` position B — `LexicalCallArgumentRecursor`
-/// CLOSES FOR FREE. This is a result, not an absence of work.**
+/// **`RT-RECURSOR-TRANSPORT` `D1` — THE EXACT POSITION-B WITNESS carries
+/// without a port. This is a result about this witness, not about the class.**
 ///
-/// With this position excluded from the selector the program takes the
+/// With this position excluded from the selector **this program** takes the
 /// functionized lane, **executes**, and produces the **same decoded
 /// observation** as the retained lane. The landed continuation machinery
-/// already carries this position; nothing needs to be built for it.
+/// already carries **this witness**.
+///
+/// ⛔⛔ **"`LexicalCallArgumentRecursor` CLOSES FOR FREE" IS WITHDRAWN AS A
+/// CLASS-WIDE CLAIM**, along with *"nothing needs to be built for it"* and
+/// *"this position needs no port"*. This doc and this control's name asserted
+/// all three of the whole B population, on the strength of this one witness.
+///
+/// **The counterexamples are eight expressions across five test families**, each
+/// enumerating exactly `{LexicalCallArgumentRecursor}` and each refusing on the
+/// functionized lane under B-only exclusion — `px8j_owned_scope_deletion_...`,
+/// `px8j_all_three_producer_paths_...`, `px8j_siblings_share_an_origin_...`,
+/// `px8j_one_two_three_scope_segments_...` at depths 1, 2 and 3, and
+/// `px8j_selected_scope_partitions_...` before and after the hole. They reach
+/// four distinct boundaries. `RT-LEXICAL-RECURSOR-CONSUMERS` owns them.
+///
+/// ⇒ **What `D1` measured is exact and stands: this witness needs no port.**
+/// What it does not license is the step from one witness to the class, and that
+/// step was mine. A single executable witness cannot close a population whose
+/// members differ in scope depth, sibling origin and hole placement — the very
+/// dimensions the counterexamples vary.
 ///
 /// ⛔ The raw native result token differs between the lanes (`0` retained,
 /// `517` functionized) and is deliberately not compared — see `rt_run`. It is a
 /// pre-decode lane-internal value, and the decoded observation is what the two
 /// lanes are required to agree on.
 ///
-/// **Promise class: transition sentinel.** It pins that this position needs no
-/// port. It reds if the functionized lane stops carrying it — which would
-/// reopen `D2` for this position — and `D3` rewrites it when the variant and
-/// its test-only selector hook are retired together.
+/// **Promise class: transition sentinel.** It pins that **this witness** needs
+/// no port. It reds if the functionized lane stops carrying it, and `D3`
+/// rewrites it when the variant and its test-only selector hook are retired
+/// together.
 #[test]
-fn rt_d1_position_b_lexical_call_argument_recursor_closes_for_free() {
+fn rt_d1_the_exact_position_b_witness_carries_without_a_port() {
     let empty: BTreeMap<&str, &RuntimeDeclaration> = BTreeMap::new();
     let witness = rt_lexical_call_argument_recursor_executable();
 
@@ -11448,8 +11485,11 @@ fn rt_d1_position_b_lexical_call_argument_recursor_closes_for_free() {
     );
     assert_eq!(
         functionized, retained,
-        "D1 for position B: the functionized lane must EXECUTE and agree with the retained lane. \
-A compile-time refusal here would mean this position needs a D2 port after all"
+        "D1 FOR THIS WITNESS ONLY: the functionized lane must EXECUTE and agree with the retained \
+         lane. A compile-time refusal here would mean this witness needs a port after all. This \
+         does NOT say the LexicalCallArgumentRecursor class needs no port -- eight px8j \
+         expressions in this same population refuse on the functionized lane, and \
+         RT-LEXICAL-RECURSOR-CONSUMERS owns them"
     );
     assert!(
         functionized.starts_with("OK "),
