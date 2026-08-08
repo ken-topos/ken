@@ -1,12 +1,12 @@
 ---
 id: RT-CARRIED-CONTINUATION-RESUME
 title: "A carried scrutinee reaching a continuation frame has no resume path — the carried elimination does not implement the Carried x {PendingLet, Active} arm"
-status: ready
+status: active
 owner: runtime
 size: M
 gate: none
 depends_on: []
-blocks: [RT-MATCH-RECURSOR-CONSUMERS]
+blocks: [RT-CARRIED-ORDINARY-COMPOSITION, RT-MATCH-RECURSOR-CONSUMERS]
 github: null
 origin: Architect sibling-authority ruling evt_2pt95vbja6447 (2026-08-08) on the RT-MATCH-RECURSOR-CONSUMERS D2 hard stop evt_397gfxdg45ncs, measured at checkpoint 50808c11. Campaign docs/program/16-recursive-descent-retirement.md node #6e. Steward-filed (agents cannot create tracked work per COORDINATION §2).
 ---

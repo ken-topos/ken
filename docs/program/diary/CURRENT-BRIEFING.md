@@ -33,55 +33,59 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-08 ~13:4xZ · THIRD WALL ON ONE CHAIN; `RT-CARRIED-CONTINUATION-RESUME` RELEASED
+## LIVE — 2026-08-08 ~14:0xZ · FOURTH WALL ON ONE CHAIN; `RT-CARRIED-ORDINARY-COMPOSITION` FILED AND FRAMED
 
-**`main = d3584138`.** `RT-MATCH-RECURSOR-CONSUMERS`'s `D2` **worked** — and
-the refusal advanced to a **sibling authority**, so a third node now sits in
-front of it. Runtime is building that node; the A node is parked behind it with
-its accepted partial in QA.
+**`main = 3bb4addb`.** `RT-CARRIED-CONTINUATION-RESUME`'s `D2` **worked** — the
+carried value survives the composition, **measured on the backtrace rather than
+inferred from the signature** — and the refusal advanced again. A fourth node
+now sits in front of `RT-MATCH-RECURSOR-CONSUMERS`.
 
-> ### THE CHAIN, because the shape is the story and it will repeat
+The implementer returned the wall on the armed terms without absorbing it, for
+the **second time in a row**. That is the standard on this chain.
+
+> ### THE CHAIN, because the shape is the story and it keeps repeating
 >
 > `resume_active_continuation` (`RT-RECURSOR-TRANSPORT` `D2`, merged
-> `89aa1550`) → `carried_join_arm` (`RT-MATCH` `D2`, built at `50808c11`) →
-> `lower_computational_match_value_composed` (**open**,
-> [[RT-CARRIED-CONTINUATION-RESUME]]).
+> `89aa1550`) → `carried_join_arm` (`RT-MATCH` `D2`, merged `3061a645`) →
+> `lower_computational_match_value_composed` (`RT-CARRIED-CONTINUATION-RESUME`
+> `D2`, built at `cc736aaf`) → the `Carried x Ordinary` **pre-delegation guard
+> family** (**open**, [[RT-CARRIED-ORDINARY-COMPOSITION]]).
 >
-> **Every repair was correct and every one revealed the next wall.** That is
-> Campaign Trap 2 — the fail-closed machinery working on a newly reachable
-> population, not a defect in the node that finds it. The implementer stopped
-> at the third rather than absorbing it, which cost one turn and is the whole
-> reason the sibling got its own node instead of being buried in an `M`.
+> **Four repairs, every one correct, every one revealing the next wall.** That
+> is Campaign Trap 2 — the fail-closed machinery working on a newly reachable
+> population, not a defect in the node that finds it.
 >
-> ⇒ **Expect a fourth. The frame's third hard stop says route it, not absorb
-> it.** It will be legible and the next step will look obvious — that is
-> exactly the condition under which absorbing feels efficient, and `#27` is the
-> record of five instances of one shape absorbed one at a time.
+> **The fourth wall was predicted in writing by the code it lives in.**
+> `RT-PRODUCER-MATCH-PORT` `D2` documented all three guards, said retirement
+> would make them live in production for the first time, and said plainly they
+> had **no shape-reaching control**. One now has a shape reaching it. The guard
+> is doing exactly what its author said it would.
+>
+> ⇒ **Expect a fifth. Route it, do not absorb it.** It will be legible and the
+> next step will look obvious — that is exactly the condition under which
+> absorbing feels efficient, and `#27` is the record of five instances of one
+> shape absorbed one at a time, each individually reasonable.
 
 | item | state |
 |---|---|
-| corrected `D0`-`D2` | **MERGED.** `b62ff22d` squashed to `main` **`89aa1550`**, CI green, verified by content on all three paths. Decision `dec_57zsqcpzcpmhp` |
-| `8efdfdb3` | **never merged.** Approval withdrawn mid-publish (`evt_38bz22cqd7e48`); `dec_6nsrbyw1wjpb` void; PR #1609 closed pre-merge, synthetic branch deleted |
-| what landed instead | a bounded child over `8efdfdb3` narrowing every class-wide claim to the exact witnesses, recording **both** A and B populations as open. `lowering/core.rs` **byte-identical to `8efdfdb3`** — the `D2` production mechanism is untouched by the correction |
-| runtime ring | **compacted** at this WP boundary (all three seats), then kicked. Leader cut `wp/RT-MATCH-RECURSOR-CONSUMERS` from `89aa1550` and dispatched `D0`+`D1` as one continuous turn; implementer confirmed picked up |
-| branch tip `10369776` | **held evidence only** — not a candidate, not a repair base, not to be continued |
-| [[RT-CARRIED-CONTINUATION-RESUME]] | **`ready`, RELEASED** `evt_291ztb8nfwq4m`. The third wall — sibling authority at `lower_computational_match_value_composed`, refusing `BoundaryCarrier`. Population is the production arm `Carried(word)` x `{PendingLet, Active}`; the two exposed rows are a **floor**. **`D0`/`D1` must partition the two frame variants before coding** — a shared refusal arm is not evidence of one mechanism (Architect, explicit) |
-| [[RT-MATCH-RECURSOR-CONSUMERS]] | **`active` but PARKED**, now `depends_on: [RT-CARRIED-CONTINUATION-RESUME]`. Its `D0`/`D1` closed the A population at **two** rows (`d8d` + `px8j_all_three_...`), one root, one owner. Its `D2` at `carried_join_arm` is **built and correct** and lands as an accepted partial; `AC-1` stays undischarged |
-| [[RT-LEXICAL-RECURSOR-CONSUMERS]] | **`draft`, framed and shovel-ready** — rows 1-5. Frame amended with B's **wider** denominator: 16 compiles / 10 tests against its eight-across-five. Different denominators, neither refuting the other; the wider one is what a sizing decision must see |
-| `D3` | blocked on **both**. `RT-DESCENT-RETIRE` downstream of that |
+| [[RT-CARRIED-ORDINARY-COMPOSITION]] | **FILED `ready`, FRAMED** (campaign #6f, Architect `evt_63ae56tttz9pq`, handle assigned by the Architect). **Not started** — blocked on its predecessor's merge. Population is the **whole guard family** — retained scrutinee index, deferred constructor case, nonempty `eliminators[1..]` — **with intersections**, because the guards are ordered and only the first reached is observable |
+| the two suffix sources | **must not be conflated**, and this is the node's sharpest input. `cc736aaf`'s own new outer-tail guard **did not fire**; the firing tail is the successor frame **rebuilt from `active.pending`**. Two different tails, one guard, one rendered string |
+| `cc736aaf` | **accepted partial, cut authorized by me.** Architect found no design defect; awaiting QA plus the exact-SHA merge Decision. Goes to `main` **before** the successor starts — the successor builds on it, and a team building on an unmerged accepted base is the long-branch shape |
+| `RT-CARRIED-CONTINUATION-RESUME` `D3` | **ruled: an ADVANCE control, not a compile-success control.** The rows do not compile end-to-end and will not until #6f lands. **And it must not key on the trailing-eliminator string** — that string belongs to a guard #6f is about to change, so a control matching it would later pass **vacuously**. Key on the *absence* of the continuation-frame refusal plus the measured `resume_active_continuation` arrival |
+| [[RT-MATCH-RECURSOR-CONSUMERS]] | `active`, **parked behind two successors now** — `depends_on` holds both. Its `AC-1` closes when the chain runs out of walls |
+| [[RT-LEXICAL-RECURSOR-CONSUMERS]] | **`draft`, framed and shovel-ready** — rows 1-5. Serialized behind this arc on **file contention**, not dependency |
+| `D3` / `RT-DESCENT-RETIRE` | downstream of all of it |
 | `#[ignore]` on this arc | **zero, ruled.** Not discouraged — ruled out |
-| [[RT-CENSUS-CAVEAT-GUARD]] | filed `ready` (PR #1611). The last unowned finding from this window; blocks nothing, contends on `core/tests/control.rs`, so it schedules after this arc |
 
-**Merged this window: #1610** (the partition), **#1611** (census-guard node),
-**#1612** / **#1614** (briefing), **#1613** (corrected `D0`-`D2`), **#1615**
-(tracker: `active` used for the first time in 180 nodes), **#1616** (frame
-amendments), **#1617** (coordinate fix), **#1618** (the sibling node), **#1619**
-(research report). `main` moved `c7693a7c` → … → **`89aa1550`** → `a737b972` →
-`efa764ee` → `560a1c74` → `3dab6d7a` → `838d42eb` → **`d3584138`**.
+**Merged this window: #1610**, **#1611**, **#1612**/**#1614**, **#1613**,
+**#1615**, **#1616**, **#1617**, **#1618**, **#1619**, **#1620** (the accepted
+partial, CI green), **#1621**, **#1622**. `main` reached **`3bb4addb`**.
 
-Adversary notified on #1613 per merge-procedure M8 (`evt_10r40cs54j4gc`) with
-both open populations named as unhunted; it hunted `89aa1550` and returned **no
-defect** (`evt_5armvc9aejj8t`), correctly unacknowledged per §10⁻a.
+Adversary hunted `3061a645` and returned **no correctness defect**, with one
+evidence-axis finding — the `D2` counters have **zero callers repo-wide**, so
+their anti-vacuity rationale reads as coverage while measuring nothing. Folded
+into `RT-MATCH` `D3` and `RT-DESCENT-RETIRE` (#1622). Correctly unacknowledged
+per §10⁻a.
 
 > ### TWO COORDINATE FAILURES TODAY, SAME SHAPE, AND THE SECOND WAS PREVENTED
 >
