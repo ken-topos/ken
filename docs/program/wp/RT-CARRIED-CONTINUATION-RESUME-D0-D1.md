@@ -1,17 +1,24 @@
 # RT-CARRIED-CONTINUATION-RESUME — `D0`/`D1` checkpoint
 
-**Base: `24d585f8fce19f3b82ca35e3d7234cfa9a2f3f28`** — the superseding accepted
-partial, not `50808c11`. The branch was moved there before any commit, on the
-Steward's approval: the two objects differ by **two comment lines and zero
-non-comment lines**, so the exposed behaviour is identical, but `50808c11` will
-not be an ancestor of `main` after a squash and a candidate cut from it would
-carry the corrected comment text back in its pre-fix form.
+**Base, re-anchored: `origin/main` = `3061a645`**, which carries the accepted
+partial `24d585f8` squashed (PR #1620, CI green). The measurements in this
+document were taken at `24d585f8` directly, before that merge; the branch was
+rebased onto `3061a645` afterwards so the partial is its real ancestry, and the
+branch's own delta is byte-identical across that rebase.
 
-**This candidate changes no code.** `git diff 24d585f8 -- crates/` is empty at
-the checkpoint SHA. Every instrument was temporary, was run, and was reverted.
-That discharges `AC-4` (landed guards intact), `AC-5` (no new `#[ignore]`) and
-`AC-6` (no retirement or lane deletion) byte-identically rather than by
-inspection.
+**Why the measurement base was `24d585f8` and not `50808c11`.** The branch was
+moved before any commit, on the Steward's approval: the two objects differ by
+**two comment lines and zero non-comment lines**, so the exposed behaviour is
+identical — but `50808c11` is not an ancestor of `main` after the squash, and a
+candidate cut from it would have carried the corrected comment text back in its
+pre-fix form. That prediction is now confirmed rather than hypothetical:
+`git merge-base --is-ancestor 24d585f8 3061a645` is false.
+
+**`D0`/`D1` changed no code**, and that was true at the `D0`/`D1` checkpoint SHA,
+where `git diff -- crates/` against the base was empty. **`D2` does change code**
+— see the appended `D2` section — so read the acceptance claims below as scoped
+to the deliverable that makes them. Every *instrument* in this document was
+temporary, was run, and was reverted; none is present at any committed SHA.
 
 > # THE TWO FINDINGS
 >
@@ -249,3 +256,74 @@ claimed.
   same caution applies to any wider reading.
 - **CI has not run.** `AC-8` is a CI claim; no local `--workspace` run, per
   `COORDINATION §12`.
+
+---
+
+# `D2` outcome — the route works, and the refusal advanced a fourth time
+
+**Appended to this record rather than filed separately, because it is the same
+branch and the same measurement chain.**
+
+## What was built
+
+`lower_computational_match_value_composed`'s carried arm now splits the two
+continuation variants:
+
+- **`Active`** routes to `resume_active_continuation` with
+  `LoweringOperand::Carried(word)` — mirroring what the specialized path already
+  does at two landed sites, not adding a transport.
+- **`PendingLet`** keeps the original refusal **verbatim**, because `D1`
+  measured its population empty **at this base** and a mechanism there would be
+  a proof over nothing.
+
+A conservative guard refuses an `Active` frame carrying **trailing composed
+eliminators**, mirroring the carried `Ordinary` arm's existing guard and for the
+same stated reason. `D1` measured zero trailing eliminators on both members, so
+it refuses only shapes outside what was measured, and it did not fire.
+
+## What was measured
+
+**The route fires, and a carried value survives the composition.** This was the
+Steward's explicit caution — that a `LoweringOperand` signature establishes
+route *availability*, not successful carried composition — and it is now
+measured rather than assumed. `resume_active_continuation` appears **on the
+refusal backtrace**, one frame below the next consumer, so the carried value was
+composed against the pending head and reached that consumer intact.
+
+**Both rows then fail identically at a fourth authority:**
+
+```
+Unsupported(BoundaryCarrier, "a carried producer-call scrutinee reached an
+ordinary eliminator with further composed eliminators behind it; the carried
+elimination consumes exactly one frame, so the remainder would be silently
+dropped")
+```
+
+That is the **carried `Ordinary` arm's trailing-composed-eliminator refusal**,
+with **one** trailing eliminator measured. It is **pre-existing** — landed by
+`RT-PRODUCER-MATCH-PORT` `D2` — and is not the guard this node added.
+
+## The corroboration worth recording
+
+**This wall was predicted in the enum's own retirement comment.** The
+`ProducerMatchCall` retirement note states that the port carries *three*
+conservative refusals — a retained scrutinee index, a deferred constructor case,
+and a trailing composed eliminator — that retiring the class makes them live in
+production for the first time, and that **they have no shape-reaching control**.
+
+⇒ One of those three now has a shape reaching it. The prediction was accurate
+and the refusal is doing exactly what its author said it would.
+
+## Status
+
+- Retained suite green at **816 / 0 / 4**; `diff --check` clean; production
+  build warning-neutral at 50.
+- **`AC-1` is not discharged and no row closes.** The node stops here under the
+  frame's third hard stop, which was armed in advance and needs no re-argument.
+- `AC-4` guards intact: `emit_carrier_transfer` byte-unchanged, the
+  `carried_join_arm` repair unchanged, `PendingLet` still fail-closed.
+- `AC-5` zero added `#[ignore]` in `crates/`; `AC-6` both variants, both
+  insertions and the one-variant hook present and unchanged; `AC-7` `issues/`
+  untouched.
+- `D3` controls remain subsequent work. The arrivals/routes counters and the
+  suppression flag for them are present and `#[cfg(test)]`-only.

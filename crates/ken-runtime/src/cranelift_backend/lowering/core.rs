@@ -336,6 +336,48 @@ fn mrc_d2_suppress_inert_word() -> bool {
     MRC_D2_SUPPRESS_INERT_WORD.with(std::cell::Cell::get)
 }
 
+/// `RT-CARRIED-CONTINUATION-RESUME` `D2` counters, on the same discipline as the
+/// two blocks above.
+#[cfg(test)]
+thread_local! {
+    /// The DENOMINATOR: `Carried` x `Active` arrivals, counted **before** the
+    /// suppression and before the composed-eliminator guard, so a zero route
+    /// count reads as "the route declined" rather than "the arm was never
+    /// reached".
+    static CCR_D2_ACTIVE_ARRIVALS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// Arrivals actually routed to `resume_active_continuation`.
+    static CCR_D2_ACTIVE_ROUTES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// `D3`'s mutation: restore the old joint refusal for `Active`, which must
+    /// recreate the exact attributed refusal on both measured rows.
+    static CCR_D2_SUPPRESS_ACTIVE_ROUTE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn ccr_d2_active_arrivals() -> usize {
+    CCR_D2_ACTIVE_ARRIVALS.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn ccr_d2_active_routes() -> usize {
+    CCR_D2_ACTIVE_ROUTES.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn reset_ccr_d2_counts() {
+    CCR_D2_ACTIVE_ARRIVALS.with(|count| count.set(0));
+    CCR_D2_ACTIVE_ROUTES.with(|count| count.set(0));
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn set_ccr_d2_suppress_active_route(suppress: bool) {
+    CCR_D2_SUPPRESS_ACTIVE_ROUTE.with(|cell| cell.set(suppress));
+}
+
+#[cfg(test)]
+fn ccr_d2_suppress_active_route() -> bool {
+    CCR_D2_SUPPRESS_ACTIVE_ROUTE.with(std::cell::Cell::get)
+}
+
 #[cfg(test)]
 fn selector_variant_exclusion() -> Option<RecursiveDescentResidual> {
     SELECTOR_VARIANT_EXCLUSION.with(std::cell::Cell::get)
@@ -3778,7 +3820,69 @@ impl<'a> Lowering<'a> {
                         frame.env,
                     )
                 }
-                EliminatorFrame::PendingLet(_) | EliminatorFrame::Active(_) => Err(unsupported(
+                // **`RT-CARRIED-CONTINUATION-RESUME` `D2` — ROUTE THE ACTIVE
+                // FRAME TO THE EXISTING RESUME, WHICH IS PHASE-AGNOSTIC.**
+                //
+                // This arm used to refuse both continuation variants together.
+                // The refusal was right about `PendingLet` and wrong about
+                // `Active`, and the difference is the operand's PHASE rather
+                // than the frame: `D1` measured these same two programs reaching
+                // this same frame at this same seat with a `Specialized` operand
+                // and passing. Only the phase moves.
+                //
+                // `resume_active_continuation` takes a `LoweringOperand`, not a
+                // `Lowered` -- so a carried value is expressible at that entry
+                // point by its signature, not by inference. It is also what the
+                // specialized path already does for an `Active` frame, at two
+                // landed sites. This mirrors a landed route rather than adding a
+                // transport.
+                EliminatorFrame::Active(active) => {
+                    #[cfg(test)]
+                    CCR_D2_ACTIVE_ARRIVALS.with(|count| count.set(count.get() + 1));
+                    // Fail closed on a shape nothing has exhibited, exactly as
+                    // the carried `Ordinary` arm above already does and for the
+                    // same reason: the resume consumes the frame's OWN pending
+                    // suffix, so composed eliminators behind it would be dropped
+                    // silently. `D1` measured zero remaining eliminators on both
+                    // members of this population, so this refuses only shapes
+                    // outside what was measured.
+                    if !eliminators[1..].is_empty() {
+                        return Err(unsupported(
+                            "BoundaryCarrier",
+                            "a carried scrutinee reached an active continuation frame with \
+                             further composed eliminators behind it; the resume consumes the \
+                             frame's own pending suffix, so the remainder would be silently \
+                             dropped",
+                        ));
+                    }
+                    #[cfg(test)]
+                    if ccr_d2_suppress_active_route() {
+                        return Err(unsupported(
+                            "BoundaryCarrier",
+                            "a carried scrutinee reached a continuation frame that resumes a \
+                             compile-time value rather than eliminating one",
+                        ));
+                    }
+                    #[cfg(test)]
+                    CCR_D2_ACTIVE_ROUTES.with(|count| count.set(count.get() + 1));
+                    self.resume_active_continuation(
+                        builder,
+                        LoweringOperand::Carried(word),
+                        active,
+                    )
+                }
+                // `PendingLet` keeps the original refusal verbatim. `D1` measured
+                // its population EMPTY at this base -- zero arrivals in either
+                // phase across the whole lib suite -- and the specialized path
+                // through this same function carries a landed
+                // `unreachable!("pending Let continuations are consumed before
+                // value composition")` saying the same thing for a stated reason.
+                //
+                // That is a fact about THIS TREE, not a property: the arm stays
+                // fail-closed precisely because an empty population is not proof
+                // of permanent unreachability, and building a mechanism here
+                // would be a proof over nothing.
+                EliminatorFrame::PendingLet(_) => Err(unsupported(
                     "BoundaryCarrier",
                     "a carried scrutinee reached a continuation frame that resumes a \
                      compile-time value rather than eliminating one",
