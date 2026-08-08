@@ -11351,40 +11351,58 @@ A compile-time refusal here would mean this position needs a D2 port after all"
     );
 }
 
-/// **`RT-RECURSOR-TRANSPORT` `D2` causal trace — the first edge at which the
-/// declared-unit return ceases to agree with the installed continuation.**
+/// Pulls `key=` ... up to the next space out of one trace entry.
+#[cfg(test)]
+fn rt_trace_field<'a>(entry: &'a str, key: &str) -> Option<&'a str> {
+    let rest = entry.split_once(key)?.1;
+    Some(rest.split(' ').next().unwrap_or(rest))
+}
+
+/// **`RT-RECURSOR-TRANSPORT` `D2` causal trace — ONE ordered, correlated
+/// subsequence, and the edge it locates.**
 ///
-/// Test-only evidence, authorized by the Architect's correction
-/// `evt_5yeh0tfp4gwwb` before any production `D2` edit. It asserts the
-/// *relation* the trace exhibits, not the origin numbers, so it survives
-/// renumbering of the plan.
+/// Test-only evidence, authorized by Architect `evt_5we1eh4k2hhry` before any
+/// production `D2` edit.
 ///
-/// The sequence on the one functionized position-A run:
+/// ⛔ **This replaces a previous control that asserted three independent
+/// `trace.iter().any(...)` hits and called an empty generated-context
+/// population "the edge". Both were wrong.** Independent `any` checks can be
+/// satisfied by three strings from three unrelated lowering contexts, so they
+/// establish no chain; and `contexts=[]` is the planner's **documented,
+/// intentional** mixed-population state — `intern_generated_contexts` mints a
+/// context only for a causal call whose emission owner is a `Specialization`,
+/// and `[A]` below shows this one's owner is `Predeclared`. An absent context
+/// is therefore expected here and is never hard-stop-2 evidence.
 ///
-/// 1. a continuation specialization is planned for the recursive position, its
-///    call identity is bound, and **its call is emitted** — `CLAIM
-///    outcome=CallEmitted`;
-/// 2. the carried recursive-position invocation then resolves a **generated
-///    execution context** for the same worker body and finds none;
-/// 3. **the context population is empty for this compilation**, so the
-///    fail-closed guard — which fires only when *some* context names this body
-///    — cannot fire either;
-/// 4. the invocation therefore takes the **raw declared unit**, whose return
-///    does not resume through the installed computational continuation;
-/// 5. the outer ordinary `Match` consequently receives a non-constructor and
-///    refuses.
+/// **What this asserts instead:** a single subsequence at strictly increasing
+/// trace indices, every step keyed by the *same* `body_origin`,
+/// `continuation_origin` and `recursive_position` read off the first step
+/// rather than hardcoded, so it cannot be satisfied by unrelated events.
 ///
-/// ⭐ **Edge 2-3 is the discriminator**, and it is not a recount of the final
-/// refusal: a specialization exists and was called, while the context
-/// population the carried invocation consults is empty. Those are two different
-/// planner populations, and the value crosses between them without resuming.
+/// ```text
+/// A  installed   owner=Predeclared  continuation_origin=C  position=P  body=B
+///                top=[ApplyRecursorSelection, Terminal]
+/// .  invocation  body=B  coords=Some((C, P))  -> raw target
+/// B  returned    body=B  C  P   phase=Carried   still installed=[ApplyRecursorSelection, ..]
+/// C  consumed    ApplyRecursorSelection  layer_origin=C
+/// D  consumed    ComputationalMatchScrutinee  match_origin=C  input phase=Carried
+/// E  consumer    actual_kind=RecursiveBackedge
+/// ```
 ///
-/// **Promise class: transition sentinel.** It pins the currently-observed edge
-/// so a repair cannot be adopted without moving it. It reds when the carried
-/// invocation stops taking the raw target — which is what any lawful `D2`
-/// repair must cause — and it retires with `D3`.
+/// ⭐ **The edge is between `D` and `E`, and it is not the raw-vs-context
+/// choice.** The installed continuation is present at `A`, still installed at
+/// `B`, and **consumed** at `C` and `D` — the carried word reaches the
+/// resumption point exactly as the source path intends. What the final consumer
+/// then receives is a **`RecursiveBackedge`**: neither the carried word nor a
+/// specialized constructor. The value is mis-presented *after* the continuation
+/// is consumed, by one consumer.
+///
+/// **Promise class: transition sentinel.** It pins the currently-measured
+/// chain, so a repair cannot be adopted without moving step `E`. It reds the
+/// moment the composed consumer stops seeing a `RecursiveBackedge`, which is
+/// what any lawful `D2` repair must cause, and retires with `D3`.
 #[test]
-fn rt_d2_trace_the_carried_invocation_falls_to_the_raw_unit_with_no_context() {
+fn rt_d2_trace_locates_the_edge_at_the_composed_consumer() {
     use crate::cranelift_backend::lowering::{reset_d5a_trace, take_d5a_trace};
     let witness = rt_match_scrutinee_recursor_executable();
 
@@ -11392,31 +11410,80 @@ fn rt_d2_trace_the_carried_invocation_falls_to_the_raw_unit_with_no_context() {
     let functionized =
         rt_run_functionized(&witness, RecursiveDescentResidual::MatchScrutineeRecursor);
     let trace = take_d5a_trace();
-
     assert!(
         functionized.contains("scrutinee is not a constructor value after ordinary expression \
 lowering"),
         "the trace is only meaningful on the run that still refuses: {functionized}"
     );
+
+    // Step A fixes the correlation key for every later step.
+    let (a, a_entry) = trace
+        .iter()
+        .enumerate()
+        .find(|(_, entry)| entry.contains("RT-D2 A INSTALLED"))
+        .unwrap_or_else(|| panic!("no install step in trace: {trace:#?}"));
+    let continuation = rt_trace_field(a_entry, "continuation_origin=")
+        .unwrap_or_else(|| panic!("install step names no continuation origin: {a_entry}"));
+    let position = rt_trace_field(a_entry, "recursive_position=")
+        .unwrap_or_else(|| panic!("install step names no recursive position: {a_entry}"));
+    let body = rt_trace_field(a_entry, "body=Some(")
+        .map(|body| body.trim_end_matches(')'))
+        .unwrap_or_else(|| panic!("install step names no body: {a_entry}"));
     assert!(
-        trace.iter().any(|entry| entry.contains("CLAIM outcome=CallEmitted")),
-        "a continuation specialization call must have been EMITTED -- without this the trace \
-below would be about a program that never reached the seam. trace: {trace:#?}"
+        a_entry.contains("owner=Some(Predeclared("),
+        "the emission owner must be recorded, and it is what makes an absent generated context \
+         expected rather than anomalous: {a_entry}"
     );
     assert!(
-        trace
-            .iter()
-            .any(|entry| entry.contains("RT-D2 CONTEXT-POPULATION") && entry.contains("contexts=[]")),
-        "the generated-execution-context population must be EMPTY at the resolution point; that \
-is why 'no context' cannot be read as 'this body has one and it was not selected'. \
-trace: {trace:#?}"
+        a_entry.contains("ApplyRecursorSelection"),
+        "the recursor invocation must be INSTALLED before the declared call: {a_entry}"
     );
-    assert!(
+
+    let step = |from: usize, needle: &str, must: &[&str]| -> usize {
         trace
             .iter()
-            .any(|entry| entry.contains("CARRIED-INVOCATION") && entry.contains("-> raw target")),
-        "the carried recursive-position invocation must fall to the RAW declared unit -- this is \
-the edge, and a repair that does not move it has not addressed the defect. trace: {trace:#?}"
+            .enumerate()
+            .skip(from + 1)
+            .find(|(_, entry)| entry.contains(needle) && must.iter().all(|f| entry.contains(f)))
+            .map(|(index, _)| index)
+            .unwrap_or_else(|| {
+                panic!("no {needle} after index {from} carrying {must:?}: {trace:#?}")
+            })
+    };
+
+    let invocation = step(
+        a,
+        "CARRIED-INVOCATION",
+        &[&format!("body={body}"), &format!("coords=Some(({continuation}, {position}"), "raw target"],
+    );
+    let returned = step(
+        invocation,
+        "RT-D2 B RETURNED",
+        &[
+            &format!("body={body}"),
+            &format!("continuation_origin={continuation}"),
+            &format!("recursive_position={position}"),
+            "phase=Carried",
+            "ApplyRecursorSelection",
+        ],
+    );
+    let applied = step(
+        returned,
+        "RT-D2 C APPLY-RECURSOR-SELECTION",
+        &[&format!("layer_origin={continuation}")],
+    );
+    let resumed = step(
+        applied,
+        "RT-D2 D COMPUTATIONAL-MATCH-SCRUTINEE",
+        &[&format!("match_origin={continuation}"), "input[phase=Carried"],
+    );
+    let consumer = step(resumed, "RT-D2 E COMPOSED-CONSUMER", &["actual_kind=RecursiveBackedge"]);
+
+    assert!(
+        a < invocation && invocation < returned && returned < applied
+            && applied < resumed && resumed < consumer,
+        "the chain must be ORDERED; got {a} < {invocation} < {returned} < {applied} < {resumed} \
+         < {consumer}"
     );
 }
 

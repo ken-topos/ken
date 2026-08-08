@@ -167,6 +167,67 @@ pub(in crate::cranelift_backend) fn set_selector_variant_exclusion(
     SELECTOR_VARIANT_EXCLUSION.with(|cell| cell.set(excluded));
 }
 
+
+/// **`RT-RECURSOR-TRANSPORT` `D2` trace helpers.** Test-only.
+///
+/// The ordered continuation stack, top first. `SourceContinuation` has no
+/// `Debug`, and the ruling asks for *ordered kinds* rather than a rendering of
+/// the payloads, so this walks the `next` chain and names each frame.
+#[cfg(test)]
+fn rt_continuation_kinds(continuation: &SourceContinuation<'_>) -> Vec<&'static str> {
+    let mut kinds = Vec::new();
+    let mut cursor = continuation;
+    loop {
+        let (kind, next): (&'static str, Option<&SourceContinuation<'_>>) = match cursor {
+            SourceContinuation::Terminal(_) => ("Terminal", None),
+            SourceContinuation::CheckedRecursiveInvocationReturn { next, .. } => {
+                ("CheckedRecursiveInvocationReturn", Some(next))
+            }
+            SourceContinuation::CheckedComputationalIHInvocationReturn { next, .. } => {
+                ("CheckedComputationalIHInvocationReturn", Some(next))
+            }
+            SourceContinuation::ReturnFromSelectedCase { next, .. } => {
+                ("ReturnFromSelectedCase", Some(next))
+            }
+            SourceContinuation::LetBody { next, .. } => ("LetBody", Some(next)),
+            SourceContinuation::ApplyRecursorSelection { next, .. } => {
+                ("ApplyRecursorSelection", Some(next))
+            }
+            SourceContinuation::UnwindRecursorSegment { next, .. } => {
+                ("UnwindRecursorSegment", Some(next))
+            }
+            SourceContinuation::IfScrutinee { next, .. } => ("IfScrutinee", Some(next)),
+            SourceContinuation::ConstructArgument { next, .. } => ("ConstructArgument", Some(next)),
+            SourceContinuation::MatchScrutinee { next, .. } => ("MatchScrutinee", Some(next)),
+            SourceContinuation::ComputationalMatchScrutinee { next, .. } => {
+                ("ComputationalMatchScrutinee", Some(next))
+            }
+            SourceContinuation::ProjectRecord { next, .. } => ("ProjectRecord", Some(next)),
+            SourceContinuation::CallCallee { next, .. } => ("CallCallee", Some(next)),
+            SourceContinuation::CallArgument { next, .. } => ("CallArgument", Some(next)),
+        };
+        kinds.push(kind);
+        match next {
+            Some(next) => cursor = next,
+            None => break,
+        }
+    }
+    kinds
+}
+
+/// An operand's PHASE and concrete value kind, which the ruling asks for
+/// separately: "carried" and "specialized as a constructor" are different
+/// facts and conflating them is how a non-constructor reads as fine.
+#[cfg(test)]
+fn rt_operand_desc(operand: &LoweringOperand) -> String {
+    match operand {
+        LoweringOperand::Carried(_) => "phase=Carried kind=<carried word>".to_string(),
+        LoweringOperand::Specialized(lowered) => {
+            format!("phase=Specialized kind={}", lowered_value_kind(lowered))
+        }
+    }
+}
+
 #[cfg(test)]
 fn selector_variant_exclusion() -> Option<RecursiveDescentResidual> {
     SELECTOR_VARIANT_EXCLUSION.with(std::cell::Cell::get)
@@ -2412,7 +2473,7 @@ impl<'a> Lowering<'a> {
                         // `BoundedNat` arm below uses. ⛔ Not `specialized_at`,
                         // ⛔ not a reconstructed `Lowered`, ⛔ not the producer.
                         if let LoweringOperand::Carried(word) = base {
-                            if let Some(body) = recursive_unit_body.filter(|_| {
+                    if let Some(body) = recursive_unit_body.filter(|_| {
                                 matches!(
                                     self.body_emission_authority,
                                     BodyEmissionAuthority::FunctionizedUnits
@@ -3583,6 +3644,22 @@ impl<'a> Lowering<'a> {
                 eliminators,
             );
         }
+        #[cfg(test)]
+        d5a_trace(format!(
+            "RT-D2 E COMPOSED-CONSUMER owner={:?} actual_kind={} eliminators={:?}",
+            self.defining_emission_owner,
+            lowered_value_kind(&scrutinee),
+            eliminators
+                .iter()
+                .map(|frame| match frame {
+                    EliminatorFrame::Computational(f) => ("Computational", Some(f.static_origin)),
+                    EliminatorFrame::Ordinary(f) => ("Ordinary", Some(f.static_origin)),
+                    EliminatorFrame::PendingLet(_) => ("PendingLet", None),
+                    EliminatorFrame::InvocationReturn => ("InvocationReturn", None),
+                    EliminatorFrame::Active(_) => ("Active", None),
+                })
+                .collect::<Vec<_>>(),
+        ));
         let Lowered::Constructor {
             constructor,
             synthesized_identity,
@@ -5052,6 +5129,14 @@ impl<'a> Lowering<'a> {
                         }
                         SourceContinuation::ApplyRecursorSelection { layer, next } => {
                             #[cfg(test)]
+                            d5a_trace(format!(
+                                "RT-D2 C APPLY-RECURSOR-SELECTION consumed \
+layer_origin={:?} layer_role={:?} next_top={:?}",
+                                layer.static_origin,
+                                layer.role,
+                                rt_continuation_kinds(next.as_ref()),
+                            ));
+                            #[cfg(test)]
                             match layer.role {
                                 RecursorLayerRole::SelectsOccurrence { origin } => {
                                     px8j_record_source_event(Px8jSourceTraceEvent::Selection {
@@ -5412,6 +5497,13 @@ impl<'a> Lowering<'a> {
                             next,
                         } => 'computational_scrutinee: {
                             self.enter_source_occurrence_plan(static_origin)?;
+                            #[cfg(test)]
+                            d5a_trace(format!(
+                                "RT-D2 D COMPUTATIONAL-MATCH-SCRUTINEE consumed \
+match_origin={static_origin:?} input[{}] frame_route={answer_route:?} next_top={:?}",
+                                rt_operand_desc(&value),
+                                rt_continuation_kinds(next.as_ref()),
+                            ));
                             // ⭐⭐ `AC-C4` — THE RESUMPTION POINT. An induction
                             // hypothesis over a carried child hands its word back
                             // as the machine's value, and it lands **here**: this
@@ -7488,6 +7580,16 @@ impl<'a> Lowering<'a> {
                         invocation,
                         checked_ih_invocation,
                     )?;
+                    #[cfg(test)]
+                    d5a_trace(format!(
+                        "RT-D2 A INSTALLED owner={:?} continuation_origin={:?} \
+recursive_position={:?} body={:?} installed=ok top={:?}",
+                        self.defining_emission_owner,
+                        carried_coordinates.continuation_origin,
+                        carried_coordinates.recursive_position,
+                        recursive_unit_body,
+                        rt_continuation_kinds(&suspended.continuation),
+                    ));
                     if let Some(body) = recursive_unit_body.filter(|_| {
                         matches!(
                             self.body_emission_authority,
@@ -7502,6 +7604,15 @@ impl<'a> Lowering<'a> {
                             &args,
                             Some(coordinates),
                         )?;
+                        #[cfg(test)]
+                        d5a_trace(format!(
+                            "RT-D2 B RETURNED body={body:?} continuation_origin={:?} \
+recursive_position={:?} returned[{}] still_installed_top={:?}",
+                            coordinates.continuation_origin,
+                            coordinates.recursive_position,
+                            rt_operand_desc(&value),
+                            rt_continuation_kinds(&suspended.continuation),
+                        ));
                         return Ok(SourceCallOutcome::Continue(SourceMachineState::Value {
                             // ⛔ `D6a`: a declared recursive-position UNIT call is
                             // not a lawful producer, and its result crosses a
