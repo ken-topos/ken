@@ -115,6 +115,28 @@ Unaffected same-family controls stay green.
   *Control:* the handback states, per variant, the owned fact and the first
   missing/mis-consumed static fact. **If one mechanism serves both, that is a
   measured finding with its evidence, not an assumption from the shared arm.**
+
+  > **DISCHARGED at `D0`/`D1` `08ac3346` — Steward ruling `evt_1h00zs7m8xa9q`.
+  > It discharged in a shape this AC did not anticipate, so do not read it as
+  > unmet because only one variant was mechanised.**
+  >
+  > The census enumerated **all four `(phase, first eliminator)` cells over 486
+  > arrivals**, not only the refusing ones: `Carried x Active` = 2 under
+  > exclusion, and **`PendingLet` = 0 in every phase and every run**. So the
+  > partition is not two authorities and not one shared mechanism — **one
+  > variant fires and the other has no members.**
+  >
+  > **`PendingLet` gets no mechanism.** Building one would be a proof over an
+  > empty population (**Trap 3**), where every control passes because there is
+  > nothing to quantify over. **The fail-closed arm stays.**
+  >
+  > Corroborated twice over, which is what makes it safe to act on: the census,
+  > and the landed `unreachable!("pending Let continuations are consumed before
+  > value composition")` on the specialized path through the same function —
+  > one empirical statement and one the mechanism makes about itself.
+  >
+  > **The emptiness is measured at a base, not a property of the design.** It
+  > is a fact about this tree and this tree will move.
 - **AC-3 — every repaired root has a committed discriminating control.**
   *Control:* it reds under a mutation at that root and greens without it, from
   the committed tree, with evidence the detector was reached.
@@ -179,9 +201,28 @@ measurements, not judgment calls, so neither is yours to absorb.
 
 ## 8. Base
 
-**Current `origin/main` at release**, which carries the accepted partial
-`50808c11` (the `carried_join_arm` repair). If that partial has not yet merged
-when you start, cut from it and say so — it is the object that exposes this
-node's population, and without it the rows still refuse on `RecursiveBackedge`.
+**Cut from the accepted partial carrying the `carried_join_arm` repair** — it is
+the object that exposes this node's population, and without it the rows still
+refuse on `RecursiveBackedge` and nothing here reproduces.
+
+**As of 2026-08-08 that object is `24d585f8`, NOT `50808c11`.** QA superseded
+`50808c11`; `24d585f8` is a strict descendant differing by two comment lines and
+zero non-comment lines.
+
+> ### CUT FROM THE OBJECT THAT WILL MERGE, NOT THE ONE THIS FRAME NAMES
+>
+> **Standing rule, and apply it without asking if `24d585f8` is superseded in
+> turn.** The accepted partial merges by **squash**, so the SHA named here never
+> becomes an ancestor of `main`. A branch cut from a superseded object carries
+> the superseded lines in their pre-fix form, and at merge that is either a
+> conflict or a **silent re-introduction of the exact defect review rejected**.
+>
+> **The silent case is the dangerous one, and comment-only fixes are its worst
+> case:** a reverted comment reds no test, trips no gate, and passes a
+> diff-scope check. It is the one class of correction every mechanical control
+> we have is blind to.
+>
+> Measure against the object under review, and **name your exact base in the
+> handback** rather than relying on this line being current.
 
 Not `10369776`, ever.

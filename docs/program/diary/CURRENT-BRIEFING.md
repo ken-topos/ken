@@ -33,11 +33,30 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-08 ~12:5xZ · CORRECTED `D0`-`D2` LANDED; `RT-MATCH-RECURSOR-CONSUMERS` IS ACTIVE
+## LIVE — 2026-08-08 ~13:4xZ · THIRD WALL ON ONE CHAIN; `RT-CARRIED-CONTINUATION-RESUME` RELEASED
 
-**`main = a737b972`.** The corrected `D0`-`D2` merged at `89aa1550`;
-`8efdfdb3` never landed. Runtime is now building
-[[RT-MATCH-RECURSOR-CONSUMERS]], and the lexical successor is framed behind it.
+**`main = d3584138`.** `RT-MATCH-RECURSOR-CONSUMERS`'s `D2` **worked** — and
+the refusal advanced to a **sibling authority**, so a third node now sits in
+front of it. Runtime is building that node; the A node is parked behind it with
+its accepted partial in QA.
+
+> ### THE CHAIN, because the shape is the story and it will repeat
+>
+> `resume_active_continuation` (`RT-RECURSOR-TRANSPORT` `D2`, merged
+> `89aa1550`) → `carried_join_arm` (`RT-MATCH` `D2`, built at `50808c11`) →
+> `lower_computational_match_value_composed` (**open**,
+> [[RT-CARRIED-CONTINUATION-RESUME]]).
+>
+> **Every repair was correct and every one revealed the next wall.** That is
+> Campaign Trap 2 — the fail-closed machinery working on a newly reachable
+> population, not a defect in the node that finds it. The implementer stopped
+> at the third rather than absorbing it, which cost one turn and is the whole
+> reason the sibling got its own node instead of being buried in an `M`.
+>
+> ⇒ **Expect a fourth. The frame's third hard stop says route it, not absorb
+> it.** It will be legible and the next step will look obvious — that is
+> exactly the condition under which absorbing feels efficient, and `#27` is the
+> record of five instances of one shape absorbed one at a time.
 
 | item | state |
 |---|---|
@@ -46,19 +65,44 @@
 | what landed instead | a bounded child over `8efdfdb3` narrowing every class-wide claim to the exact witnesses, recording **both** A and B populations as open. `lowering/core.rs` **byte-identical to `8efdfdb3`** — the `D2` production mechanism is untouched by the correction |
 | runtime ring | **compacted** at this WP boundary (all three seats), then kicked. Leader cut `wp/RT-MATCH-RECURSOR-CONSUMERS` from `89aa1550` and dispatched `D0`+`D1` as one continuous turn; implementer confirmed picked up |
 | branch tip `10369776` | **held evidence only** — not a candidate, not a repair base, not to be continued |
-| [[RT-MATCH-RECURSOR-CONSUMERS]] | **`active`** — released as `evt_131xgg8gd16v`, thread `thr_5wff`. Row 6 / Position A completion. First of the two by ruled order |
-| [[RT-LEXICAL-RECURSOR-CONSUMERS]] | **`draft`, framed and shovel-ready** — rows 1-5. Flips `ready` the moment the A node merges |
+| [[RT-CARRIED-CONTINUATION-RESUME]] | **`ready`, RELEASED** `evt_291ztb8nfwq4m`. The third wall — sibling authority at `lower_computational_match_value_composed`, refusing `BoundaryCarrier`. Population is the production arm `Carried(word)` x `{PendingLet, Active}`; the two exposed rows are a **floor**. **`D0`/`D1` must partition the two frame variants before coding** — a shared refusal arm is not evidence of one mechanism (Architect, explicit) |
+| [[RT-MATCH-RECURSOR-CONSUMERS]] | **`active` but PARKED**, now `depends_on: [RT-CARRIED-CONTINUATION-RESUME]`. Its `D0`/`D1` closed the A population at **two** rows (`d8d` + `px8j_all_three_...`), one root, one owner. Its `D2` at `carried_join_arm` is **built and correct** and lands as an accepted partial; `AC-1` stays undischarged |
+| [[RT-LEXICAL-RECURSOR-CONSUMERS]] | **`draft`, framed and shovel-ready** — rows 1-5. Frame amended with B's **wider** denominator: 16 compiles / 10 tests against its eight-across-five. Different denominators, neither refuting the other; the wider one is what a sizing decision must see |
 | `D3` | blocked on **both**. `RT-DESCENT-RETIRE` downstream of that |
 | `#[ignore]` on this arc | **zero, ruled.** Not discouraged — ruled out |
 | [[RT-CENSUS-CAVEAT-GUARD]] | filed `ready` (PR #1611). The last unowned finding from this window; blocks nothing, contends on `core/tests/control.rs`, so it schedules after this arc |
 
-**Merged this window: #1610** (the partition), **#1611** (the census-guard
-node), **#1612** / **#1614** (briefing), **#1613** (the corrected `D0`-`D2`, the
-only code merge). `main` moved `c7693a7c` → `5d4c623e` → `5939c46d` →
-`41dfac14` → **`89aa1550`** → **`a737b972`**. Adversary notified on #1613 per
-merge-procedure M8 (`evt_10r40cs54j4gc`), with both open populations named as
-unhunted; it hunted `89aa1550` and returned **no defect**
-(`evt_5armvc9aejj8t`), correctly unacknowledged per §10⁻a.
+**Merged this window: #1610** (the partition), **#1611** (census-guard node),
+**#1612** / **#1614** (briefing), **#1613** (corrected `D0`-`D2`), **#1615**
+(tracker: `active` used for the first time in 180 nodes), **#1616** (frame
+amendments), **#1617** (coordinate fix), **#1618** (the sibling node), **#1619**
+(research report). `main` moved `c7693a7c` → … → **`89aa1550`** → `a737b972` →
+`efa764ee` → `560a1c74` → `3dab6d7a` → `838d42eb` → **`d3584138`**.
+
+Adversary notified on #1613 per merge-procedure M8 (`evt_10r40cs54j4gc`) with
+both open populations named as unhunted; it hunted `89aa1550` and returned **no
+defect** (`evt_5armvc9aejj8t`), correctly unacknowledged per §10⁻a.
+
+> ### TWO COORDINATE FAILURES TODAY, SAME SHAPE, AND THE SECOND WAS PREVENTED
+>
+> `D1` reported the repair owner as `core.rs:10842`, read off a worktree its own
+> instrumentation had displaced by a uniform **+78**, and stated against a base
+> where the real line is `10764`. **`10842` resolves — to ordinary code inside a
+> different function.** Nothing looks wrong on arrival, which is what makes it
+> worse than no coordinate at all. It had already propagated into my `D2`
+> authorization and the frame before the implementer caught it.
+>
+> ⇒ **The frames in this arc now name FUNCTIONS, not lines**, because these
+> nodes move the files they cite; a coordinate in a frame rots against its own
+> deliverable. Re-derive any trace **after** reverting instrumentation.
+>
+> **The same shape, caught before it landed:** the sibling node's frame named
+> `50808c11` as its base after QA had superseded it with `24d585f8`. Since the
+> partial merges by **squash**, a branch cut from the superseded object carries
+> its pre-fix lines and silently re-introduces exactly what review rejected.
+> **Comment-only fixes are the worst case — a reverted comment reds no test,
+> trips no gate, and passes a diff-scope check.** Standing rule now in the
+> frame: cut from the object that will merge, not the one the document names.
 
 > ### TWO PUBLISHER RUNS KILLED PRE-MERGE THIS WINDOW, AND I HANDLED THEM DIFFERENTLY ON PURPOSE
 >
@@ -95,26 +139,51 @@ unhunted; it hunted `89aa1550` and returned **no defect**
 
 > ### MY NEXT ACTION, so a cold resume does not have to re-derive it
 >
-> **DISCHARGED ~12:4xZ:** the runtime ring was compacted and
-> [[RT-MATCH-RECURSOR-CONSUMERS]] kicked as `evt_131xgg8gd16v` with the §4b
-> anchor line. What follows replaces it.
+> **DISCHARGED ~13:3xZ:** [[RT-MATCH-RECURSOR-CONSUMERS]] was released, ran to a
+> `D0`/`D1` checkpoint, ruled on (`M` stands, `evt_3xr56abxe19ss`), hard-stopped
+> at its `D2`, and its sibling was filed and released
+> (`evt_291ztb8nfwq4m`). What follows replaces it.
 >
-> **The wait has an address (§1a):** the `D0`/`D1` exact-SHA checkpoint — or a
-> frame hard stop — owed by `runtime-leader` on thread `thr_5wff`. `M` is
-> provisional and that checkpoint is my re-size point. **A runtime turn
-> legitimately runs hours** (`MODELS.md` — that seat is T1 on genuinely hard
-> work); tens of minutes of silence is not a stall and must not be nudged as one.
+> **The wait has an address (§1a):** the `D0`/`D1` exact-SHA checkpoint on
+> [[RT-CARRIED-CONTINUATION-RESUME]], owed by `runtime-leader`, thread
+> `thr_713sxvhfym48q`. `M` is provisional and that checkpoint is my re-size
+> point. **A runtime turn legitimately runs hours** (`MODELS.md` — that seat is
+> T1 on genuinely hard work); tens of minutes of silence is not a stall.
 >
-> **The moment it merges: flip [[RT-LEXICAL-RECURSOR-CONSUMERS]] to `ready` and
-> kick it.** Its frame is already written at
-> `docs/program/wp/RT-LEXICAL-RECURSOR-CONSUMERS.md` — **do not re-frame it.**
-> Compact the ring first, then kick with the §4b anchor line. There is no
-> Steward pass owed between that merge and that kick.
+> **Order of release from here:** `RT-CARRIED-CONTINUATION-RESUME` →
+> `RT-MATCH-RECURSOR-CONSUMERS` completes → [[RT-LEXICAL-RECURSOR-CONSUMERS]]
+> (flip `ready` and kick; **frame already written and amended, do not
+> re-frame**) → `RT-RECURSOR-TRANSPORT` `D3` → [[RT-DESCENT-RETIRE]].
 >
-> **DO NOT FOLD THE TWO NODES.** Distinct producer, activation hook, boundary
-> and completion owner. If the two `D1` partitions prove one exact shared
-> production root, that is a **subsumption proposal routed to me before
-> coding** — never inferred from shared retirement timing or syntax.
+> **DO NOT FOLD ANY OF THESE NODES.** Distinct producer, activation hook,
+> boundary and completion owner in every case. A shared production root, if one
+> is ever proven, is a **subsumption proposal routed to me before coding** —
+> never inferred from shared timing, shared syntax, or a shared refusal arm.
+>
+> **Do not compact the runtime ring at the moment.** It is carrying two objects
+> — the accepted partial's review and the new node — so there is no clean WP
+> boundary, and a compaction would summarise away context still in use.
+
+> ### PENDING OPERATOR DECISION — carried, NOT mine to decide
+>
+> **Charter a research-only formalization of the owner-indexed causal-obligation
+> calculus?** Research's finding landed at `research/causal-obligation-calculus.md`
+> (PR #1619).
+>
+> **The finding:** the native compiler has discovered an extractable,
+> owner-indexed **exactly-once** causal-obligation calculus — planner-minted
+> opaque identities, owner-indexed single consumption, disjoint discharge forms,
+> an empty-ledger close proving **set** equality. It is **not** ATT x OTT: it is
+> a checked compiler protocol in Rust maps, with no Ken syntax or judgments.
+>
+> **Research recommends chartering, with `Eq`/`cast` over the linear fragment as
+> the EXPLICIT HARD GATE rather than an assumed consequence.** That framing is
+> the part to put in front of the operator — it is where a formalization would
+> actually fail.
+>
+> **Product posture preserved and unchanged:** product `R2` stays closed, ADR
+> 0021 stays in force, no node filed. Chartering grows the program and is a
+> scope fork the roadmap does not settle, so it is the operator's call.
 
 > ### THE CENSUS PARTITIONED SIX REDS INTO TWO POPULATIONS AND TWO SEAMS
 >
