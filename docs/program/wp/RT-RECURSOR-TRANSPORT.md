@@ -128,6 +128,66 @@ necessary.**
 - It must **not** be `BoundaryUse`, must **not** be `PlannedEffectSeat`, must
   **not** be a runtime selector, and must **not** be a lowering-minted token.
 
+> #### RESOLVED 2026-08-08 — `D2` is position A alone, under a BOUNDED technique
+>
+> `D1` came back **asymmetric** (checkpoint `2e5e6a8b`). Position B
+> `LexicalCallArgumentRecursor` **closes for free** — the functionized lane
+> executes and yields the same decoded `RuntimeObservation`. **`D2` is
+> `MatchScrutineeRecursor` alone.**
+>
+> **Hard stop 2 was routed and is NOT triggered** — Architect ruling
+> **`evt_46yzde84ky6ax`**, grounded at `2e5e6a8b`. Position A is a narrow
+> consumer activation over **existing** planner populations and the existing
+> static-worker / continuation call machinery. **Read that ruling before
+> starting `D2`; it is the bounded technique and this frame does not restate
+> it.** Its shape, so you can tell whether you are still inside it:
+>
+> - the refusal is in `lower_computational_match_value_composed` — the direct
+>   composed recursive case installs each induction hypothesis as
+>   `Value(make_computational_recursor(...))`, so an exact `Call Var` callee
+>   takes the value/closure route and the outer ordinary `Match` receives a
+>   non-constructor;
+> - **the missing-looking fact is already carried.** `Lowered::Constructor`'s
+>   `occurrence` is the planner-issued `AggregateOccurrenceId`, and
+>   `aggregate_record_view(occurrence)` already yields `producer_origin()` and
+>   `shape()`. **The comment claiming the real origin needs a lowering signature
+>   change is stale** — later `D7` machinery landed exactly that producer
+>   identity;
+> - install the existing `StaticWorkerBinding` at the induction-hypothesis
+>   callee seat; reuse `composed_recursive_argument_binding` rather than adding
+>   a second target-lookup vocabulary; emit through the existing
+>   `call_static_worker_with_inputs` and `claim_composed_discharge`.
+>
+> **No planner population, no ABI population, no `BoundaryUse`, no
+> `PlannedEffectSeat` widening, no lowering-minted identity, no second call
+> ABI.** If implementation discovers any of those must change, **stop again
+> under hard stop 2** rather than extending the ruling.
+>
+> **Five committed controls are owed with `D2`**, per that ruling — recorded
+> here because a ruling that lives only in a thread is not a durable
+> deliverable:
+>
+> 1. the position-A retained/functionized executable pair, equal decoded
+>    observation, with the non-recursive same-shape control retained;
+> 2. exact counts: one target-derived IH binding, one raw-worker emission, one
+>    composed discharge on the functionized witness, and **zero** on the
+>    retained and control populations where applicable;
+> 3. a **live** same-shaped sibling aggregate-occurrence substitution that fires
+>    and cannot select this target;
+> 4. a target/value disagreement control proving a planned target plus a
+>    non-closure field **refuses before emission**;
+> 5. candidate-path evidence that planner population and ABI declarations are
+>    unchanged.
+>
+> **Hard stop 1 remains neither triggered nor cleared** (Steward
+> `evt_4j967sx0sfh96`, sustained in the ruling). It presupposes two transports
+> and one position needs none. Do not record it as considered-and-cleared.
+>
+> **Sizing unchanged: `M`.** Scope halved, variance concentrated in position A.
+> **The fold survives but its "same mechanism" justification is withdrawn** —
+> `D1` disproved it. One node, because splitting B out would produce a deletion
+> that cannot fail.
+
 ### `D3` — joint retirement
 
 **Only after both executable positions are green**, retire the two residual
