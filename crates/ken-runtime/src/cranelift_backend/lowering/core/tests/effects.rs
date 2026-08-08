@@ -56,6 +56,7 @@ fn run_checked_bounded_nat_fixture(
         next_source_join: 0,
         next_source_predecessor: 0,
         live_source_continuations: 0,
+        carried_suffix_reentries: 0,
         source_control_root: None,
         active_oriented_semantic_regions: 0,
         active_carried_computational_eliminations: Vec::new(),

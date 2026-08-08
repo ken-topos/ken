@@ -401,6 +401,44 @@ pub(in crate::cranelift_backend) fn reset_observed_recursive_descent_residuals()
     OBSERVED_RESIDUALS.with(|cell| *cell.borrow_mut() = None);
 }
 
+/// The bounded re-entry depth for continuing a composed suffix behind a carried
+/// ordinary elimination.
+///
+/// Deliberately small. Every measured member of the population has a suffix of
+/// length one, so a depth of two is already beyond anything this node observed;
+/// the bound exists to make termination a property of the code rather than of an
+/// unexercised argument, not to accommodate a shape nobody has seen. If a real
+/// program ever reaches it, the refusal is the signal to measure that shape and
+/// raise the bound deliberately.
+const CARRIED_SUFFIX_REENTRY_LIMIT: usize = 8;
+
+/// `RT-CARRIED-ORDINARY-COMPOSITION` `D2` counters, on the chain's standing
+/// discipline: the denominator is taken BEFORE the guard so a mutation cannot
+/// manufacture its own zero.
+#[cfg(test)]
+thread_local! {
+    /// Arrivals at the arm carrying a nonempty suffix.
+    static COC_D2_SUFFIX_ARRIVALS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// Suffixes actually continued after a successful elimination.
+    static COC_D2_SUFFIX_CONTINUATIONS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn coc_d2_suffix_arrivals() -> usize {
+    COC_D2_SUFFIX_ARRIVALS.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn coc_d2_suffix_continuations() -> usize {
+    COC_D2_SUFFIX_CONTINUATIONS.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn reset_coc_d2_counts() {
+    COC_D2_SUFFIX_ARRIVALS.with(|count| count.set(0));
+    COC_D2_SUFFIX_CONTINUATIONS.with(|count| count.set(0));
+}
+
 /// **`RT-CARRIER-BYTESPAN-OBSERVE` `D2` — the reply byte span, MASKED at the
 /// typed producer** (Architect `dec_12s3j2gj67c66`).
 ///
@@ -1569,6 +1607,7 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
         next_source_join: 0,
         next_source_predecessor: 0,
         live_source_continuations: 0,
+        carried_suffix_reentries: 0,
         source_control_root: None,
         active_oriented_semantic_regions: 0,
         active_carried_computational_eliminations: Vec::new(),
@@ -3800,25 +3839,64 @@ impl<'a> Lowering<'a> {
                              from a compile-time shape the carrier does not have",
                         ));
                     }
-                    if !eliminators[1..].is_empty() {
-                        return Err(unsupported(
-                            "BoundaryCarrier",
-                            "a carried producer-call scrutinee reached an ordinary eliminator \
-                             with further composed eliminators behind it; the carried \
-                             elimination consumes exactly one frame, so the remainder would be \
-                             silently dropped",
-                        ));
+                    // **`RT-CARRIED-ORDINARY-COMPOSITION` `D2` — CONTINUE THE
+                    // SUFFIX INSTEAD OF REFUSING IT.**
+                    //
+                    // The carried elimination consumes exactly one frame, which
+                    // is why a composed suffix behind it used to refuse rather
+                    // than be dropped. It does not need to express the suffix:
+                    // it RETURNS a `LoweringOperand`, so the suffix is continued
+                    // by composing that returned value against the remaining
+                    // eliminators and re-entering this same consumer -- the
+                    // shape the specialized path already uses.
+                    //
+                    // `lower_carried_match`'s interface is untouched: it still
+                    // takes exactly cases / default / origin / env.
+                    let suffix = &eliminators[1..];
+                    #[cfg(test)]
+                    if !suffix.is_empty() {
+                        COC_D2_SUFFIX_ARRIVALS.with(|count| count.set(count.get() + 1));
+                    }
+                    // ⇒ Fail closed past a bounded re-entry depth. See the field's
+                    // own comment for why the lexicographic measure is stated but
+                    // NOT relied on: every measured member has a suffix of length
+                    // one, so depth two is unexercised, and this node does not
+                    // ship a termination argument whose only witness is an
+                    // argument.
+                    if !suffix.is_empty() {
+                        self.carried_suffix_reentries += 1;
+                        if self.carried_suffix_reentries > CARRIED_SUFFIX_REENTRY_LIMIT {
+                            self.carried_suffix_reentries -= 1;
+                            return Err(unsupported(
+                                "BoundaryCarrier",
+                                "a carried ordinary elimination's composed suffix exceeded the                                  bounded re-entry depth; the continuation is refused rather than                                  recursing without a measured bound",
+                            ));
+                        }
                     }
                     #[cfg(test)]
                     PRODUCER_MATCH_UNIT_PORTS.with(|calls| calls.set(calls.get() + 1));
-                    self.lower_carried_match(
+                    let eliminated = self.lower_carried_match(
                         builder,
                         word,
                         frame.cases,
                         frame.default,
                         frame.static_origin,
                         frame.env,
-                    )
+                    );
+                    if suffix.is_empty() {
+                        return eliminated;
+                    }
+                    let continued = eliminated.and_then(|value| {
+                        #[cfg(test)]
+                        COC_D2_SUFFIX_CONTINUATIONS.with(|count| count.set(count.get() + 1));
+                        self.lower_computational_match_value_composed(
+                            builder,
+                            RoutedAnswer { value, route: incoming_route },
+                            suffix,
+                        )
+                    });
+                    self.carried_suffix_reentries -= 1;
+                    continued
                 }
                 // **`RT-CARRIED-CONTINUATION-RESUME` `D2` — ROUTE THE ACTIVE
                 // FRAME TO THE EXISTING RESUME, WHICH IS PHASE-AGNOSTIC.**
