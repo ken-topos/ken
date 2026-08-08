@@ -33,7 +33,29 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-08 ~16:2xZ · #6f CLOSED (`D2` + `D3` merged); #6g RELEASED
+## LIVE — 2026-08-08 ~16:4xZ · #6f CLOSED; #6g RUNNING at `S`
+
+> ### MY ADDRESS: the CROSS-CRATE CENSUS for #6g, then `D2` at `S`
+>
+> `D0`/`D1` returned at `f3be6476` (base `dcd6d84c`, one path `+257/-0`,
+> `crates/` byte-identical) and I ruled on it at `evt_64f8gm80y2w0y` in
+> `thr_yyq1h7mxt5aw`. **Re-sized `M` to `S`. `D2` authorized, key held narrow.**
+>
+> **Owed first: the cross-crate census.** The instrument is env-gated rather than
+> `cfg(test)` so it can run in `ken-cli`/`ken-verify` integration binaries where
+> `cfg(test)` is structurally blind. It was built and not run. **That is Trap 1,
+> unclosed across five nodes because the capability did not exist until now.**
+> Bounded with an exit — if the harness cannot carry it, that is the answer and
+> `D2` proceeds on the lib-corpus perimeter with the limitation on the node.
+>
+> **Three constraints on `D2`, all recorded on the node — do not re-derive:**
+> the resume is the **identity** for the whole measured population, so `D3` must
+> assert the **route**, not the vanished refusal; **`AC-5` is discharged by
+> disjointness and that discharge is conditional on the narrow key**; and the
+> **retained lane is a free positive control** — the same programs, accepted in
+> one lane and refused in the other, which tests the campaign's thesis directly.
+
+
 
 **`main = dcd6d84c`.** `RT-CARRIED-CONTINUATION-RESUME` (#6e) is **closed**, and
 `RT-CARRIED-ORDINARY-COMPOSITION` (#6f) is now **closed too** — `D2` accepted
