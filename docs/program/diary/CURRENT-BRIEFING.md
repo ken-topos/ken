@@ -87,9 +87,16 @@ Surviving: `MatchScrutineeRecursor`, `LexicalCallArgumentRecursor`, both live in
 >    `D2` narrow consumer port → `D3` joint retirement.
 > 3. **`07ce6ef1` is NOT the repair base** — and this is the dangerous one. It is
 >    **not an ancestor of `main`**; `StaticRecursorWorker` has zero hits on `main`
->    and the four core files diverged by roughly **+44,986/-16,942**. Resuming it
->    would have overwritten the landed architecture. The node had protected it as
->    the base since 2026-07-29.
+>    and the four core files diverged by **`+58,582/-17,365`** (at `837f9296`).
+>    Resuming it would have overwritten the landed architecture. The node had
+>    protected it as the base since 2026-07-29.
+>
+>    **The `+44,986/-16,942` I first published was wrong, and I inherited it
+>    rather than deriving it** — it came from the Architect's own ruling text and
+>    I transcribed it into four artifacts. Caught on their bounded re-read
+>    (`evt_6x0d8h54gpvvm`). A figure handed to you by an authority is still an
+>    unverified figure; the fix carries the command so the next reader can
+>    re-derive it in one line.
 >
 > Size `L` → provisional `M`. `D1` may close a class for free and is the re-size
 > point.

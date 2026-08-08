@@ -52,8 +52,10 @@ origin: Operator directive 2026-07-29 — prioritize replacement of RecursiveDes
 > **3. `07ce6ef1` is NOT the repair base.** The old text said it *"SURVIVES AND
 > IS THE REPAIR BASE — do not reset it"*. It is **not an ancestor of `d9b2eb38`**
 > and exists only on preserved and old `D7` branches. Its `StaticRecursorWorker`
-> prototype has 36 crate hits there and **zero on current `main`**, while the
-> four core files have diverged by roughly **+44,986/-16,942**. Continuing or
+> prototype has 36 crate hits there and **zero on current `main`**, and the four
+> core files have diverged by **`+58,582/-17,365`** (measured at `837f9296`
+> across `lowering/core.rs`, `core/tests/control.rs`, `lowering/mod.rs`,
+> `planning/static_transition.rs`). Continuing or
 > cherry-picking it **would overwrite the landed continuation-specialization,
 > ownership, ABI and ledger architecture.** Cite it as historical refusal and
 > design evidence only; re-derive every mechanism claim on the new base.
