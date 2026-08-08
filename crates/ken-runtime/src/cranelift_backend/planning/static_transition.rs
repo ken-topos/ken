@@ -874,34 +874,6 @@ impl ContinuationSourceCoordinate {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-enum BoundaryUsePhase {
-    #[cfg(test)]
-    SpecializedValue,
-    OperationalCarrier,
-}
-
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-enum BoundaryUseOperation {
-    Forward,
-    #[cfg(test)]
-    Retain,
-}
-
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-enum BoundaryUseNeed {
-    PreserveValue,
-    #[cfg(test)]
-    PreserveCallableIdentity,
-}
-
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-enum BoundaryUseAvail {
-    Value,
-    #[cfg(test)]
-    Callable,
-}
-
 /// One exact ordered input projection into a dormant continuation unit.
 ///
 /// Every field is static planner provenance. In particular, the value carried
@@ -920,10 +892,6 @@ struct ContinuationInputProjection {
     carrier: AbiCarrier,
     ownership: AbiOwnership,
     storage_owner: AbiStorageOwner,
-    boundary_phase: BoundaryUsePhase,
-    boundary_operation: BoundaryUseOperation,
-    boundary_need: BoundaryUseNeed,
-    boundary_avail: BoundaryUseAvail,
     referent_affinity: Vec<BoundaryReferentOwner>,
     ordinary_abi_position: u32,
     /// **`D5a` — where this value is IMMEDIATELY available to the emitter.**
@@ -1491,10 +1459,6 @@ enum ContinuationProjectionOmission {
     Carrier,
     Ownership,
     StorageOwner,
-    BoundaryPhase,
-    BoundaryOperation,
-    BoundaryNeed,
-    BoundaryAvail,
     ReferentAffinity,
     OrdinaryAbiPosition,
 }
@@ -2269,10 +2233,6 @@ fn continuation_input_view(
         carrier: projection.carrier,
         ownership: projection.ownership,
         storage_owner: projection.storage_owner,
-        boundary_phase: projection.boundary_phase,
-        boundary_operation: projection.boundary_operation,
-        boundary_need: projection.boundary_need,
-        boundary_avail: projection.boundary_avail,
         referent_affinity: projection.referent_affinity.clone(),
         ordinary_abi_position: projection.ordinary_abi_position,
         availability,
@@ -2293,10 +2253,6 @@ pub(in crate::cranelift_backend) struct ContinuationInputView {
     pub(in crate::cranelift_backend) carrier: AbiCarrier,
     pub(in crate::cranelift_backend) ownership: AbiOwnership,
     pub(in crate::cranelift_backend) storage_owner: AbiStorageOwner,
-    pub(in crate::cranelift_backend) boundary_phase: BoundaryUsePhase,
-    pub(in crate::cranelift_backend) boundary_operation: BoundaryUseOperation,
-    pub(in crate::cranelift_backend) boundary_need: BoundaryUseNeed,
-    pub(in crate::cranelift_backend) boundary_avail: BoundaryUseAvail,
     pub(in crate::cranelift_backend) referent_affinity: Vec<BoundaryReferentOwner>,
     pub(in crate::cranelift_backend) ordinary_abi_position: u32,
     /// **`D3b` re-cut** — the two consumer-specific claims. See
@@ -4726,11 +4682,19 @@ fn fixed_node_selected_owner_of(
 /// **`RT-DECL-CLOSURE-PORT` `D7` — the phase one host-effect seat's value is
 /// actually in.**
 ///
-/// ⛔ Deliberately its own type rather than a reuse of [`BoundaryUsePhase`].
-/// That vocabulary is the CONTINUATION-input projection's and is keyed on ABI
-/// slots; this one is keyed on a semantic seat of a host operation. They answer
-/// different questions about different populations, and one enum spanning both
-/// is what lets an answer derived for one be read as authority for the other.
+/// ⛔ Deliberately its own type rather than a reuse of the continuation-input
+/// projection's former boundary-use vocabulary. That vocabulary was keyed on
+/// ABI slots; this one is keyed on a semantic seat of a host operation. They
+/// answer different questions about different populations, and one enum
+/// spanning both is what lets an answer derived for one be read as authority
+/// for the other.
+///
+/// ⭐ That separation is why this type survived a deletion that took the other
+/// one. `RT-CONTSPEC-LEDGER` (Architect `evt_1v9m7t4m9dmj7`) retired the four
+/// continuation-side boundary-use axes as an unowned schema fragment, having
+/// established that nothing consumed them. The proposal that preceded it was to
+/// populate them by projecting THIS record onto them — refused precisely
+/// because the two populations are not one. Keep them apart.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(in crate::cranelift_backend) enum EffectSeatPhase {
     /// A compile-time `Lowered` template the emitter may read directly.
@@ -6300,10 +6264,14 @@ fn walk_continuation_value_environment(
                 // to an `AbiCarrier`; the IH's phase depends on
                 // `functionized_units`, a whole-plan argument that is not a
                 // field of `StaticTransitionPlan` and so is not edge-local; and
-                // an IH is a *callable*, whose continuation-input vocabulary
-                // (`BoundaryUseAvail::Callable`,
-                // `BoundaryUseNeed::PreserveCallableIdentity`) exists only under
-                // `#[cfg(test)]`. Leaving it `Open` is the pre-`D2` behaviour
+                // an IH is a *callable*, and the continuation-input projection
+                // has no callable domain at all — its source vocabulary
+                // (`AbiCarrier` / `AbiOwnership` / `AbiStorageOwner`) carries
+                // values, with no representation for a static callable, so
+                // there is nothing here to name an IH with. Supplying one is
+                // [[RT-CONTSRC-CALLABLE-CONTRACT]]'s, as a closed sum beside
+                // `ContinuationSourceSlotAuthority`. Leaving it `Open` is the
+                // pre-`D2` behaviour
                 // and refuses to claim what it cannot derive; a default carrier
                 // here is exactly what `evt_9krmbv834z9p` forbids.
                 //
@@ -7488,10 +7456,6 @@ fn exact_continuation_projection(
                 carrier: input.carrier,
                 ownership: input.ownership,
                 storage_owner: input.storage_owner,
-                boundary_phase: BoundaryUsePhase::OperationalCarrier,
-                boundary_operation: BoundaryUseOperation::Forward,
-                boundary_need: BoundaryUseNeed::PreserveValue,
-                boundary_avail: BoundaryUseAvail::Value,
                 referent_affinity: input.referent_affinity.clone(),
                 ordinary_abi_position: ordinary_parameters
                     .checked_add(ordinal)
@@ -7644,18 +7608,6 @@ fn continuation_keys_equal_under_mutation(
                     }
                     ContinuationProjectionOmission::StorageOwner => {
                         target.storage_owner = source.storage_owner
-                    }
-                    ContinuationProjectionOmission::BoundaryPhase => {
-                        target.boundary_phase = source.boundary_phase
-                    }
-                    ContinuationProjectionOmission::BoundaryOperation => {
-                        target.boundary_operation = source.boundary_operation
-                    }
-                    ContinuationProjectionOmission::BoundaryNeed => {
-                        target.boundary_need = source.boundary_need
-                    }
-                    ContinuationProjectionOmission::BoundaryAvail => {
-                        target.boundary_avail = source.boundary_avail
                     }
                     ContinuationProjectionOmission::ReferentAffinity => {
                         target.referent_affinity = source.referent_affinity.clone()
@@ -22911,10 +22863,6 @@ mod tests {
             carrier: effect_source.carrier,
             ownership: effect_source.ownership,
             storage_owner: effect_source.storage_owner,
-            boundary_phase: BoundaryUsePhase::OperationalCarrier,
-            boundary_operation: BoundaryUseOperation::Forward,
-            boundary_need: BoundaryUseNeed::PreserveValue,
-            boundary_avail: BoundaryUseAvail::Value,
             referent_affinity: effect_source.referent_affinity.clone(),
             ordinary_abi_position: 7,
         };
@@ -23449,18 +23397,6 @@ mod tests {
             ContinuationProjectionOmission::StorageOwner => {
                 projection.storage_owner = AbiStorageOwner::ArtifactStatic
             }
-            ContinuationProjectionOmission::BoundaryPhase => {
-                projection.boundary_phase = BoundaryUsePhase::SpecializedValue
-            }
-            ContinuationProjectionOmission::BoundaryOperation => {
-                projection.boundary_operation = BoundaryUseOperation::Retain
-            }
-            ContinuationProjectionOmission::BoundaryNeed => {
-                projection.boundary_need = BoundaryUseNeed::PreserveCallableIdentity
-            }
-            ContinuationProjectionOmission::BoundaryAvail => {
-                projection.boundary_avail = BoundaryUseAvail::Callable
-            }
             ContinuationProjectionOmission::ReferentAffinity => {
                 projection.referent_affinity = vec![BoundaryReferentOwner::PersistentStore]
             }
@@ -23486,10 +23422,6 @@ mod tests {
             ContinuationProjectionOmission::Carrier,
             ContinuationProjectionOmission::Ownership,
             ContinuationProjectionOmission::StorageOwner,
-            ContinuationProjectionOmission::BoundaryPhase,
-            ContinuationProjectionOmission::BoundaryOperation,
-            ContinuationProjectionOmission::BoundaryNeed,
-            ContinuationProjectionOmission::BoundaryAvail,
             ContinuationProjectionOmission::ReferentAffinity,
             ContinuationProjectionOmission::OrdinaryAbiPosition,
         ];
