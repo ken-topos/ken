@@ -1,7 +1,7 @@
 ---
 id: RT-CARRIER-BYTESPAN-OBSERVE
 title: "Carrier byte-span observation capability — every BytesPointerLength seat is SPECIALIZED_ONLY and the carrier has no total emitted byte-span observer, so a carried host result cannot satisfy a byte-span effect seat"
-status: active
+status: merged
 owner: runtime
 size: L
 gate: none

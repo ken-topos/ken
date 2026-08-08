@@ -64,27 +64,25 @@
 
 > ### NEXT ACTION ON RESUME — read this line first
 >
-> **`D5` IS PUBLISHING as of 2026-08-08 ~00:0xZ — exact `f49a2255`, PR opened by
-> the background publisher.** If it landed, `origin/main` moved past `185da29e`.
-> **Check the publisher's own output before anything else** — do NOT `git fetch`
-> while it is inside its window (that writes `.git/ken-publisher-FROZEN` and
-> blocks the NEXT publish, not this one).
+> **`D5` IS MERGED. `RT-CARRIER-BYTESPAN-OBSERVE` IS CLOSED.** PR #1555 from
+> exact `f49a2255`, squashed to `origin/main` **`e0fc15c3`**. **M6 done — all
+> 15 paths blob-verified.** M7 done in this same commit: node flipped `merged`,
+> tracker regenerated.
 >
-> **Owed by me the moment it lands, in order:**
+> **⇒ `RT-SEED-CALL-PORT` IS THE NEXT ACTION.** The operator's named entry
+> point: `ready`, dep merged, frame glyph-clean as of PR #1553. Compact the
+> Runtime ring first (§15 — Steward compacts the team before delivering a WP,
+> gated on retros being in), then kick it.
 >
-> 1. **M6** — blob-verify all 15 paths on `main`, BEFORE any reset.
-> 2. **M7** — flip `RT-CARRIER-BYTESPAN-OBSERVE` to `merged` and regen the
->    tracker. **This node CAN be flipped now**: `D6` moved out, so `D5` closes
->    it. That is a change from the previous window, which correctly forbade the
->    flip while three deliverables were unbuilt.
-> 3. **M8** — notify the Adversary (code merge, 15 crates files). **No
->    acknowledgement of any kind, ever** (§10⁻a).
-> 4. **M3 FOLLOW-UP — route TWO cited sources to the LIBRARIAN, after the
->    merge:** `crates/ken-cli/tests/px4b_native_production.rs` and
+> **STILL OWED BY ME after this publish — two items, neither optional:**
+>
+> 1. **M8 — notify the Adversary.** Code merge, 15 crates files. **No
+>    acknowledgement of any kind, ever** (§10⁻a). If you cannot find an M8 post
+>    for `e0fc15c3`, it was not sent.
+> 2. **M3 FOLLOW-UP — route TWO cited sources to the LIBRARIAN:**
+>    `crates/ken-cli/tests/px4b_native_production.rs` and
 >    `crates/ken-cli/tests/rt_parity_native.rs` are in
 >    `library/SOURCE-ATTESTATIONS`. **Never into the ring's frame.**
-> 5. **Then `RT-SEED-CALL-PORT`** — the operator's named entry point. It is
->    `ready`, its dep is merged, and its frame is glyph-clean as of PR #1553.
 >
 > ## `D5` WAS HARD-STOPPED AND RE-CUT — 2026-08-07 (PR #1554)
 >
