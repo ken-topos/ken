@@ -64,23 +64,28 @@
 
 > ### NEXT ACTION ON RESUME — read this line first
 >
-> **`D1` IS ANSWERED AND IT INVERTED THE PREDICTION. `SeedClosureCall` FIRES —
-> THIS NODE DOES NOT CLOSE FOR FREE.** `main` `11a9f767`, worktree clean, zero
-> open PRs.
+> **`D1` MERGED. `D2` IS UNDER REVIEW. `D1` inverted the prediction —
+> `SeedClosureCall` FIRES, no free close.** `main` **`0b232f42`**, worktree
+> clean, zero open PRs, **nothing owed by me**.
 >
-> **Candidate `fd6a3996a2508f6c46a9ae25cd756a5dc55e5f12`**, two `ken-runtime`
-> files, merge base `211a208a`, awaiting exact-SHA review.
+> - **`D1`**: PR #1563, exact `05e6e801`, both paths blob-verified. M8 sent.
+>   Adversary hunted it: **no defect**.
+> - **`D2`**: candidate `d4856f194fd56d619b063f2c7c02822864fa03a6`, under
+>   QA/Architect review. **It merges on its own when accepted — do not hold it
+>   for `D3` or for `AC-5`.**
+> - **Node stays `active`** until `D3`. Flip to `merged` only when it closes.
 >
-> **MERGE `D1` ON ITS RESOLVED DECISION. Do NOT hold it behind the `D2` fork.**
-> It is complete accepted work and **three later campaign nodes consume its
-> production-site enumeration hook** (`RT-PRODUCER-MATCH-PORT`,
-> `RT-RECURSOR-TRANSPORT`, `RT-DESCENT-RETIRE`). Operator partial-merge policy,
-> 2026-08-06.
+> **The `D2` fork was RULED (Architect `evt_7p8dmg1rez02c`): PORT the
+> capability, do not delete or defer.** No elaborator proof owed on this
+> branch. The six mechanism points and `AC-6` are in the frame — build and
+> review against the frame, not against the thread's restatements.
 >
-> **The `D2` design fork is with the Architect** (`evt_5s44nwfcgw33r`); my
-> ruling is `evt_515av8hnnr15`. **No port until they rule** — building the M
-> port and then learning the answer was "retire the capability" wastes an M;
-> the reverse costs nothing.
+> **`AC-5` IS `D3`'s, ruled at `evt_7y8qz0raz6x0k`**, and most of its
+> instrumentation already exists (`scale_b_record_function`,
+> `lowering/mod.rs:213`, per-emitter incl. `RecursiveDescentRoot` and
+> `FunctionizedUnitBody`). Only the per-function **distribution** is missing —
+> the existing metrics are sums. **Report the gap; do not add a parallel
+> recorder.**
 >
 > **The node is NOT deferred.** "Buys no per-function-ceiling benefit" is not
 > grounds: the operator's directive is that a half-migrated state is debt for
