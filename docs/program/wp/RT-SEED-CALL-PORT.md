@@ -9,10 +9,11 @@ closure-seed → callable-unit machinery at the call site.**
 **Risk:** low–medium — the machinery is built by [[RT-DECL-CLOSURE-PORT]];
 this is its second application point.
 
-**The `M` predates the 2026-08-05 `D1` correction and does not include
-building the enumerator.** It was set on the premise that the instrument was
-inherited. Treat it as covering `D2`/`D3` only; report the `D1` cost at pickup
-and the Steward re-sizes then. **Do not** silently absorb it into `M`.
+**The `M` stands, and the re-size announced on 2026-08-05 is WITHDRAWN
+(2026-08-08).** That note told the ring `D1` included building the enumerator
+and to report its cost for a re-size. That premise was false: the instrument
+is on `main` — see `D1`. `D1` is cheap, `M` now over-covers rather than
+under-covers, and there is no build cost to report.
 
 **Read `docs/program/16-recursive-descent-retirement.md` first.** It carries
 the campaign's binding traps and the schedule. This frame does not repeat
@@ -67,30 +68,55 @@ general, little or nothing remains here.
 - **`D1` — Measure before building, and be willing to stop.** Report whether
   `SeedClosureCall` still fires on any measured program.
 
-  **The enumeration is not durable on `main`, and this frame previously said it
-  was.** [[RT-DECL-CLOSURE-PORT]]'s `D1` permits "a temporary or permanent
-  enumeration"; it was rebuilt at `38b05ac9` in a detached scratch worktree
-  against the preserved deltas, so it never entered the candidate lineage.
-  Measured at `origin/main = 8558d4e6`, the tree carries only
-  `recursive_descent_residual` (`core.rs:151`), which returns
-  `Option<RecursiveDescentResidual>` — the short-circuited **first** reason, and
-  the exact instrument that node's `D1` ruled inadequate. `control.rs:5080` is a
-  per-route classifier-accounting pin, not a program-level set.
+  **THE ENUMERATOR IS DURABLE ON `main`. DO NOT BUILD ONE.** Measured at
+  `origin/main = 606efa93` (2026-08-08):
 
-  ⇒ **Carrying in or rebuilding the enumerator is inside this node's `D1`, not
-  a precondition already met.** Size it that way, and record which you did.
+  - `enumerate_recursive_descent_residuals` — `core.rs:598`, the entry point,
+    over the expression plus the declaration map.
+  - `collect_recursive_descent_residuals` — `core.rs:616`, the
+    non-short-circuiting twin: accumulates into a `BTreeSet`, visits every child
+    regardless of what a sibling produced, exhaustive `match` with no wildcard
+    arm. It classifies `SeedClosureCall` at the `Call` arm, `core.rs:707`.
+
+  It landed in `7ca5cfc0` ([[RT-SRCBODY-BIND-ORDER]]), and its own doc comment
+  names this node as a reuser.
+
+  **This frame asserted the opposite until 2026-08-08, and the error is worth
+  naming because it is the reusable one.** [[RT-DECL-CLOSURE-PORT]]'s
+  enumerator genuinely never entered the candidate lineage — true when that node
+  closed, and it stayed in this frame as an inherited premise. A *later,
+  different* node landed a durable one. **A fact about the tree decays; re-derive
+  it against current `main` at each use rather than carrying it forward.**
+
+  ⇒ **`D1` is the corpus measurement only.** The instrument is a precondition
+  already met.
   - **If it does not fire anywhere: post that, stop, and hand the node back to
     the Steward to close** — **but only after `D1a` below.** Do not build a
     port for a class with no population, and do not go looking for a real
     program that would resurrect it.
   - If it fires, `D1` names the exact programs and proceeds.
 - **`D1a` — THE FREE-CLOSE GATE. An EXACT-SET positive control on the
-  instrument, on THIS tree, required before any close-on-absence.** Construct or
-  temporarily reintroduce a program that *does* fire `SeedClosureCall`, and show
-  the enumeration reports **the exact set of variants that program fires** — not
-  merely that `SeedClosureCall` appears somewhere among them. Restore
-  byte-identically. **Only then** is a "fires nowhere" result admissible as a
-  close.
+  instrument, on THIS tree, required before any close-on-absence.**
+
+  **THIS CONTROL IS ALREADY COMMITTED. Do not construct a temporary program and
+  do not plan a byte-identical restore.**
+  `d1_the_enumerator_reports_every_variant_not_the_first`
+  (`core/tests/control.rs:10849`) is `#[test]` and not `#[ignore]`d. It builds a
+  compound firing four variants and asserts `assert_eq!` over a `BTreeSet` — an
+  exact-set assertion, not membership — with `SeedClosureCall` among them and its
+  firing witness at `control.rs:10723`. It then contrasts the short-circuiting
+  selector's one-reason answer on the same program.
+
+  **What remains is to RUN it by name on this tree**, per the instrument's own
+  doc: re-prove cheaply at each point of use, because later deliverables rewrite
+  that file underneath it. **Presence is not greenness.** Only then is a "fires
+  nowhere" result admissible as a close.
+
+  **The committed witness is not a population.**
+  `d1_seed_closure_call_witness()` is a hand-built `RuntimeExpr` in a test, not
+  a Ken program. It shows the enumerator can *see* the class; it says nothing
+  about whether the class *has* a live population. Report the instrument's
+  provability and the corpus's population as two separate findings.
 
   **A reachability control does not discharge this, and this frame asked for
   one until 2026-08-05.** [[RT-DECL-CLOSURE-PORT]] measured the difference on
@@ -137,11 +163,13 @@ general, little or nothing remains here.
   this: it quantifies over the firing set, and the regression population is its
   complement (campaign doc, Trap 2).
 - **`AC-2`.** `D1`'s enumeration is recorded in the tree with the class's full
-  population named, **and the enumerator itself lands in the candidate lineage,
-  not only its output.** Recording the result while the instrument stays in a
-  scratch worktree is what left this frame asserting a durable enumeration that
-  did not exist; three later nodes in this campaign consume the same instrument,
-  so a result-only record reproduces the defect at each of them.
+  population named. **The "enumerator lands in the candidate lineage" half is
+  DISCHARGED BY INHERITANCE** — `7ca5cfc0` landed it (see `D1`). State that it is
+  already satisfied; do not re-land it.
+
+  The obligation still binds on anything you *add*: three later nodes in this
+  campaign consume the same instrument, so any extension of it lands in the
+  lineage rather than in a scratch worktree.
 
   **If the node closes on an empty population, `D1a`'s positive control is
   recorded too.** A close-on-absence without it is not a

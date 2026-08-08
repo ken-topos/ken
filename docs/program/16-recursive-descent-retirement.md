@@ -106,6 +106,29 @@ short-circuited first. This is the same `D1` obligation
 `RT-DECL-CLOSURE-PORT` already carries; the enumeration should be built **once**
 by whichever node runs first and reused, not rebuilt per node.
 
+**IT HAS BEEN BUILT. REUSE IT — do not build a second one.** Measured at
+`origin/main = 606efa93` (2026-08-08), landed by `RT-SRCBODY-BIND-ORDER`
+(`7ca5cfc0`):
+
+| what | where |
+|---|---|
+| entry point, over expression plus declaration map | `lowering/core.rs:598` `enumerate_recursive_descent_residuals` |
+| non-short-circuiting walk, `BTreeSet`, no wildcard arm | `core.rs:616` `collect_recursive_descent_residuals` |
+| exact-set control, `assert_eq!` over four variants | `core/tests/control.rs:10849` `d1_the_enumerator_reports_every_variant_not_the_first` |
+
+**Two standing obligations survive its existence, and they are what each `D1`
+still owes.** First, **run the control by name on your tree** — later
+deliverables rewrite `core.rs` underneath it, so presence is not greenness.
+Second, **an instrument that can see a class is not a population**: the
+committed witnesses are hand-built `RuntimeExpr` values in tests, not Ken
+programs, so they prove the walk reports the class and say nothing about
+whether any real program fires it.
+
+**`RT-SEED-CALL-PORT` asserted this instrument did not exist until 2026-08-08**,
+having inherited that fact from `RT-DECL-CLOSURE-PORT` — where it was true — and
+never re-derived it after a later node landed one. **Re-derive a claim about the
+tree against current `main` at each use.**
+
 ### Trap 2 — ⭐ the later nodes are riskier than they look
 
 As classes retire, program shapes that **never reached `FunctionizedUnits`
