@@ -115,6 +115,28 @@ Unaffected same-family controls stay green.
   *Control:* the handback states, per variant, the owned fact and the first
   missing/mis-consumed static fact. **If one mechanism serves both, that is a
   measured finding with its evidence, not an assumption from the shared arm.**
+
+  > **DISCHARGED at `D0`/`D1` `08ac3346` — Steward ruling `evt_1h00zs7m8xa9q`.
+  > It discharged in a shape this AC did not anticipate, so do not read it as
+  > unmet because only one variant was mechanised.**
+  >
+  > The census enumerated **all four `(phase, first eliminator)` cells over 486
+  > arrivals**, not only the refusing ones: `Carried x Active` = 2 under
+  > exclusion, and **`PendingLet` = 0 in every phase and every run**. So the
+  > partition is not two authorities and not one shared mechanism — **one
+  > variant fires and the other has no members.**
+  >
+  > **`PendingLet` gets no mechanism.** Building one would be a proof over an
+  > empty population (**Trap 3**), where every control passes because there is
+  > nothing to quantify over. **The fail-closed arm stays.**
+  >
+  > Corroborated twice over, which is what makes it safe to act on: the census,
+  > and the landed `unreachable!("pending Let continuations are consumed before
+  > value composition")` on the specialized path through the same function —
+  > one empirical statement and one the mechanism makes about itself.
+  >
+  > **The emptiness is measured at a base, not a property of the design.** It
+  > is a fact about this tree and this tree will move.
 - **AC-3 — every repaired root has a committed discriminating control.**
   *Control:* it reds under a mutation at that root and greens without it, from
   the committed tree, with evidence the detector was reached.
