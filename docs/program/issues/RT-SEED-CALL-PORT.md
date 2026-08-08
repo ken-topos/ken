@@ -1,7 +1,7 @@
 ---
 id: RT-SEED-CALL-PORT
 title: "Seed-closure call port — a Call whose callee is the retained non-lexical closure form routes the whole object to RecursiveDescent"
-status: active
+status: merged
 owner: runtime
 size: M
 gate: none
