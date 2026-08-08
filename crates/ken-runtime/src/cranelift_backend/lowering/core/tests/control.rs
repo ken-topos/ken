@@ -11351,6 +11351,75 @@ A compile-time refusal here would mean this position needs a D2 port after all"
     );
 }
 
+/// **`RT-RECURSOR-TRANSPORT` `D2` causal trace — the first edge at which the
+/// declared-unit return ceases to agree with the installed continuation.**
+///
+/// Test-only evidence, authorized by the Architect's correction
+/// `evt_5yeh0tfp4gwwb` before any production `D2` edit. It asserts the
+/// *relation* the trace exhibits, not the origin numbers, so it survives
+/// renumbering of the plan.
+///
+/// The sequence on the one functionized position-A run:
+///
+/// 1. a continuation specialization is planned for the recursive position, its
+///    call identity is bound, and **its call is emitted** — `CLAIM
+///    outcome=CallEmitted`;
+/// 2. the carried recursive-position invocation then resolves a **generated
+///    execution context** for the same worker body and finds none;
+/// 3. **the context population is empty for this compilation**, so the
+///    fail-closed guard — which fires only when *some* context names this body
+///    — cannot fire either;
+/// 4. the invocation therefore takes the **raw declared unit**, whose return
+///    does not resume through the installed computational continuation;
+/// 5. the outer ordinary `Match` consequently receives a non-constructor and
+///    refuses.
+///
+/// ⭐ **Edge 2-3 is the discriminator**, and it is not a recount of the final
+/// refusal: a specialization exists and was called, while the context
+/// population the carried invocation consults is empty. Those are two different
+/// planner populations, and the value crosses between them without resuming.
+///
+/// **Promise class: transition sentinel.** It pins the currently-observed edge
+/// so a repair cannot be adopted without moving it. It reds when the carried
+/// invocation stops taking the raw target — which is what any lawful `D2`
+/// repair must cause — and it retires with `D3`.
+#[test]
+fn rt_d2_trace_the_carried_invocation_falls_to_the_raw_unit_with_no_context() {
+    use crate::cranelift_backend::lowering::{reset_d5a_trace, take_d5a_trace};
+    let witness = rt_match_scrutinee_recursor_executable();
+
+    reset_d5a_trace();
+    let functionized =
+        rt_run_functionized(&witness, RecursiveDescentResidual::MatchScrutineeRecursor);
+    let trace = take_d5a_trace();
+
+    assert!(
+        functionized.contains("scrutinee is not a constructor value after ordinary expression \
+lowering"),
+        "the trace is only meaningful on the run that still refuses: {functionized}"
+    );
+    assert!(
+        trace.iter().any(|entry| entry.contains("CLAIM outcome=CallEmitted")),
+        "a continuation specialization call must have been EMITTED -- without this the trace \
+below would be about a program that never reached the seam. trace: {trace:#?}"
+    );
+    assert!(
+        trace
+            .iter()
+            .any(|entry| entry.contains("RT-D2 CONTEXT-POPULATION") && entry.contains("contexts=[]")),
+        "the generated-execution-context population must be EMPTY at the resolution point; that \
+is why 'no context' cannot be read as 'this body has one and it was not selected'. \
+trace: {trace:#?}"
+    );
+    assert!(
+        trace
+            .iter()
+            .any(|entry| entry.contains("CARRIED-INVOCATION") && entry.contains("-> raw target")),
+        "the carried recursive-position invocation must fall to the RAW declared unit -- this is \
+the edge, and a repair that does not move it has not addressed the defect. trace: {trace:#?}"
+    );
+}
+
 /// **`AC-2` positive control 2 — every variant is reachable by the
 /// instrument.**
 ///

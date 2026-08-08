@@ -11644,6 +11644,22 @@ impl<'a> Lowering<'a> {
                 ),
             ));
         }
+        // `RT-RECURSOR-TRANSPORT` `D2` trace: the CONTEXT POPULATION this
+        // resolution was answered from, so "raw target" can be read as "no
+        // context exists for this body" rather than merely "none was returned".
+        #[cfg(test)]
+        d5a_trace(format!(
+            "  RT-D2 CONTEXT-POPULATION body={body_origin:?} contexts={:?}",
+            self.static_transition_plan
+                .continuation_contexts()?
+                .iter()
+                .map(|context| (
+                    context.id(),
+                    context.worker_body_origin(),
+                    context.enclosing_specialization()
+                ))
+                .collect::<Vec<_>>()
+        ));
         #[cfg(test)]
         d5a_trace(format!(
             "  CARRIED-INVOCATION body={body_origin:?} coords={:?} -> {}",
