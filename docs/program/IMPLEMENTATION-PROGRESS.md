@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-08-08 08:35:48Z — from 177 issue file(s) in `docs/program/issues/`.
+2026-08-08 08:47:08Z — from 177 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -143,7 +143,7 @@ the committed file matches the generator's output.
 | `RT-CONTSPEC-LOWER` | ContinuationSpecialization slice 3 — attach the token at each producer alternative, emit the direct call before the identity-erasing join, close nested recursion and the ledgers, then ACTIVATE | closed | runtime | L | none | — |
 | `RT-CONTSPEC-PLANNER` | ContinuationSpecialization slice 1 — land the planner closure DORMANT: exact ordered projection, full-key interning before discovery, exact causal edge tokens, finite recursion | merged | runtime | M | none | — |
 | `RT-CONTSPEC-SUBSTRATE` | ContinuationSpecialization slice 0 — re-derive and independently gate the DORMANT D7 substrate: closed case-emission reachability, exact occurrence/owner/lifetime authority, pre-allocation closure | merged | runtime | M | none | — |
-| `RT-CONTSPEC-WITNESS` | ContinuationSpecialization seam 4 — integrated witness and closeout: the native population, the six formerly shadowed rows reclassified, the two host rows rerun, and the campaign closeout record | ready | runtime | M | none | — |
+| `RT-CONTSPEC-WITNESS` | ContinuationSpecialization seam 4 — integrated witness and closeout: the native population, the six formerly shadowed rows reclassified, the two host rows rerun, and the campaign closeout record | merged | runtime | M | none | — |
 | `RT-CONTSRC-CALLABLE-CONTRACT` | Closed callable-contract arm for continuation sources — a recursive IH is a compiler-only static worker with no value carrier, and the enclosing slot authority is unconditionally a value contract, so its environment sits outside the domain RT-CONTSRC-PRODUCER-LOCAL owns | ready | runtime | M | none | — |
 | `RT-CONTSRC-PRODUCER-LOCAL` | Producer-local continuation source coordinate — a mid-body value is a third availability class with no ABI seat, so continuation specialization cannot name its environment | merged | runtime | L | none | — |
 | `RT-DECL-CLOSURE-PORT` | Transparent-declaration-closure emission port — a retained TransparentDeclarationClosure residual forces the whole object onto the monolithic RecursiveDescent root, which exceeds Cranelift's per-function ceiling | merged | runtime | L | none | — |
@@ -177,7 +177,7 @@ the committed file matches the generator's output.
 | `RT-PLANNER-DIAGNOSTIC-K` | Boundary A planner: report planner-invariant failures as planner defects, and assert fixed_k CONSTANT rather than merely affine | merged | runtime | S | none | https://github.com/swe-toolkit/ken/pull/929 |
 | `RT-PROCESS-EXIT-STATUS` | ProcessExitStatus refusal in the escape lane (rt_escape r2_cross_buffer_freeze_fails_closed_with_invalid_bounds) | draft | runtime | TBD | none | — |
 | `RT-PRODUCER-MATCH-PORT` | Producer-match call port — an ordinary Match whose scrutinee is directly a Call routes the whole object to RecursiveDescent | merged | runtime | M | none | — |
-| `RT-RECURSOR-TRANSPORT` | Active-recursor transport — an active computational recursor's invocation-local scope/return-hole state cannot cross a functionized unit boundary, retaining two residual classes | ready | runtime | L | none | — |
+| `RT-RECURSOR-TRANSPORT` | Retire the two live recursor residual classes — MatchScrutineeRecursor and LexicalCallArgumentRecursor — off the RecursiveDescent lane | ready | runtime | M | none | — |
 | `RT-SCALE-A` | Boundary A — re-derive the planner census for n=3..7 against the COMPLETED factored representation, superseding the provisional outer-planner numbers | merged | runtime | M | none | — |
 | `RT-SCALE-B` | Boundary B — the full n=3..7 emission measurement, the research-grounded analytical model, and the operator scaling verdict that gates RT-NATIVE-FNSPLIT's merge | merged | runtime | L | none | — |
 | `RT-SEED-CALL-PORT` | Seed-closure call port — a Call whose callee is the retained non-lexical closure form routes the whole object to RecursiveDescent | merged | runtime | M | none | — |
@@ -228,11 +228,11 @@ itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 - `NATIVE-HANDLE-CARRIER` — Native build-pipeline completeness — a constructor-private resource-carrying handle fails checked-core body-view lowering (MissingClosureMetadata) when it crosses the higher-order withBuffer normalization boundary
 - `PX8-ERRID-ALLOC` — ResourceErrorV1 has no allocation-failure identity and buffer allocation is infallible, so PX8's allocation-distinct-from-BufferLimit row cannot be produced at all
 - `RT-CARRIER-PRODUCER-OCCURRENCE` — a source aggregate reaches the carrier with no planner-issued producer occurrence, so the C2 edge refuses to emit and the nested-payload selection row never exercises its property
-- `RT-CONTSPEC-WITNESS` — ContinuationSpecialization seam 4 — integrated witness and closeout: the native population, the six formerly shadowed rows reclassified, the two host rows rerun, and the campaign closeout record
 - `RT-CONTSRC-CALLABLE-CONTRACT` — Closed callable-contract arm for continuation sources — a recursive IH is a compiler-only static worker with no value carrier, and the enclosing slot authority is unconditionally a value contract, so its environment sits outside the domain RT-CONTSRC-PRODUCER-LOCAL owns
 - `RT-EFFECT-DIFF` — One reusable rich differential boundary over EffectObservation — interpreter vs native, first-divergence reporting, so backend-local tests can observe what only the CLI suites currently can
 - `RT-FNSPLIT-B2O-CHECK` — the B2O checking layer advertises more than it enforces — structural closure for the item enumerator and reachability for the validator arms
 - `RT-FNUNIT-RESULT-TOKEN` — Broad starter shapes fail the result-token table on the FunctionizedUnits lane — pre-existing, unmasked by retiring SeedClosureCall
+- `RT-RECURSOR-TRANSPORT` — Retire the two live recursor residual classes — MatchScrutineeRecursor and LexicalCallArgumentRecursor — off the RecursiveDescent lane
 - `RT-WORKER-FIXTURE-DECODE` — AC-5's target-redirect detector is dark — its expression dies at the run step with Backend NativeResultDecode token 9, before any of its three comparisons, while the fixture helper's other caller passes
 - `SPEC-MISSION-GROUNDING` — Ground the spec as a whole against the mission — audit every retained constraint for which mission property fails without it, and relax the ones where nothing does
 
@@ -272,7 +272,6 @@ is itself not yet `merged`/`closed`:
 - `RT-BACKEND-MODULE-SPLIT` blocked by `RT-DESCENT-RETIRE` (status: ready)
 - `RT-DESCENT-RETIRE` blocked by `RT-RECURSOR-TRANSPORT` (status: ready)
 - `RT-DESCENT-RETIRE` blocked by `RT-FNUNIT-RESULT-TOKEN` (status: ready)
-- `RT-RECURSOR-TRANSPORT` blocked by `RT-CONTSPEC-WITNESS` (status: ready)
 
 ## Gate progress
 

@@ -339,7 +339,8 @@ graph LR
   NHC --> DCP[RT-DECL-CLOSURE-PORT]
   DCP --> SCP[RT-SEED-CALL-PORT]
   SCP --> PMP[RT-PRODUCER-MATCH-PORT]
-  DCP === RXT[RT-RECURSOR-TRANSPORT]
+  DCP --> WIT[RT-CONTSPEC-WITNESS]
+  WIT --> RXT[RT-RECURSOR-TRANSPORT]
   RXT --> RET[RT-DESCENT-RETIRE]
   PMP --> RET
   SCP --> FNU[RT-FNUNIT-RESULT-TOKEN]
@@ -358,7 +359,7 @@ graph LR
 | 3 | `RT-DECL-CLOSURE-PORT` | **L+** | **builds the closure-seed → callable-unit machinery** #4/#5 reuse. ✅ mechanism gate discharged on **both** deltas. ⭐ **Now also carries `D7`, the closed `Carried`-consumer matrix, and holds the ABI release** |
 | 4 | `RT-SEED-CALL-PORT` | S–M | cheapest; reuses #3 directly and may close on its own `D1` |
 | 5 | `RT-PRODUCER-MATCH-PORT` | M | its **syntactic** `ProducerMatchCall` retirement only — ⛔ **not** the carried-`Match` transport, which is #3's `D7` |
-| **3-atomic** | `RT-RECURSOR-TRANSPORT` | L | ⭐⭐ **MOVED 2026-07-29 from #6 — it is `D7`'s reached successor and assembles ATOMICALLY with #3.** `D1` is answered: outcome **(b)** |
+| 6b | `RT-RECURSOR-TRANSPORT` | **M, provisional** | **RECUT 2026-08-08** (Architect `evt_237tbdsacqbk4`). The atomic-with-#3 assembly and the `size: L` are **withdrawn** — `D7` merged on its own, and the continuation machinery the `L` assumed this node must invent has landed. Now: re-census, one discriminating executable witness per live position, then only the narrow consumer port each failure proves necessary. Branches from post-`RT-CONTSPEC-WITNESS` `main`; `07ce6ef1` is **not** its base. Outcome **(b)** still holds |
 | 6 | `RT-FNUNIT-RESULT-TOKEN` | M | **Trap 2, filed 2026-08-08** — retiring `SeedClosureCall` made a shape newly reachable that the `FunctionizedUnits` lane does not support (`native result token 265 is not in the result table`). Owns `nc22`, currently `#[ignore]`d. **Gates #7**: it is the only program exercising a shape supported *only* by the lane #7 deletes. Its `M` is a **scoping** figure, not a measured one — the family width is unestablishable from a corpus holding one instance |
 | 7 | `RT-DESCENT-RETIRE` | M | delete the selector, enum, authority and lane; bank the win. Gated on **five** nodes — the four migration nodes **and #6** |
 | 8 | `RT-BACKEND-MODULE-SPLIT` | M | ⭐ **operator, 2026-07-31** — split the oversized `ken-runtime` backend files. ⛔ **After #7, never before** — see below |
