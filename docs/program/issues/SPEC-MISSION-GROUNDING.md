@@ -11,17 +11,26 @@ github: null
 origin: Operator question 2026-07-26 — "the question to ground the spec against the goals of the language has been a great benefit (or will be, at least). What agent would be best suited to perform the same analysis on the spec as a whole?" followed by "ok make a note of the process." Generalizes the single-node result on SPEC-CLOSURE-BOUNDARY, which began with the operator's direction challenge (evt_5qr8c07a1tbc9) and whose immediate cause was six consecutive Architect production blocks on RT-FNSPLIT-B2V against a premise nobody had examined. Steward-filed per COORDINATION §2 (agents cannot create tracked work).
 ---
 
-> ## STATUS CORRECTED `ready` TO `draft` — 2026-08-08, Steward
+> ## `draft` STANDS, BUT THE REASON FIRST GIVEN FOR IT WAS FALSE
 >
-> **`ready` means shovel-ready: a written frame, dependencies merged.**
-> This node was not, because
-> no frame exists. Dependencies are met and the Spec enclave is idle,
-> so **this node is the enclave's blocker and the frame is Steward debt.**
+> **Corrected 2026-08-08, Steward.** The flip note that stood here said this
+> node was not shovel-ready because **"no frame exists"**. That reason is
+> wrong: §2 routes the work, §4 gives the method, §5 states acceptance
+> criteria, and §3's precondition is **discharged** — `docs/MISSION.md` is on
+> `origin/main` and the first pass already ran.
 >
-> **The correction is not a downgrade of the work.** A node advertising
-> startable work it does not have makes the backlog read deeper than it
-> is, and that depth is exactly what a Steward reads to decide whether a
-> team is idle for want of work or for want of a lane.
+> **What actually keeps it `draft` is that it is an UMBRELLA, not a WP.** §4
+> says in its own heading that this cannot be one sweep, and 27,856 lines
+> across 63 files and 8 areas is not an assignable deliverable. **It has to be
+> cut into per-area WPs before any seat can start, and that cut is Steward
+> work.** The frame is not missing; the decomposition is.
+>
+> **Do not read the idle Spec enclave as a reason to release this.** Only one
+> additional lane is authorized (Foundation), and opening a Spec lane is an
+> operator call, not a Steward one.
+>
+> Recorded because the false reason and the true one point at different
+> work — writing a frame would have discharged nothing.
 
 > ## ✅ PRECONDITION DISCHARGED, FIRST PASS RAN — this node is now the umbrella
 >

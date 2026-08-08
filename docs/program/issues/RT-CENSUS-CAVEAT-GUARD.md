@@ -1,7 +1,7 @@
 ---
 id: RT-CENSUS-CAVEAT-GUARD
 title: "The identifier-census caveat's staleness guard is an existence check standing in for a count check, so it cannot detect the drift it was written to catch"
-status: draft
+status: ready
 owner: runtime
 size: S
 gate: none
@@ -11,16 +11,24 @@ github: null
 origin: Reported by runtime-implementer during RT-RECURSOR-TRANSPORT D3 (evt_16cmej481q7ns family) as an incidental finding; Architect scoped it OUT of the hard-stop-4 repair nodes at evt_3r4j14fv1jtj2 as pre-existing prose debt. Steward-filed (agents cannot create tracked work per COORDINATION §2), and re-derived by the Steward at main 5d4c623e rather than inherited.
 ---
 
-> ## STATUS CORRECTED `ready` TO `draft` — 2026-08-08, Steward
+> ## THE `draft` FLIP WAS WRONG AND IS REVERTED — 2026-08-08, Steward
 >
-> **`ready` means shovel-ready: a written frame, dependencies merged.**
-> This node was not, because
-> no frame exists.
+> **This node was flipped `ready` to `draft` earlier today on the stated
+> ground that "no frame exists". That is false, and it is reverted to
+> `ready`.** No separate `docs/program/wp/` file exists, but the sections
+> below are a frame: deliverables, acceptance criteria with their controls,
+> scope with a routing instruction, and a contention check.
 >
-> **The correction is not a downgrade of the work.** A node advertising
-> startable work it does not have makes the backlog read deeper than it
-> is, and that depth is exactly what a Steward reads to decide whether a
-> team is idle for want of work or for want of a lane.
+> **The flip came from testing for a FILE and concluding about READINESS.**
+> The same bad test produced three other wrong flips the same morning
+> (reverted in PR #1645) on a different failure of the same shape — there,
+> frames that exist under non-matching filenames. **The right test is
+> whether frame content exists anywhere, not whether a path resolves:**
+> `grep -rl <node-id> docs/program/wp/`, then read the node body.
+>
+> **`ready` here does not mean start it now.** See *Contention* — this file
+> is contended with the active recursor arc, and the node blocks nothing, so
+> there is no reason to contend for it.
 
 ## What it is
 

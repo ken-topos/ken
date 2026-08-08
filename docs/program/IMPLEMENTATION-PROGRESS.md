@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-08-08 18:36:11Z — from 184 issue file(s) in `docs/program/issues/`.
+2026-08-08 18:39:46Z — from 184 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -136,7 +136,7 @@ the committed file matches the generator's output.
 | `RT-CARRIED-RESOURCE-SCALAR` | A carried word cannot satisfy a ResourceScalar effect seat -- same Need-not-in-Avail shape as the byte-span gap, different need, different seats | draft | runtime | TBD | none | — |
 | `RT-CARRIER-BYTESPAN-OBSERVE` | Carrier byte-span observation capability — every BytesPointerLength seat is SPECIALIZED_ONLY and the carrier has no total emitted byte-span observer, so a carried host result cannot satisfy a byte-span effect seat | merged | runtime | L | none | — |
 | `RT-CARRIER-PRODUCER-OCCURRENCE` | a source aggregate reaches the carrier with no planner-issued producer occurrence, so the C2 edge refuses to emit and the nested-payload selection row never exercises its property | ready | runtime | M | none | — |
-| `RT-CENSUS-CAVEAT-GUARD` | The identifier-census caveat's staleness guard is an existence check standing in for a count check, so it cannot detect the drift it was written to catch | draft | runtime | S | none | — |
+| `RT-CENSUS-CAVEAT-GUARD` | The identifier-census caveat's staleness guard is an existence check standing in for a count check, so it cannot detect the drift it was written to catch | ready | runtime | S | none | — |
 | `RT-CLOSURE-BOUNDARY-LANE` | A closure cannot cross the durable boundary -- runtime-local and live-domain only, with no durable lane | draft | runtime | TBD | none | — |
 | `RT-COMPMATCH-TREE-SCRUTINEE` | ComputationalMatch refuses a tree-producing scrutinee that is not Bool or a constructor (rt_span_prov) | draft | runtime | TBD | none | — |
 | `RT-CONTINUATION-CALL-DISCHARGE` | A planned continuation call is neither directly emitted nor compositionally consumed once the Active resume path goes live — attribution, not repair | active | runtime | S | none | — |
@@ -231,6 +231,7 @@ itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 - `CI-IGNORED-SWEEP` — nothing in the repo ever re-runs an ignored row, so every skip is write-only and a landed repair ships with its own regression cover switched off
 - `KERNEL-NESTED-IND` — admit nested strictly-positive inductives in the kernel — structural positivity through declared parameter positions, generated and checked dependent eliminators with one lifted IH per contained recursive occurrence, iota, and surface consumability
 - `RT-CARRIER-PRODUCER-OCCURRENCE` — a source aggregate reaches the carrier with no planner-issued producer occurrence, so the C2 edge refuses to emit and the nested-payload selection row never exercises its property
+- `RT-CENSUS-CAVEAT-GUARD` — The identifier-census caveat's staleness guard is an existence check standing in for a count check, so it cannot detect the drift it was written to catch
 - `RT-CONTSRC-CALLABLE-CONTRACT` — Closed callable-contract arm for continuation sources — a recursive IH is a compiler-only static worker with no value carrier, and the enclosing slot authority is unconditionally a value contract, so its environment sits outside the domain RT-CONTSRC-PRODUCER-LOCAL owns
 - `RT-EFFECT-DIFF` — One reusable rich differential boundary over EffectObservation — interpreter vs native, first-divergence reporting, so backend-local tests can observe what only the CLI suites currently can
 - `RT-FNSPLIT-B2O-CHECK` — the B2O checking layer advertises more than it enforces — structural closure for the item enumerator and reachability for the validator arms
