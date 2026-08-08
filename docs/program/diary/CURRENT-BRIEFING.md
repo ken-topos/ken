@@ -120,6 +120,25 @@ artifacts), **#1606** (the `D3` frame reconciliation below).
 > **The same withdrawn claim also sat in `D0`'s leading sentence**, in a section
 > I was not editing. Found only by grepping the whole file for the phrase family.
 
+> ### OPERATOR SEQUENCING 2026-08-08 — `NATIVE-HANDLE-CARRIER` goes after #8
+>
+> **Instruction: slot `NATIVE-HANDLE-CARRIER` after `RT-BACKEND-MODULE-SPLIT`.**
+> Recorded as a `depends_on` edge (the only thing `gen-progress.sh` reads), with
+> the reciprocal `blocks` on #8 and a new schedule row #9. Tracker confirms:
+> *"blocked by `RT-BACKEND-MODULE-SPLIT` (status: draft)"*.
+>
+> **Its old hold banner is now history.** That gate — `RT-DECL-CLOSURE-PORT`'s
+> `AC-1` row — merged, and all three original deps are merged; the node was
+> genuinely resumable and the campaign row still described it as held. It is now
+> held by a **deliberate** edge instead of a stale one.
+>
+> **Cost, so it is not rediscovered as a surprise:** this node gates
+> `PX8-F-CAP-41` Phase 2 and therefore **`PX8` clause-(a) closure**, which now
+> sits behind five nodes. Nothing rots — the elaborator half is done and
+> preserved at `c07e63c2` — the cost is latency, not rework. And the sequencing
+> makes one thing *cheaper*: it rebases onto the post-split module layout once,
+> rather than landing against the old layout and being moved by #8.
+
 > ### TRIGGER I MUST NOT DROP — `D2` is an accepted base not yet on `main`
 >
 > `8efdfdb3` is committed and approved by both reviewers, and `D3` builds on it.
