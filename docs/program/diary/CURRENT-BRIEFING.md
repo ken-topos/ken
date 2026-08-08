@@ -226,6 +226,34 @@ per §10⁻a.
 > **Product posture preserved and unchanged:** product `R2` stays closed, ADR
 > 0021 stays in force, no node filed. Chartering grows the program and is a
 > scope fork the roadmap does not settle, so it is the operator's call.
+>
+> #### UPDATED 2026-08-08 — the formalization now EXISTS, so the question changed
+>
+> Research landed **two more reports** at PR **#1628**:
+> `research/linear-causal-obligation-calculus.md` (+721) — sorts, contexts,
+> judgments, reduction rules, four typed closure laws, safety properties, an
+> executable-decision-procedure mapping — and
+> `research/compiler-obligation-ir-refactor.md` (+589).
+>
+> ⇒ **The decision is no longer "should we start."** It is *"does this warrant
+> further investment, and against which gate."* I published on the reports' own
+> terms and am **not** treating their existence as an answer — a research
+> document landing in `research/` charters nothing.
+>
+> **Both reports preserve the posture explicitly**, checked against the text
+> rather than the request: the calculus states it formalizes a **compiler-local**
+> discovery, not a source language, and *"neither changes Ken's kernel context
+> nor supplies resource-sensitive rules for observational equality or `cast`."*
+> The IR report carries its own §8 *what this refactoring does not decide* and §9
+> *product and research posture*.
+>
+> **A second, separate item now sits behind this one.** The IR report recommends
+> a real architecture — canonical planned/generated terms, a closed source
+> machine, a hybrid checked transducer. **Landing the report adopts none of it.**
+> That is an Architect component-design call plus a sequencing call of mine, and
+> **I am deliberately not routing it yet**: it touches the same lowering surface
+> the runtime ring is mid-node on, so raising it now would contend with active
+> work rather than inform it.
 
 > ### THE CENSUS PARTITIONED SIX REDS INTO TWO POPULATIONS AND TWO SEAMS
 >
