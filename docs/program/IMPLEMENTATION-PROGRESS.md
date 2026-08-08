@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-08-08 18:14:51Z — from 184 issue file(s) in `docs/program/issues/`.
+2026-08-08 18:26:05Z — from 184 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -139,7 +139,7 @@ the committed file matches the generator's output.
 | `RT-CENSUS-CAVEAT-GUARD` | The identifier-census caveat's staleness guard is an existence check standing in for a count check, so it cannot detect the drift it was written to catch | draft | runtime | S | none | — |
 | `RT-CLOSURE-BOUNDARY-LANE` | A closure cannot cross the durable boundary -- runtime-local and live-domain only, with no durable lane | draft | runtime | TBD | none | — |
 | `RT-COMPMATCH-TREE-SCRUTINEE` | ComputationalMatch refuses a tree-producing scrutinee that is not Bool or a constructor (rt_span_prov) | draft | runtime | TBD | none | — |
-| `RT-CONTINUATION-CALL-DISCHARGE` | A planned continuation call is neither directly emitted nor compositionally consumed once the Active resume path goes live — attribution, not repair | active | runtime | M | none | — |
+| `RT-CONTINUATION-CALL-DISCHARGE` | A planned continuation call is neither directly emitted nor compositionally consumed once the Active resume path goes live — attribution, not repair | active | runtime | S | none | — |
 | `RT-CONTSPEC-ABI` | ContinuationSpecialization slice 2 — land the explicit unit/descriptor projection and the ABI, owner/lifetime/affinity and zero-allocation negative gates, still DORMANT | merged | runtime | M | none | — |
 | `RT-CONTSPEC-ACTIVATE` | ContinuationSpecialization seam 2 — lowering activation and exact-use consumption: direct call before the identity-erasing join, active emitted owner, affine call occurrence, JoinArm consumption, gating the 37-row lower-owned population | merged | runtime | L | none | — |
 | `RT-CONTSPEC-ASSEMBLY` | ContinuationSpecialization seam 1 — the lawful assembly: extract the accepted branch-scope helper and its feature-gated harness onto the landed slice 0-2 blobs, unactivated, and prove the prior-slice surfaces are untouched | merged | runtime | M | none | — |

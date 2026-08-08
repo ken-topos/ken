@@ -3,7 +3,7 @@ id: RT-CONTINUATION-CALL-DISCHARGE
 title: "A planned continuation call is neither directly emitted nor compositionally consumed once the Active resume path goes live — attribution, not repair"
 status: active
 owner: runtime
-size: M
+size: S
 gate: none
 depends_on: [RT-SPECIALIZED-ACTIVE-RESUME]
 blocks: [RT-MATCH-RECURSOR-CONSUMERS]
@@ -148,3 +148,62 @@ branch it lands on changes the work by more than a size step: option 3 is a
 planner-authority correction, option 1 touches a producer/call seat, option 2 is
 an evidence-plumbing repair. **Re-size on the `D0`/`D1` handback**, as #6f and
 #6g both were.
+
+## RULED: OPTION 3 — the planner over-issues. Re-sized `M` to `S`
+
+Architect ruling relayed at `evt_4ebpfvfrvv8qy`; Steward re-size
+`evt_e5t1809bn0k4`, 2026-08-08. `D0`/`D1` at exact `9f0a4e41`.
+
+**This is a planner-owned source-structural classification** of the exact
+producer / continuation / alternative / recursive-position edge as **direct
+specialization call** versus **deferred-inline case**. The activated witness is
+**deferred-inline** — bridge-selected case work is performed inline — so the
+planner's continuation token is **over-issued**.
+
+**Options 1 and 2 are refuted.** Option 2 fell at `D0`: with `emitted=0` and
+`composed=0` there is no call instruction of any kind, so there is no lost
+evidence because nothing happened.
+
+> ### `declared=1` DOES NOT MEAN LOWERING INTENDED TO CALL
+>
+> It reads that way, and it is the inference the next reader will reach for.
+> **`close`'s own note says declaration is bulk over the planned set** — *"an
+> unused declaration is a `FuncRef` nobody called."* So `declared=1` merely
+> restates `planned=1` and settles nothing.
+>
+> Recorded because it dissolved on inspection; a fact that dissolves is only
+> harmless when the dissolution is written down next to it.
+
+### What `D2` owes
+
+The same classification must govern **issuance and bridge choice**; **no token,
+claim slot, or declaration** for deferred-inline; reachability built from the
+remaining eligible graph. **Unchanged:** direct/composed edges, finished-CLIF
+verification, exact set equality, the both-sets refusal.
+
+Evidence: the deferred-inline classification/bridge/selected path; the identity
+**absent from all five ledger populations**; **token-only reissue reproduces the
+refusal**; one direct and one composed survivor preserved; the census changing
+**only** by ruled-edge removal; and both lanes `Ok` with the retained ledger
+**still unopened**.
+
+> ### THE ONE THING THAT OVERTURNS `S`
+>
+> **Excluding an edge is small. Discovering that the planner's traversal
+> assumes the edge exists is not** — that is a traversal-contract change at
+> planner authority and a different node's work.
+>
+> **Hard stop and route** if the reachability rebuild requires changing the
+> traversal contract rather than excluding an edge from it. Do not let a
+> growing reachability change quietly convert this to an `M` in flight.
+>
+> **Evidence item 5 is the early instrument:** *census changes only by
+> ruled-edge removal* is a differential over the whole 213-identity population,
+> so a traversal-contract problem appears there as a second changed row rather
+> than as a surprise at review.
+
+### Sequencing
+
+`D2` waits for Foundation's `PX8-ERRID-ALLOC` to land, then **rebases onto the
+resulting `main`** — see the contention note above. Re-derive every `core.rs`
+coordinate after the rebase.
