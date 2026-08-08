@@ -48,6 +48,84 @@ thread_local! {
         const { std::cell::Cell::new(ResidualEnumerationMutation::None) };
 }
 
+/// **`RT-SEED-CALL-PORT` `D2` — the selector witness that breaks the `D2`/`D3`
+/// circularity, and it is `D3`'s job to delete it.**
+///
+/// `D2` builds the callee-position seed unit on the `FunctionizedUnits` lane.
+/// But `SeedClosureCall` fires for exactly the programs that reach it, so the
+/// selector routes every one of them to `RecursiveDescent` and the new arm is
+/// unreachable until `D3` retires the variant. Without a witness, `D2` could
+/// land with no executed evidence at all -- which is the shape the campaign
+/// keeps paying for.
+///
+/// This masks the classification in the SELECTOR only. The `D1` enumerator is
+/// deliberately left alone, so the census keeps reporting `SeedClosureCall`
+/// truthfully while the port is exercised. A witness that also blinded the
+/// instrument would make `D1a` measure the witness rather than the tree.
+///
+/// The identical device sat at `declaration_recursive_descent_residual` for
+/// `RT-DECL-CLOSURE-PORT`'s `D5`, for the same measured reason, and its `D6`
+/// removed it on activation. `D3` does the same here: retiring the variant
+/// makes every control below run unhooked, and that is the evidence `D3` owes.
+#[cfg(test)]
+thread_local! {
+    static SEED_CLOSURE_CALL_SELECTOR_WITNESS: std::cell::Cell<bool> =
+        const { std::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn set_seed_closure_call_selector_witness(armed: bool) {
+    SEED_CLOSURE_CALL_SELECTOR_WITNESS.with(|cell| cell.set(armed));
+}
+
+/// **`D2` reachability — how many times the ported seed-callee arm reached its
+/// HANDOFF POINT: arity checked, every capture resolved, inputs handed to the
+/// existing typed call path.**
+///
+/// Without this the `AC-6` controls cannot discriminate. The canonical seed
+/// returns `7` on the `RecursiveDescent` lane and `7` through the new port, so
+/// a green observation is consistent with the port never running. Counting the
+/// arm's own handoff is what separates "the program still works" from "the
+/// program went through the mechanism `D2` built".
+///
+/// **This is NOT an emission oracle, and the distinction is load-bearing.** The
+/// increment precedes `call_declared_unit`, and the actual call instruction is
+/// emitted later in the unchanged transport (`lowering/mod.rs`, at the
+/// `builder.ins().call`). Between the two, target lookup, descriptor and input
+/// checks, carrier transfer and host-context resolution can all still refuse.
+/// So `(Err(_), count == 1)` is reachable **without any unit call existing**.
+///
+/// ⇒ The count alone proves the **handoff**. Evidence for a *completed* typed
+/// unit call is the pair **successful outcome AND count 1**, which is how every
+/// positive row below reads it. A count of **0** proves refusal *before* the
+/// handoff, which is the distinct thing `AC-6.2` asserts.
+#[cfg(test)]
+thread_local! {
+    static SEED_CALLEE_UNIT_PORTS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn reset_seed_callee_unit_ports() {
+    SEED_CALLEE_UNIT_PORTS.with(|cell| cell.set(0));
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn seed_callee_unit_ports() -> usize {
+    SEED_CALLEE_UNIT_PORTS.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+fn seed_closure_call_selector_witness() -> bool {
+    SEED_CLOSURE_CALL_SELECTOR_WITNESS.with(std::cell::Cell::get)
+}
+
+/// In production the witness does not exist and the classification is
+/// unconditional.
+#[cfg(not(test))]
+fn seed_closure_call_selector_witness() -> bool {
+    false
+}
+
 /// The mutation `D1a` proves its exact-set control against.
 ///
 /// `ShortCircuitLikeTheSelector` is not a synthetic perturbation: it makes the
@@ -615,7 +693,8 @@ fn recursive_descent_residual(expr: &RuntimeExpr) -> Option<RecursiveDescentResi
             .find_map(|(_, value)| recursive_descent_residual(value)),
         RuntimeExpr::Project { record, .. } => recursive_descent_residual(record),
         RuntimeExpr::Call { callee, args } => {
-            matches!(callee.as_ref(), RuntimeExpr::Closure { .. })
+            (matches!(callee.as_ref(), RuntimeExpr::Closure { .. })
+                && !seed_closure_call_selector_witness())
                 .then_some(RecursiveDescentResidual::SeedClosureCall)
                 .or_else(|| {
                     (matches!(callee.as_ref(), RuntimeExpr::LexicalClosure { .. })
@@ -12894,6 +12973,105 @@ impl<'a> Lowering<'a> {
                     self.body_emission_authority,
                     BodyEmissionAuthority::FunctionizedUnits
                 ) {
+                    // **`RT-SEED-CALL-PORT` `D2` — the callee-position seed
+                    // unit** (Architect `evt_7p8dmg1rez02c`).
+                    //
+                    // This is the `LexicalClosure` arm below applied one form
+                    // over, and it differs in exactly one thing: the capture
+                    // MATERIAL. A `Closure`'s captures are seed symbols
+                    // resolved out of the explicit seed environment, so they go
+                    // through `lower_seed_capture` and never through
+                    // `child_occurrence`/`lower_expr`. That is the same
+                    // `Seed`/`Lexical` split the declaration-body arm already
+                    // makes; this reaches it from call position.
+                    //
+                    // Deliberately NOT routed through `Lowered::
+                    // DeclarationClosure` below: a literal callee has no
+                    // declaration reference, no symbol identity and no
+                    // checked-call template, so there is nothing for the
+                    // identity join to validate. The unit transport is reused;
+                    // the declaration-specific identity route is not.
+                    //
+                    // No `Constructor`/`Record` capture environment is
+                    // synthesized and no aggregate is allocated, so the
+                    // campaign doc's Trap 5 preflight obligation is VACUOUS
+                    // here. Recorded rather than discharged, and no token is
+                    // minted -- a per-unit token would manufacture state this
+                    // mechanism does not have.
+                    if let RuntimeExpr::Closure {
+                        captures,
+                        params,
+                        body,
+                    } = callee.expr
+                    {
+                        if params.len() != args.len() {
+                            return Err(unsupported(
+                                "Call",
+                                format!(
+                                    "closure expects {} args but call provides {}",
+                                    params.len(),
+                                    args.len()
+                                ),
+                            ));
+                        }
+                        let mut inputs = args
+                            .iter()
+                            .enumerate()
+                            .map(|(position, argument)| {
+                                let argument = self.child_occurrence(
+                                    static_origin,
+                                    1 + position,
+                                    argument,
+                                )?;
+                                let lowered = self.lower_expr(builder, argument, env)?;
+                                self.carry_call_input(builder, argument.static_origin, lowered)
+                            })
+                            .collect::<Result<Vec<_>, _>>()?;
+                        let closure_origin = callee.static_origin;
+                        // Capture SOURCE order, appended after the full
+                        // parameter run: the callee unit's ABI inputs are
+                        // `Parameter ++ Capture`, and the two runs are not
+                        // interchangeable even when their arities coincide.
+                        inputs.extend(
+                            captures
+                                .iter()
+                                .map(|capture| {
+                                    // Seed captures resolve to JIT-time ground
+                                    // values, so this asserts the phase rather
+                                    // than preserving one. There is no carried
+                                    // seed capture to lose, which is why these
+                                    // do not go through `carry_call_input`.
+                                    self.lower_seed_capture(builder, capture)
+                                        .map(LoweringOperand::Specialized)
+                                })
+                                .collect::<Result<Vec<_>, _>>()?,
+                        );
+                        // The planner plans the body FIRST, so the body is the
+                        // closure's child `0`. A `Closure`'s captures are
+                        // symbols rather than expressions, so unlike the
+                        // lexical form they occupy no child slots at all.
+                        let body = self
+                            .child_occurrence(closure_origin, 0, body)?
+                            .static_origin;
+                        // Counted at the HANDOFF point, AFTER arity and every
+                        // capture have resolved: an arity or capture refusal
+                        // leaves this at zero, so the count means "this arm
+                        // resolved its inputs and handed them to the typed call
+                        // path" rather than "the arm was entered".
+                        //
+                        // It does NOT mean a call instruction exists. The
+                        // transport below can still refuse, so pair the count
+                        // with the run's outcome before claiming emission.
+                        #[cfg(test)]
+                        SEED_CALLEE_UNIT_PORTS.with(|calls| calls.set(calls.get() + 1));
+                        return self.call_declared_unit(
+                            builder,
+                            body,
+                            &inputs,
+                            #[cfg(test)]
+                            None,
+                        );
+                    }
                     if let RuntimeExpr::LexicalClosure {
                         captures,
                         params,

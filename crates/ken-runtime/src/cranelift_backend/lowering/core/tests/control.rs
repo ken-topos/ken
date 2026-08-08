@@ -11,6 +11,9 @@ use crate::RuntimeSymbolMetadata;
 // seed corpus, not on hand-built witnesses. `values.rs` and `constructors.rs`
 // reach it the same way.
 use crate::nc5_seed_examples;
+// `RT-SEED-CALL-PORT` `D2` — the `AC-6` controls report the run, not just its
+// success, so they name the report type.
+use crate::CraneliftRunReport;
 // `RT-SRCBODY-BIND-ORDER` `D3` — the whole-process run harness lives beside
 // the effect controls that first needed it; the binding-order controls below
 // run the same shape.
@@ -11118,6 +11121,192 @@ fn seed_call_port_d1a_the_exact_set_control_reds_under_short_circuiting() {
     );
 
     set_residual_enumeration_mutation(ResidualEnumerationMutation::None);
+}
+
+// ─── RT-SEED-CALL-PORT D2 / AC-6 — the callee-position seed unit ───────────
+
+/// Run `example` with the `D2` selector witness armed, and report both the
+/// outcome and how many times the ported seed-callee arm reached its handoff
+/// point -- arity checked, captures resolved, inputs passed to the typed call
+/// path.
+///
+/// **The count is not an emission oracle.** It is taken before
+/// `call_declared_unit`, which can still refuse, so the pair matters: a
+/// successful outcome WITH count 1 is the evidence for a completed typed unit
+/// call, and count 0 is the evidence for a refusal that preceded the handoff.
+///
+/// The witness is armed and disarmed around a single run so a panic inside one
+/// control cannot leak the masked selector into the next test on this thread.
+#[cfg(test)]
+fn d2_run_ported(
+    example: &RuntimeExample,
+    seed_env: &NativeSeedEnvironment,
+) -> (Result<CraneliftRunReport, CraneliftBackendError>, usize) {
+    reset_seed_callee_unit_ports();
+    set_seed_closure_call_selector_witness(true);
+    let outcome = run_example_with_seed_observation(example, seed_env);
+    set_seed_closure_call_selector_witness(false);
+    (outcome, seed_callee_unit_ports())
+}
+
+/// A direct seed closure computing `argument - capture`, called with `5` against
+/// the `nc5` seed capture `y = 2`.
+///
+/// `AC-6`'s third control exists because the canonical seed computes `5 + 2` and
+/// **addition is commutative**, so it returns `7` whether the port passes
+/// `Parameter ++ Capture` or `Capture ++ Parameter`. Subtraction is not: the
+/// ruled order gives `5 - 2 = 3` and a swap gives `2 - 5 = -3`. Same shape, same
+/// arity, same values -- only the order is observable.
+#[cfg(test)]
+fn d2_order_sensitive_example() -> RuntimeExample {
+    RuntimeExample {
+        name: "seed-call-port-d2-order-sensitive".to_string(),
+        checked_core_shape: "let y = 2 in (\\x . sub_int x y) 5".to_string(),
+        ir: RuntimeExpr::Call {
+            callee: Box::new(RuntimeExpr::Closure {
+                captures: vec!["decl:fixture::Local::y".to_string()],
+                params: vec!["x".to_string()],
+                body: Box::new(RuntimeExpr::PrimitiveCall {
+                    primitive: RuntimePrimitive {
+                        symbol: "sub_int".to_string(),
+                        partiality: RuntimePartiality::Total,
+                    },
+                    args: vec![RuntimeExpr::Var(0), RuntimeExpr::Var(1)],
+                }),
+            }),
+            args: vec![RuntimeExpr::Value(RuntimeValue::Int((5).into()))],
+        },
+        observation: RuntimeObservation::Returned(RuntimeGroundValue::Int((3).into())),
+    }
+}
+
+/// **`AC-6.1` — the canonical explicit-seed-env positive, through the port.**
+///
+/// The reachability count is what makes this a control rather than a
+/// restatement that the seed still works. `closure-capture-application` returns
+/// `7` on the `RecursiveDescent` lane too, so the observation alone cannot tell
+/// the two lanes apart. The paired zero -- same program, witness disarmed, the
+/// arm never reaching its handoff -- is the half that proves the count is
+/// measuring the port and not merely counting compilations.
+///
+/// **What the two assertions prove TOGETHER, and neither alone.** The count is
+/// taken before `call_declared_unit`, which can still refuse, so a count of 1
+/// on its own would not establish that a call instruction exists. Paired with a
+/// successful run that returns the seed's declared observation, it does: the
+/// program went through this arm AND the typed call path completed.
+///
+/// **Promise class: durable invariant.** The ported call must produce the seed's
+/// declared observation. `D3` removes the witness, not the property.
+#[test]
+fn d2_ac6_1_the_canonical_seed_runs_through_the_ported_callee_unit() {
+    let example = nc5_seed_examples()
+        .into_iter()
+        .find(|example| example.name == "closure-capture-application")
+        .expect("seed exists");
+
+    let (outcome, ports) = d2_run_ported(&example, &NativeSeedEnvironment::nc5_seed());
+    let report = outcome.expect("the ported callee unit compiles and runs");
+    assert_eq!(
+        report.observation, example.observation,
+        "AC-6.1: the ported call must produce the seed's declared observation"
+    );
+    assert!(report.verifier_passed);
+    assert_eq!(
+        ports, 1,
+        "AC-6.1: the ported arm must reach its handoff exactly once -- a zero here means the \
+         assertion above passed on the RecursiveDescent lane and says nothing about D2. With the \
+         successful run asserted above, this pair is the evidence for a completed typed unit call"
+    );
+
+    // The discriminating half: without the witness the selector still routes
+    // this program to `RecursiveDescent`, so the port must NOT run.
+    reset_seed_callee_unit_ports();
+    let unported = run_example_with_seed_observation(&example, &NativeSeedEnvironment::nc5_seed())
+        .expect("the seed still runs on the retained lane");
+    assert_eq!(
+        unported.observation, example.observation,
+        "the retained lane is unchanged by D2"
+    );
+    assert_eq!(
+        seed_callee_unit_ports(),
+        0,
+        "without the witness the selector retains the lane, so the port must not run. A nonzero \
+         here means the count is not measuring what AC-6.1 claims"
+    );
+}
+
+/// **`AC-6.2` — the missing-capture loud refusal, raised by the port itself.**
+///
+/// With the witness armed the refusal now comes from `D2`'s arm resolving a seed
+/// symbol through `lower_seed_capture`, not from the retained lane. The port
+/// count must be **zero**: the arm counts at its handoff point, after arity and
+/// every capture have resolved, so a capture refusal lands strictly before the
+/// count. That zero is evidence of refusal BEFORE the handoff -- a distinct and
+/// weaker claim than "nothing was emitted", which this counter cannot make.
+///
+/// **Promise class: durable invariant.** An unresolvable seed capture must fail
+/// closed and loudly, whichever lane reaches it.
+#[test]
+fn d2_ac6_2_a_missing_seed_capture_refuses_loudly_before_the_ported_handoff() {
+    let example = nc5_seed_examples()
+        .into_iter()
+        .find(|example| example.name == "closure-capture-application")
+        .expect("seed exists");
+
+    let (outcome, ports) = d2_run_ported(&example, &NativeSeedEnvironment::empty());
+    let error = outcome.expect_err("a missing seed capture must refuse");
+    assert!(
+        matches!(
+            error,
+            CraneliftBackendError::Unsupported(UnsupportedLowering {
+                construct: "Closure",
+                ..
+            })
+        ),
+        "AC-6.2: the refusal must name the Closure construct, not a generic backend failure: \
+         {error:?}"
+    );
+    assert_eq!(
+        ports, 0,
+        "AC-6.2: the refusal must precede the handoff -- a nonzero count means this arm passed \
+         inputs to the typed call path for a closure whose captures never resolved"
+    );
+}
+
+/// **`AC-6.3` — the ORDER-SENSITIVE `Parameter ++ Capture` control.**
+///
+/// This is the one `AC-6` calls not optional, and the reason is a live blindness
+/// rather than a hypothesis: the canonical seed computes `5 + 2 = 7`, and
+/// because addition is commutative it returns `7` under either input order. It
+/// cannot see the defect `D2` point 3 exists to prevent.
+///
+/// `sub_int` with argument `5` and capture `2` is the smallest witness that can.
+/// The ruled order yields `3`; a `Capture ++ Parameter` swap yields `-3`. The
+/// assertion is on the exact value, so a swap does not merely change a count --
+/// it names a different number.
+///
+/// **Promise class: durable invariant.** It pins the ABI input order of a
+/// ported seed-callee unit, which is a contract of the transport rather than a
+/// property of this fixture.
+#[test]
+fn d2_ac6_3_the_ported_unit_receives_parameters_before_captures() {
+    let example = d2_order_sensitive_example();
+
+    let (outcome, ports) = d2_run_ported(&example, &NativeSeedEnvironment::nc5_seed());
+    let report = outcome.expect("the order-sensitive fixture compiles and runs");
+    assert_eq!(
+        ports, 1,
+        "AC-6.3: the fixture must reach the ported arm's handoff, or the value below is about \
+         the retained lane"
+    );
+    assert_eq!(
+        report.observation,
+        RuntimeObservation::Returned(RuntimeGroundValue::Int((3).into())),
+        "AC-6.3: 5 - 2 = 3 under the ruled Parameter ++ Capture order. A -3 here is the exact \
+         Capture ++ Parameter swap this control exists to catch, and no commutative operator \
+         could have distinguished them"
+    );
+    assert!(report.verifier_passed);
 }
 
 // ─── RT-DECL-CLOSURE-PORT D5 — the split-domain validator's control group ──
