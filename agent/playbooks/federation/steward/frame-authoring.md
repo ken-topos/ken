@@ -163,20 +163,37 @@ forever. Re-scope the oracle to its own historical set and let a live-anchored
 property cover new files — confirming that live net exists first, or you trade
 a rubber stamp for a hole.
 
-### (c-prime) Never publish a bare `:line`. A coordinate is a time-sensitive operand.
+### (c-prime) Cite prose sites by GREP-ABLE PHRASE. A coordinate is a time-sensitive operand.
 
 **Promoted 2026-08-08 from `RT-CONTSPEC-LEDGER`, and it binds the frame author
 first because that is where the defect originated.**
 
-Cite a source site as **`path:line` measured at the SHA you are handing off**,
-or **by a grep-able phrase with no number at all.** Prefer the phrase.
+**The rule: cite by a grep-able phrase with no number.** Reach for `path:line`
+only when no phrase is stable, and then only at **the SHA you are handing off**.
 
-**A scoping header does not qualify a coordinate ninety lines below it.** That
-frame opened with *"All anchors are in `…/planning/static_transition.rs`"* and
-its `D4` then cited bare `:4729` and `:6304`. Downstream those acquired the
-wrong filename, and an auditor checking whether `D4` discharged would have
-opened live unrelated production code and concluded the deliverable never
-landed.
+> **Do not weaken this to "always attach a base to your coordinate." That
+> repair PASSES on the case that produced the rule and still fails.**
+>
+> That frame qualified its coordinates **three ways** — *"All anchors are in
+> `…/planning/static_transition.rs`"*, *"Measured by the Steward at
+> `0fd9f6e8…`"*, and *"read every line number as an anchor to re-find, never as
+> a value to check."* All three sat in one section. `D4` cited `:4729` and
+> `:6304` **ninety lines below it** and inherited none of them in practice.
+>
+> ⇒ **Distance defeats every qualifier equally.** A qualification that lives in
+> a different section does not travel to the citation. If a reader must scroll
+> to learn which file and which tree a number belongs to, it is unqualified at
+> the point of use.
+>
+> **And the base it named was true and irrelevant** — `0fd9f6e8` was one commit
+> behind the `5da614ba` the node was released at, so the coordinates were
+> correctly measured against **a tree no reader of that frame would ever check
+> out.** That is worse than an unqualified number, for the reason the Adversary
+> gave about the wrong filename: **it carries visible evidence of care.**
+
+Downstream those coordinates acquired the wrong filename, and an auditor
+checking whether `D4` discharged would have opened live unrelated production
+code and concluded the deliverable never landed.
 
 ⇒ **A citation pointing at a real thing that is not the thing is worse than one
 pointing at nothing.** A bad path 404s and gets fixed; a plausible-but-wrong
