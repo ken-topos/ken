@@ -1,6 +1,6 @@
 ---
 id: RT-CONTSPEC-WITNESS
-title: "ContinuationSpecialization seam 4 — integrated witness and closeout: the native population, the six formerly shadowed rows reclassified, the two host rows rerun, and the tracker closure of every node still open in the set"
+title: "ContinuationSpecialization seam 4 — integrated witness and closeout: the native population, the six formerly shadowed rows reclassified, the two host rows rerun, and the campaign closeout record"
 status: ready
 owner: runtime
 size: M
@@ -11,7 +11,7 @@ github: null
 origin: "Architect ownership/sizing ruling evt_1yymw1gdszpbs (2026-08-02), outcome (c) on RT-CONTSPEC-LOWER, seam 4 of four — the terminal seam that inherits RT-CONTSPEC-LOWER's tracker closure (three nodes as originally scoped; two as at 2026-08-08, RT-DECL-CLOSURE-PORT having merged separately). Steward-filed (agents cannot create tracked work per COORDINATION section 2)."
 ---
 
-# Seam 4 — the closeout, and the only seam that closes other nodes
+# Seam 4 — the integrated witness and campaign closeout
 
 Runs only after seams 1-3 land. Three deliverable populations:
 
