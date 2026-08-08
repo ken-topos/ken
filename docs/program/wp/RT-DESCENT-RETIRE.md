@@ -11,9 +11,18 @@ directive names, so this is a required node, not a tidy-up.**
 
 ⛔ **Read `docs/program/16-recursive-descent-retirement.md` first.**
 
-⛔ **Gated on all four migration nodes.** ⛔ Do not start until
-[[RT-DECL-CLOSURE-PORT]], [[RT-SEED-CALL-PORT]], [[RT-PRODUCER-MATCH-PORT]] and
-[[RT-RECURSOR-TRANSPORT]] have merged.
+⛔ **Gated on five nodes, not four.** ⛔ Do not start until
+[[RT-DECL-CLOSURE-PORT]], [[RT-SEED-CALL-PORT]], [[RT-PRODUCER-MATCH-PORT]],
+[[RT-RECURSOR-TRANSPORT]] **and [[RT-FNUNIT-RESULT-TOKEN]]** have merged.
+
+⛔ **The fifth is not a migration node and its gate is not "the class is
+retired."** `RT-FNUNIT-RESULT-TOKEN` owns `nc22`, the only program exercising a
+shape that **only the lane you are deleting supports**. It is `#[ignore]`d under
+that node's quarantine — so if you delete the lane first, the capability
+disappears and **the single row that would have caught it is already
+suppressed**. Its gate is `nc22` running **green on the `FunctionizedUnits`
+lane**, not the skip being tidied. Added 2026-08-08 by the Steward; that node
+was filed after this frame was written.
 
 ---
 
@@ -217,9 +226,10 @@ the proof is unavailable and any argument for it is circular.
 
 ## 6. ⛔ Banned scope
 
-- ⛔ **Starting before all four migration nodes merge.** A partial deletion is
-  strictly worse than none: it removes the fallback while a class can still
-  select it.
+- ⛔ **Starting before all five gating nodes merge** — the four migration nodes
+  and [[RT-FNUNIT-RESULT-TOKEN]]. A partial deletion is strictly worse than
+  none: it removes the fallback while a class can still select it, or while a
+  shape still has no other lane to run on.
 - ⛔ **Keeping the lane "just in case."** That is the half-migrated state the
   directive rules out. If a case still needs it, ⛔ **stop** — the campaign is
   not finished and the missing class is a node, not a retained fallback.
