@@ -228,6 +228,56 @@ fn rt_operand_desc(operand: &LoweringOperand) -> String {
     }
 }
 
+/// **`RT-RECURSOR-TRANSPORT` `D2` — the backedge-propagation counter and its
+/// suppression mutation.** Test-only.
+///
+/// The counter is not bookkeeping: the repair's claim is that the protocol
+/// marker is propagated *exactly once*, at the suffix-consumption boundary. A
+/// guard that never fired would leave the old refusal, and a guard that fired
+/// on an ordinary value would return early from a consumer that still owes its
+/// eliminator. Counting separates those from "it works".
+#[cfg(test)]
+thread_local! {
+    static RT_D2_BACKEDGE_PROPAGATIONS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static RT_D2_SUPPRESS_PROPAGATION: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// The DENOMINATOR. Counts arrivals at this seat with a real pending
+    /// suffix, so "zero propagations" can be read as "the guard declined" and
+    /// not as "the seat was never reached" -- a negative check passes for any
+    /// reason, and this is its positive control.
+    static RT_D2_SEAT_WITH_PENDING: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn rt_d2_seat_with_pending() -> usize {
+    RT_D2_SEAT_WITH_PENDING.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn record_rt_d2_backedge_propagation() {
+    RT_D2_BACKEDGE_PROPAGATIONS.with(|count| count.set(count.get() + 1));
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn rt_d2_backedge_propagations() -> usize {
+    RT_D2_BACKEDGE_PROPAGATIONS.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn reset_rt_d2_backedge_propagations() {
+    RT_D2_BACKEDGE_PROPAGATIONS.with(|count| count.set(0));
+    RT_D2_SEAT_WITH_PENDING.with(|count| count.set(0));
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn set_rt_d2_suppress_propagation(suppress: bool) {
+    RT_D2_SUPPRESS_PROPAGATION.with(|cell| cell.set(suppress));
+}
+
+#[cfg(test)]
+fn rt_d2_suppress_propagation() -> bool {
+    RT_D2_SUPPRESS_PROPAGATION.with(std::cell::Cell::get)
+}
+
 #[cfg(test)]
 fn selector_variant_exclusion() -> Option<RecursiveDescentResidual> {
     SELECTOR_VARIANT_EXCLUSION.with(std::cell::Cell::get)
@@ -1851,6 +1901,43 @@ impl<'a> Lowering<'a> {
         let Some((head, tail)) = active.pending.split_first() else {
             return Ok(value);
         };
+        #[cfg(test)]
+        RT_D2_SEAT_WITH_PENDING.with(|count| count.set(count.get() + 1));
+        // ⭐⭐ **`RT-RECURSOR-TRANSPORT` `D2` — PROPAGATE THE BACKEDGE PROTOCOL
+        // MARKER** (Architect `evt_bqg3gjwkp350`).
+        //
+        // `Lowered::RecursiveBackedge` is **not a value**. It says a
+        // tail-recursive edge has ALREADY been emitted as a CFG jump, the
+        // current block is predecessor-free, and every enclosing combinator
+        // must propagate the marker rather than consume it. Handing it to the
+        // outer ordinary eliminator asks a protocol token to be a constructor,
+        // which is the refusal `D1` measured.
+        //
+        // ⛔ The guard sits HERE, before `mint_continuation_cursor`, the
+        // successor `Active` frame and any eliminator work, so the
+        // predecessor-free path emits no suffix block, allocation, call, claim
+        // or occurrence-plan consumption. ⛔ It is deliberately NOT inside
+        // `lower_computational_match_value_composed`: that consumer should not
+        // hide an invalid caller handing it protocol machinery.
+        //
+        // ⛔ Matches `Specialized(RecursiveBackedge)` only — not `Trap`, not
+        // `Carried`, not any ordinary specialized variant. A pending active
+        // continuation over an ordinary value still consumes its next
+        // eliminator.
+        #[cfg(test)]
+        let suppress = rt_d2_suppress_propagation();
+        #[cfg(not(test))]
+        let suppress = false;
+        if !suppress
+            && matches!(
+                &value,
+                LoweringOperand::Specialized(Lowered::RecursiveBackedge)
+            )
+        {
+            #[cfg(test)]
+            record_rt_d2_backedge_propagation();
+            return Ok(value);
+        }
         let cursor = self.mint_continuation_cursor();
         let successor = EliminatorFrame::Active(ActiveContinuationFrame {
             activation: active.activation,

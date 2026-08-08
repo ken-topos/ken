@@ -158,3 +158,55 @@ the same shapes closed over a real constructor.
 
 **Suite at this candidate: 814 passed, 0 failed, 4 ignored** — the 812 baseline
 plus the two `D1` witnesses.
+
+---
+
+## D2 — position A closes, by propagating the backedge protocol marker
+
+Architect disposition `evt_bqg3gjwkp350`: hard stop 2 **not triggered**, node
+stays `M`, and the repair is a narrow protocol-marker propagation.
+
+**`Lowered::RecursiveBackedge` is not a value.** It records that a
+tail-recursive edge has already been emitted as a CFG jump and the current
+block is predecessor-free, so every enclosing combinator must propagate it.
+`lower_carried_computational_match` was right to return it; the defect was the
+next consumer. `resume_active_continuation` saw a non-empty pending suffix and
+unconditionally handed the marker to the outer ordinary eliminator, which asked
+a protocol token to be a constructor.
+
+The repair sits in `resume_active_continuation`, after the pending suffix is
+known and **before** cursor minting, the successor `Active` frame, and any
+eliminator work, so the predecessor-free path emits no suffix block,
+allocation, call, claim or occurrence-plan consumption. It matches
+`Specialized(RecursiveBackedge)` only.
+
+| run | seat arrivals | propagations | result |
+|---|---:|---:|---|
+| position A, functionized | 1 | **1** | `Returned(Int(Small(7)))` |
+| position A, retained | 1 | 0 | `Returned(Int(Small(7)))` |
+| position A, propagation suppressed | 1 | 0 | the exact `D1` refusal, replayed |
+| non-recursive control | **0** | 0 | executes; never reaches this seat |
+| position B | **0** | 0 | executes; never reaches this seat |
+
+**Both lanes now agree on position A's executed answer.**
+
+### Two corrections to my own earlier readings, kept rather than overwritten
+
+- I called an empty generated-context population "the edge". It is the
+  planner's documented mixed-population state: a context is minted only for a
+  causal call whose emission owner is a `Specialization`, and the trace's step
+  `A` records this one's owner as `Predeclared`. Never hard-stop-2 evidence.
+- I called `RecursiveBackedge` a mis-presented value. It is a protocol marker,
+  and manufacturing a carrier or constructor for it would have duplicated a
+  path that had already jumped.
+
+### The seat denominator, and why the zeros needed one
+
+The zeros above are only meaningful beside an arrival count. A program that
+never reaches `resume_active_continuation` with a pending suffix also reports
+zero propagations, and reading that as "the guard correctly declined" would be
+measuring absence. **Position B and the non-recursive control arrive zero
+times**, so their zeros say the repair is scoped, not that the guard declined
+on them; that is stated in the control rather than implied. The genuine
+same-seat non-backedge control is **position A's own retained lane**, which
+arrives, is declined, and still consumes its eliminator.

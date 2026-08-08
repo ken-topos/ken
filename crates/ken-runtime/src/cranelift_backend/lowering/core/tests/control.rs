@@ -11234,58 +11234,41 @@ fn rt_match_over_nonrecursive_computational_match() -> RuntimeExpr {
     }
 }
 
-/// **`RT-RECURSOR-TRANSPORT` `D1` position A — `MatchScrutineeRecursor` does
-/// NOT close for free. Routed as a refusal, not recorded as an outcome.**
+/// **`RT-RECURSOR-TRANSPORT` `D2` control 1 — position A now EXECUTES on the
+/// functionized lane and agrees with the retained lane.**
 ///
-/// Under the per-variant selector exclusion this position does not execute at
-/// all. Its first functionized result is a **compile-time refusal**:
-/// `Unsupported(ComputationalMatch)`, *"scrutinee is not a constructor value
-/// after ordinary expression lowering"*. Per the frame, a compile-time refusal
-/// that never executes **is not an outcome** — so this row records it as a
-/// refusal and claims nothing about behaviour.
+/// `D1` recorded this position refusing at lowering. `D2`'s protocol-marker
+/// propagation at `resume_active_continuation` repairs it: both lanes execute
+/// and produce the same decoded observation.
 ///
-/// ⭐ **The third assertion is what makes this the POSITION's refusal rather
-/// than my fixture's.** The control is the same ordinary-`Match`-over-
-/// `ComputationalMatch` shape with **no recursive position**: it is not a
-/// residual at all, takes the functionized lane with no exclusion set, and
-/// **executes**. The only difference between the two programs is the recursive
-/// position, so that is the discriminator. Without this the red would be
-/// equally consistent with "an ordinary match cannot consume a computational
-/// match at all", which is a different and much larger claim.
+/// ⭐ The third assertion is the same discriminator `D1` used and it is kept:
+/// the non-recursive same-shape control was never a residual and executes
+/// unaided, so this row's subject remains the recursive position rather than
+/// the shape.
 ///
-/// **Promise class: transition sentinel.** It reds when position A starts
-/// compiling on the functionized lane — which is exactly what `D2` is for. It
-/// retires when `D3` removes the variant.
+/// **Promise class: durable invariant.** The subject is that the two lanes
+/// agree on this position's executed answer. Every extension preserving the
+/// backedge protocol keeps it green.
 #[test]
-fn rt_d1_position_a_match_scrutinee_recursor_does_not_close_for_free() {
+fn rt_d2_position_a_executes_on_both_lanes_and_agrees() {
     let empty: BTreeMap<&str, &RuntimeDeclaration> = BTreeMap::new();
     let witness = rt_match_scrutinee_recursor_executable();
 
     assert_eq!(
         enumerate_recursive_descent_residuals(&witness, &empty),
         BTreeSet::from([RecursiveDescentResidual::MatchScrutineeRecursor]),
-        "the probe requires a SINGLE-variant witness: the exclusion removes one member, so any          second variant would leave the program retained and the probe would measure nothing"
-    );
-    assert_eq!(
-        rt_run(&witness),
-        "OK Returned(Int(Small(7)))",
-        "positive control: the position executes on the RETAINED lane, so the refusal below is          about the functionized lane and not about a broken fixture"
+        "single-variant witness: the exclusion removes one member, so a second variant would \
+         leave the program retained and the probe would measure nothing"
     );
 
-    let functionized = rt_run_functionized(
-        &witness,
-        RecursiveDescentResidual::MatchScrutineeRecursor,
-    );
-    assert!(
-        functionized.contains("scrutinee is not a constructor value after ordinary expression \
-lowering"),
-        "position A must still refuse at lowering with its own reason; if this changes, D1's \
-answer for this position has changed and D2 must be re-derived. got: {functionized}"
-    );
-    assert!(
-        functionized.starts_with("COMPILE-ERR"),
-        "the refusal must be a compile-time one that never executes -- that is precisely why it \
-is routed rather than recorded as an outcome. got: {functionized}"
+    let retained = rt_run(&witness);
+    assert_eq!(retained, "OK Returned(Int(Small(7)))", "retained lane");
+    let functionized =
+        rt_run_functionized(&witness, RecursiveDescentResidual::MatchScrutineeRecursor);
+    assert_eq!(
+        functionized, retained,
+        "D2: the functionized lane must EXECUTE and agree with the retained lane; a compile-time \
+         refusal here means the repair regressed"
     );
 
     let control = rt_match_over_nonrecursive_computational_match();
@@ -11296,8 +11279,124 @@ is routed rather than recorded as an outcome. got: {functionized}"
     assert_eq!(
         rt_run(&control),
         "OK Returned(Int(Small(7)))",
-        "DISCRIMINATOR: the same shape without a recursive position executes on the functionized \
-lane. So position A's refusal is the recursive position's, not the shape's"
+        "the same shape without a recursive position still executes unaided"
+    );
+}
+
+/// **`D2` control 3/4 — the propagation applies EXACTLY ONCE, and suppressing
+/// only it replays the exact `D1` refusal.**
+///
+/// ⛔ The seat denominator is what makes the zeros mean something. A run that
+/// never reaches `resume_active_continuation` with a pending suffix would also
+/// report zero propagations, and reading that as "the guard correctly declined"
+/// would be measuring absence. Every zero below is paired with a positive
+/// arrival count.
+///
+/// **Promise class: durable invariant** for the counts; the suppression arm is
+/// the A/B proof that the guard is what repairs position A.
+#[test]
+fn rt_d2_the_propagation_applies_once_and_suppressing_it_replays_the_refusal() {
+    use crate::cranelift_backend::lowering::core::{
+        reset_rt_d2_backedge_propagations, rt_d2_backedge_propagations, rt_d2_seat_with_pending,
+        set_rt_d2_suppress_propagation,
+    };
+    struct Restore;
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            set_rt_d2_suppress_propagation(false);
+        }
+    }
+
+    let witness = rt_match_scrutinee_recursor_executable();
+
+    // Functionized position A: exactly one propagation.
+    reset_rt_d2_backedge_propagations();
+    let functionized =
+        rt_run_functionized(&witness, RecursiveDescentResidual::MatchScrutineeRecursor);
+    assert_eq!(functionized, "OK Returned(Int(Small(7)))", "unmutated must execute");
+    assert_eq!(
+        rt_d2_backedge_propagations(),
+        1,
+        "exactly one propagation on the functionized position-A witness"
+    );
+
+    // Retained lane: the seat is reached, and the guard declines.
+    reset_rt_d2_backedge_propagations();
+    let retained = rt_run(&witness);
+    assert_eq!(retained, "OK Returned(Int(Small(7)))");
+    assert_eq!(
+        rt_d2_backedge_propagations(),
+        0,
+        "no propagation on the retained lane"
+    );
+
+    // SAME-SEAT NON-BACKEDGE CONTROL. The retained lane of the SAME program
+    // arrives at this seat with a pending suffix and a non-backedge value: the
+    // guard declines, the eliminator is still consumed, and the program
+    // executes. That is what makes the zero above a declined guard rather than
+    // an unvisited seat.
+    reset_rt_d2_backedge_propagations();
+    let retained_again = rt_run(&witness);
+    let retained_arrivals = rt_d2_seat_with_pending();
+    assert_eq!(retained_again, "OK Returned(Int(Small(7)))");
+    assert_eq!(
+        rt_d2_backedge_propagations(),
+        0,
+        "an ordinary value at this seat must NOT return early"
+    );
+    assert!(
+        retained_arrivals > 0,
+        "POSITIVE CONTROL: the non-backedge run must actually REACH this seat with a pending \
+         suffix, or its zero propagations measure absence rather than a declined guard. \
+         arrivals: {retained_arrivals}"
+    );
+
+    // ⛔ Stated rather than implied: position B and the non-recursive control
+    // report zero propagations because they NEVER REACH this seat -- measured
+    // arrivals are 0 for both. Their zeros are therefore evidence that the
+    // repair is scoped, and NOT evidence that the guard declined on them.
+    for (label, expr, excluded) in [
+        (
+            "position B",
+            rt_lexical_call_argument_recursor_executable(),
+            Some(RecursiveDescentResidual::LexicalCallArgumentRecursor),
+        ),
+        ("non-recursive control", rt_match_over_nonrecursive_computational_match(), None),
+    ] {
+        reset_rt_d2_backedge_propagations();
+        let _ = match excluded {
+            Some(variant) => rt_run_functionized(&expr, variant),
+            None => rt_run(&expr),
+        };
+        assert_eq!(
+            rt_d2_backedge_propagations(),
+            0,
+            "{label} must not propagate"
+        );
+        assert_eq!(
+            rt_d2_seat_with_pending(),
+            0,
+            "{label} is expected never to reach this seat; if it starts arriving, its zero \
+             propagation count changes meaning and this control must be re-read"
+        );
+    }
+
+    // A/B: suppress ONLY this propagation and the D1 refusal returns verbatim.
+    reset_rt_d2_backedge_propagations();
+    set_rt_d2_suppress_propagation(true);
+    let _restore = Restore;
+    let suppressed =
+        rt_run_functionized(&witness, RecursiveDescentResidual::MatchScrutineeRecursor);
+    assert_eq!(
+        rt_d2_backedge_propagations(),
+        0,
+        "the suppression must actually suppress; a non-zero here means the A/B proved nothing"
+    );
+    assert!(
+        suppressed.contains("scrutinee is not a constructor value after ordinary expression \
+lowering"),
+        "suppressing only this guard must replay the exact D1 refusal, which is what attributes \
+         the repair to this guard and not to something else that moved. got: {suppressed}"
     );
 }
 
@@ -11358,85 +11457,67 @@ fn rt_trace_field<'a>(entry: &'a str, key: &str) -> Option<&'a str> {
     Some(rest.split(' ').next().unwrap_or(rest))
 }
 
-/// **`RT-RECURSOR-TRANSPORT` `D2` causal trace — ONE ordered, correlated
-/// subsequence, and the edge it locates.**
+/// **`D2` control 2 — the corrected ordered chain, and the event that is now
+/// ABSENT.**
 ///
-/// Test-only evidence, authorized by Architect `evt_5we1eh4k2hhry` before any
-/// production `D2` edit.
+/// ⛔ **This supersedes two earlier readings of mine, both wrong.** The first
+/// called an empty generated-context population "the edge"; it is the planner's
+/// documented mixed-population state, and step `A` shows why — the emission
+/// owner is `Predeclared`, so no context is minted. The second called
+/// `RecursiveBackedge` a *mis-presented value*; it is **not a value at all**.
+/// It is a protocol marker saying a tail-recursive edge has already been
+/// emitted as a CFG jump and the current block is predecessor-free, so
+/// enclosing combinators must propagate it. `lower_carried_computational_match`
+/// was right to return it.
 ///
-/// ⛔ **This replaces a previous control that asserted three independent
-/// `trace.iter().any(...)` hits and called an empty generated-context
-/// population "the edge". Both were wrong.** Independent `any` checks can be
-/// satisfied by three strings from three unrelated lowering contexts, so they
-/// establish no chain; and `contexts=[]` is the planner's **documented,
-/// intentional** mixed-population state — `intern_generated_contexts` mints a
-/// context only for a causal call whose emission owner is a `Specialization`,
-/// and `[A]` below shows this one's owner is `Predeclared`. An absent context
-/// is therefore expected here and is never hard-stop-2 evidence.
+/// **The defect was the next consumer**, and the repair is that
+/// `resume_active_continuation` propagates the marker instead of handing it to
+/// the outer ordinary eliminator.
 ///
-/// **What this asserts instead:** a single subsequence at strictly increasing
-/// trace indices, every step keyed by the *same* `body_origin`,
-/// `continuation_origin` and `recursive_position` read off the first step
-/// rather than hardcoded, so it cannot be satisfied by unrelated events.
+/// The chain `A`-`D` is unchanged and still correlated on one
+/// `body_origin`/`continuation_origin`/`recursive_position`. What changed is
+/// the end: exactly one propagation, and **no composed-consumer event carrying
+/// `RecursiveBackedge`** — the absence is the point, so it is asserted rather
+/// than left to be noticed.
 ///
-/// ```text
-/// A  installed   owner=Predeclared  continuation_origin=C  position=P  body=B
-///                top=[ApplyRecursorSelection, Terminal]
-/// .  invocation  body=B  coords=Some((C, P))  -> raw target
-/// B  returned    body=B  C  P   phase=Carried   still installed=[ApplyRecursorSelection, ..]
-/// C  consumed    ApplyRecursorSelection  layer_origin=C
-/// D  consumed    ComputationalMatchScrutinee  match_origin=C  input phase=Carried
-/// E  consumer    actual_kind=RecursiveBackedge
-/// ```
-///
-/// ⭐ **The edge is between `D` and `E`, and it is not the raw-vs-context
-/// choice.** The installed continuation is present at `A`, still installed at
-/// `B`, and **consumed** at `C` and `D` — the carried word reaches the
-/// resumption point exactly as the source path intends. What the final consumer
-/// then receives is a **`RecursiveBackedge`**: neither the carried word nor a
-/// specialized constructor. The value is mis-presented *after* the continuation
-/// is consumed, by one consumer.
-///
-/// **Promise class: transition sentinel.** It pins the currently-measured
-/// chain, so a repair cannot be adopted without moving step `E`. It reds the
-/// moment the composed consumer stops seeing a `RecursiveBackedge`, which is
-/// what any lawful `D2` repair must cause, and retires with `D3`.
+/// **Promise class: durable invariant.** It pins that the marker reaches the
+/// suffix boundary and stops there.
 #[test]
-fn rt_d2_trace_locates_the_edge_at_the_composed_consumer() {
+fn rt_d2_trace_shows_the_marker_propagated_and_never_reaching_the_composed_consumer() {
+    use crate::cranelift_backend::lowering::core::{
+        reset_rt_d2_backedge_propagations, rt_d2_backedge_propagations,
+    };
     use crate::cranelift_backend::lowering::{reset_d5a_trace, take_d5a_trace};
     let witness = rt_match_scrutinee_recursor_executable();
 
     reset_d5a_trace();
+    reset_rt_d2_backedge_propagations();
     let functionized =
         rt_run_functionized(&witness, RecursiveDescentResidual::MatchScrutineeRecursor);
     let trace = take_d5a_trace();
-    assert!(
-        functionized.contains("scrutinee is not a constructor value after ordinary expression \
-lowering"),
-        "the trace is only meaningful on the run that still refuses: {functionized}"
+
+    assert_eq!(functionized, "OK Returned(Int(Small(7)))", "the repaired run must execute");
+    assert_eq!(
+        rt_d2_backedge_propagations(),
+        1,
+        "exactly one active-resume backedge propagation"
     );
 
-    // Step A fixes the correlation key for every later step.
     let (a, a_entry) = trace
         .iter()
         .enumerate()
         .find(|(_, entry)| entry.contains("RT-D2 A INSTALLED"))
-        .unwrap_or_else(|| panic!("no install step in trace: {trace:#?}"));
+        .unwrap_or_else(|| panic!("no install step: {trace:#?}"));
     let continuation = rt_trace_field(a_entry, "continuation_origin=")
-        .unwrap_or_else(|| panic!("install step names no continuation origin: {a_entry}"));
+        .unwrap_or_else(|| panic!("no continuation origin: {a_entry}"));
     let position = rt_trace_field(a_entry, "recursive_position=")
-        .unwrap_or_else(|| panic!("install step names no recursive position: {a_entry}"));
+        .unwrap_or_else(|| panic!("no recursive position: {a_entry}"));
     let body = rt_trace_field(a_entry, "body=Some(")
         .map(|body| body.trim_end_matches(')'))
-        .unwrap_or_else(|| panic!("install step names no body: {a_entry}"));
+        .unwrap_or_else(|| panic!("no body: {a_entry}"));
     assert!(
         a_entry.contains("owner=Some(Predeclared("),
-        "the emission owner must be recorded, and it is what makes an absent generated context \
-         expected rather than anomalous: {a_entry}"
-    );
-    assert!(
-        a_entry.contains("ApplyRecursorSelection"),
-        "the recursor invocation must be INSTALLED before the declared call: {a_entry}"
+        "the emission owner is what makes an absent generated context expected: {a_entry}"
     );
 
     let step = |from: usize, needle: &str, must: &[&str]| -> usize {
@@ -11446,25 +11527,17 @@ lowering"),
             .skip(from + 1)
             .find(|(_, entry)| entry.contains(needle) && must.iter().all(|f| entry.contains(f)))
             .map(|(index, _)| index)
-            .unwrap_or_else(|| {
-                panic!("no {needle} after index {from} carrying {must:?}: {trace:#?}")
-            })
+            .unwrap_or_else(|| panic!("no {needle} after {from} with {must:?}: {trace:#?}"))
     };
 
-    let invocation = step(
-        a,
-        "CARRIED-INVOCATION",
-        &[&format!("body={body}"), &format!("coords=Some(({continuation}, {position}"), "raw target"],
-    );
     let returned = step(
-        invocation,
+        a,
         "RT-D2 B RETURNED",
         &[
             &format!("body={body}"),
             &format!("continuation_origin={continuation}"),
             &format!("recursive_position={position}"),
             "phase=Carried",
-            "ApplyRecursorSelection",
         ],
     );
     let applied = step(
@@ -11477,13 +11550,15 @@ lowering"),
         "RT-D2 D COMPUTATIONAL-MATCH-SCRUTINEE",
         &[&format!("match_origin={continuation}"), "input[phase=Carried"],
     );
-    let consumer = step(resumed, "RT-D2 E COMPOSED-CONSUMER", &["actual_kind=RecursiveBackedge"]);
+    assert!(a < returned && returned < applied && applied < resumed, "the chain must be ordered");
 
     assert!(
-        a < invocation && invocation < returned && returned < applied
-            && applied < resumed && resumed < consumer,
-        "the chain must be ORDERED; got {a} < {invocation} < {returned} < {applied} < {resumed} \
-         < {consumer}"
+        !trace
+            .iter()
+            .any(|entry| entry.contains("RT-D2 E COMPOSED-CONSUMER")
+                && entry.contains("actual_kind=RecursiveBackedge")),
+        "THE ABSENCE IS THE REPAIR: the protocol marker must never reach the composed consumer. \
+         trace: {trace:#?}"
     );
 }
 
