@@ -33,7 +33,47 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-08 ~00:4xZ · `RT-SEED-CALL-PORT` active; `D5` closed and merged
+## LIVE — 2026-08-08 ~07:3xZ · `RT-CONTSPEC-LEDGER` merged; `RT-CONTSPEC-WITNESS` is the frontier
+
+**`main = 43e5903f`.** Runtime ring idle and compacting; zero open PRs.
+
+**Merged this session, in order:** `RT-PRODUCER-MATCH-PORT` (PR #1582),
+`RT-CONTSPEC-LEDGER` recut (#1584), `RT-CONTSPEC-WITNESS` correction (#1585),
+`RT-CONTSPEC-LEDGER` code (#1586, candidate `6e222eda`, `main = 22d2f549`),
+M7 tracker sync plus `D6b` fold (#1587).
+
+**Campaign state.** Three of five `RecursiveDescentResidual` classes retired
+(`TransparentDeclarationClosure`, `SeedClosureCall`, `ProducerMatchCall`).
+Surviving: `MatchScrutineeRecursor`, `LexicalCallArgumentRecursor`, both owned
+by `RT-RECURSOR-TRANSPORT`. ContinuationSpecialization seams 1-3 merged; seam 4
+(`RT-CONTSPEC-WITNESS`) is `ready` and verified shovel-ready.
+
+**Seam 3 was recut mid-flight from populate to DELETE** (Architect
+`evt_1v9m7t4m9dmj7`, sustaining hard stop 7). The four `BoundaryUse*` axes were
+an unowned schema fragment; zero occurrences now remain in `crates/`. The same
+ruling **superseded the Architect's own `evt_40ra70t92mjd2`**:
+`RT-DECL-CLOSURE-PORT` `D7` never owed a global boundary-use record, and is no
+longer a `depends_on` of the ledger seam.
+
+> ### THE NEXT STEWARD ACTION, if nothing else is pending
+>
+> **Release `RT-CONTSPEC-WITNESS` to Runtime.** Its frame is corrected and
+> audited: `AC-1`'s 138-row disposition is exhaustive and dischargeable, and
+> `AC-7`'s closure is **TWO** nodes (itself and `RT-RECURSOR-TRANSPORT`), not
+> three — `RT-DECL-CLOSURE-PORT` already merged. The compaction gate was
+> started on all three Runtime seats at ~07:3xZ; **verify from pane markers,
+> never from `moot compact`'s output.**
+
+> ### UNRESOLVED, and it needs the Architect — route it when `RT-RECURSOR-TRANSPORT` nears the frontier
+>
+> That node's frame carries a "what this node now owes" paragraph written while
+> `RT-DECL-CLOSURE-PORT` `D7` was unlanded, demanding a `BoundaryUse` record per
+> static lowering event. **I flagged it rather than resolving it** (2026-08-08).
+> The `BoundaryUse` it names is the **host-effect** population, not the four
+> deleted continuation axes — same word, different domain, and conflating them
+> is the exact confusion `D7` was built to prevent. **The flag is a caution the
+> text is stale, NOT a ruling the obligation is discharged. Nobody has measured
+> that.** Ask the Architect as "what remains owed against the merged `D7`?"
 
 > ### OPEN RISK CARRIED OUT OF `RT-SEED-CALL-PORT` — a cost that MOVED, with no code change to prompt a re-read
 >
