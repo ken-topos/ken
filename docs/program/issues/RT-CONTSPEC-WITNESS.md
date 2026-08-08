@@ -1,7 +1,7 @@
 ---
 id: RT-CONTSPEC-WITNESS
 title: "ContinuationSpecialization seam 4 — integrated witness and closeout: the native population, the six formerly shadowed rows reclassified, the two host rows rerun, and the campaign closeout record"
-status: ready
+status: merged
 owner: runtime
 size: M
 gate: none
