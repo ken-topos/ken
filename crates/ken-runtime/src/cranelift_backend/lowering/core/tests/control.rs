@@ -11075,6 +11075,556 @@ fn d1_active_recursor() -> RuntimeExpr {
     }
 }
 
+/// **`RT-RECURSOR-TRANSPORT` `D1` — a CLOSED active computational recursor.**
+///
+/// The classification fixtures above scrutinise `Var(0)`, which is free at the
+/// root: they are perfectly good for asking the classifier a question and
+/// cannot be compiled or run. `D1` needs an **executed** outcome, so this is
+/// the same shape closed over a real constructor.
+#[cfg(test)]
+fn rt_closed_active_recursor() -> RuntimeExpr {
+    RuntimeExpr::ComputationalMatch {
+        scrutinee: Box::new(RuntimeExpr::Construct {
+            constructor: "ctor:fixture::rt::Node".to_string(),
+            args: vec![RuntimeExpr::LexicalClosure {
+                captures: Vec::new(),
+                params: vec!["unit".to_string()],
+                body: Box::new(RuntimeExpr::Construct {
+                    constructor: "ctor:fixture::rt::Leaf".to_string(),
+                    args: Vec::new(),
+                }),
+            }],
+        }),
+        cases: vec![
+            crate::RuntimeComputationalMatchCase {
+                constructor: "ctor:fixture::rt::Node".to_string(),
+                argument_binders: 1,
+                recursive_positions: vec![0],
+                body: RuntimeExpr::Call {
+                    callee: Box::new(RuntimeExpr::Var(0)),
+                    args: vec![RuntimeExpr::Construct {
+                        constructor: "ctor:prelude::Unit::MkUnit".to_string(),
+                        args: Vec::new(),
+                    }],
+                },
+            },
+            crate::RuntimeComputationalMatchCase {
+                constructor: "ctor:fixture::rt::Leaf".to_string(),
+                argument_binders: 0,
+                recursive_positions: Vec::new(),
+                body: RuntimeExpr::Construct {
+                    constructor: "ctor:fixture::rt::Leaf".to_string(),
+                    args: Vec::new(),
+                },
+            },
+        ],
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "rt closed active recursor".to_string(),
+        },
+    }
+}
+
+/// **The exact `D1` position-A witness** — an ordinary `Match` consuming an
+/// active recursor, built as a **closed, executable expression**.
+///
+/// ⚠ "Closed" describes this **expression**: it scrutinises a real constructor
+/// rather than a free `Var`, so it can be compiled and run. It says nothing
+/// about the `MatchScrutineeRecursor` class. The bare word stood alone here
+/// until 2026-08-08, next to a withdrawn claim that *"position A closes"*, where
+/// it read as the class closing.
+#[cfg(test)]
+fn rt_match_scrutinee_recursor_executable() -> RuntimeExpr {
+    RuntimeExpr::Match {
+        scrutinee: Box::new(rt_closed_active_recursor()),
+        cases: vec![crate::RuntimeMatchCase {
+            constructor: "ctor:fixture::rt::Leaf".to_string(),
+            binders: 0,
+            body: RuntimeExpr::Value(RuntimeValue::Int(7.into())),
+        }],
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "rt match scrutinee recursor".to_string(),
+        },
+    }
+}
+
+/// `D1` position B: a lexical unit call whose argument is an active recursor.
+#[cfg(test)]
+fn rt_lexical_call_argument_recursor_executable() -> RuntimeExpr {
+    RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::LexicalClosure {
+            captures: Vec::new(),
+            params: vec!["x".to_string()],
+            body: Box::new(RuntimeExpr::Var(0)),
+        }),
+        args: vec![rt_closed_active_recursor()],
+    }
+}
+
+/// Runs `expr` and returns the **decoded observation** only.
+///
+/// ⛔ The raw native result token is deliberately dropped. It is a lane-internal
+/// pre-decode value -- the two lanes encode the same result differently, and
+/// `Leaf` arrives as token `0` on the retained lane and `517` on the
+/// functionized one. Comparing tokens across lanes would manufacture a
+/// difference where the semantics agree; the decoded `RuntimeObservation` is
+/// what the lanes are supposed to agree on, so that is what this returns.
+#[cfg(test)]
+fn rt_run(expr: &RuntimeExpr) -> String {
+    match crate::cranelift_backend::artifact::compile_expr_for_lowering_tests(
+        expr,
+        &NativeSeedEnvironment::empty(),
+    ) {
+        Err(error) => format!("COMPILE-ERR {error:?}"),
+        Ok(compiled) => match compiled.run(None) {
+            Err(error) => format!("RUN-ERR {error:?}"),
+            Ok((observation, _token)) => format!("OK {observation:?}"),
+        },
+    }
+}
+
+/// Runs `expr` under a `D1` per-variant selector exclusion, restoring the
+/// exclusion afterwards even if the body panics.
+#[cfg(test)]
+fn rt_run_functionized(expr: &RuntimeExpr, excluded: RecursiveDescentResidual) -> String {
+    struct Restore;
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            crate::cranelift_backend::lowering::core::set_selector_variant_exclusion(None);
+        }
+    }
+    crate::cranelift_backend::lowering::core::set_selector_variant_exclusion(Some(excluded));
+    let _restore = Restore;
+    rt_run(expr)
+}
+
+/// **The control for THAT EXACT WITNESS** — the SAME
+/// ordinary-`Match`-over-`ComputationalMatch` shape with **no recursive
+/// position**, so it is not a residual at all and takes the functionized lane
+/// with no exclusion set.
+///
+/// If this also refuses, **this witness's red** is about consuming a
+/// computational match at all and my fixture is the wrong instrument. If it
+/// compiles, **the recursive-position axis in this program is the
+/// discriminator**.
+///
+/// ⛔ **This pair separates two axes of ONE program; it establishes nothing
+/// about the `MatchScrutineeRecursor` class.** The last sentence read *"the red
+/// is the position's"* and the one above it *"position A's red"* — the withdrawn
+/// class-wide attribution, surviving in a helper's doc after the controls
+/// themselves were corrected. `d8d` is an A-population program on this same
+/// object whose refusal this pair says nothing about.
+#[cfg(test)]
+fn rt_match_over_nonrecursive_computational_match() -> RuntimeExpr {
+    let inert = RuntimeExpr::ComputationalMatch {
+        scrutinee: Box::new(RuntimeExpr::Construct {
+            constructor: "ctor:fixture::rt::Node".to_string(),
+            args: vec![RuntimeExpr::Value(RuntimeValue::Int(3.into()))],
+        }),
+        cases: vec![crate::RuntimeComputationalMatchCase {
+            constructor: "ctor:fixture::rt::Node".to_string(),
+            argument_binders: 1,
+            recursive_positions: Vec::new(),
+            body: RuntimeExpr::Construct {
+                constructor: "ctor:fixture::rt::Leaf".to_string(),
+                args: Vec::new(),
+            },
+        }],
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "rt inert computational match".to_string(),
+        },
+    };
+    RuntimeExpr::Match {
+        scrutinee: Box::new(inert),
+        cases: vec![crate::RuntimeMatchCase {
+            constructor: "ctor:fixture::rt::Leaf".to_string(),
+            binders: 0,
+            body: RuntimeExpr::Value(RuntimeValue::Int(7.into())),
+        }],
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "rt inert outer".to_string(),
+        },
+    }
+}
+
+/// **`RT-RECURSOR-TRANSPORT` `D2` control 1 — THE EXACT `D1` POSITION-A WITNESS
+/// executes on both lanes and agrees, after the repair at the exact
+/// `resume_active_continuation` seat.**
+///
+/// ⛔⛔ **THE SUBJECT IS THIS WITNESS, NOT THE POSITION.** This doc and this
+/// control's name previously said *"position A now EXECUTES on the functionized
+/// lane and agrees with the retained lane"* — a claim about the whole
+/// `MatchScrutineeRecursor` class. **That claim is false and is withdrawn.**
+///
+/// The counterexample is on this same object. `d8d_the_composed_binding_site_-`
+/// `is_live_and_neither_landed_population_installs_a_target` builds an
+/// A-population program — its complete residual set is exactly
+/// `{MatchScrutineeRecursor}` — and under an A-only selector exclusion it
+/// reaches `FunctionizedUnits` and **refuses**, with
+/// `Unsupported(RecursiveBackedge, "protocol machinery is never a source value
+/// at a boundary")`. That is measurable here, at `D2`, with this repair active.
+///
+/// ⇒ **`D2` is a safe PARTIAL position-A increment, not completion of position
+/// A.** It closes the exact `D1` witness at the exact repaired seat. The rest of
+/// the A population is **still open**, and `RT-MATCH-RECURSOR-CONSUMERS` owns
+/// closing it. Read a green run here as *"this witness, this seat"* and nothing
+/// wider.
+///
+/// ⭐ The third assertion is the same discriminator `D1` used and it is kept:
+/// the non-recursive same-shape control was never a residual and executes
+/// unaided, so this row's subject remains the recursive position rather than
+/// the shape.
+///
+/// **Promise class: durable invariant.** The subject is that **this witness's**
+/// two lanes agree on its executed answer. Every extension preserving the
+/// backedge protocol keeps it green.
+#[test]
+fn rt_d2_the_exact_position_a_witness_executes_on_both_lanes_and_agrees() {
+    let empty: BTreeMap<&str, &RuntimeDeclaration> = BTreeMap::new();
+    let witness = rt_match_scrutinee_recursor_executable();
+
+    assert_eq!(
+        enumerate_recursive_descent_residuals(&witness, &empty),
+        BTreeSet::from([RecursiveDescentResidual::MatchScrutineeRecursor]),
+        "single-variant witness: the exclusion removes one member, so a second variant would \
+         leave the program retained and the probe would measure nothing"
+    );
+
+    let retained = rt_run(&witness);
+    assert_eq!(retained, "OK Returned(Int(Small(7)))", "retained lane");
+    let functionized =
+        rt_run_functionized(&witness, RecursiveDescentResidual::MatchScrutineeRecursor);
+    assert_eq!(
+        functionized, retained,
+        "D2, FOR THIS WITNESS ONLY: the functionized lane must EXECUTE and agree with the \
+         retained lane; a compile-time refusal here means the repair regressed. This does NOT \
+         say position A is closed -- d8d is an A-population counterexample on this same object, \
+         and RT-MATCH-RECURSOR-CONSUMERS owns the rest of the population"
+    );
+
+    let control = rt_match_over_nonrecursive_computational_match();
+    assert!(
+        enumerate_recursive_descent_residuals(&control, &empty).is_empty(),
+        "the control must not be a residual at all"
+    );
+    assert_eq!(
+        rt_run(&control),
+        "OK Returned(Int(Small(7)))",
+        "the same shape without a recursive position still executes unaided"
+    );
+}
+
+/// **`D2` controls 3 and 4 — exact arrival, match and propagation counts, and
+/// an A/B whose mutated side is measured rather than assumed.**
+///
+/// ⛔ **The denominator is not uniform, and saying so is the point.** Two
+/// different zeros appear below and they mean different things:
+/// - position A retained *arrives* at the seat and the guard declines — a
+///   measured decline, paired with a positive arrival count;
+/// - position B and the non-recursive control **never arrive** (arrivals `0`),
+///   so their zero propagations are *scope* evidence and say nothing about the
+///   guard's behaviour.
+///
+/// ⛔ **Why the suppressed run counts MATCHES and not just propagations.** The
+/// production guard is `!suppress && matches!(..)` and short-circuits, so under
+/// suppression the `matches!` is never evaluated and a zero propagation count
+/// is guaranteed by construction. Asserting that zero alone would be an A/B
+/// whose mutated side proves nothing. The match counter is incremented *before*
+/// the guard, so the suppressed run shows the detector **would** have fired —
+/// one match, one arrival, zero completed propagations.
+///
+/// **Promise class: durable invariant** for the counts; the suppression arm is
+/// the A/B that attributes position A's repair to this guard specifically.
+#[test]
+fn rt_d2_exact_counts_and_the_suppression_ab() {
+    use crate::cranelift_backend::lowering::core::{
+        reset_rt_d2_backedge_propagations, rt_d2_backedge_matches, rt_d2_backedge_propagations,
+        rt_d2_seat_with_pending, set_rt_d2_suppress_propagation,
+    };
+    use crate::cranelift_backend::lowering::{reset_d5a_trace, take_d5a_trace};
+    struct Restore;
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            set_rt_d2_suppress_propagation(false);
+        }
+    }
+    let witness = rt_match_scrutinee_recursor_executable();
+
+    // (arrivals, matches, propagations) asserted EXACTLY, not as lower bounds:
+    // a duplicated seat consumption would still satisfy `> 0` while the record
+    // claims one.
+    reset_rt_d2_backedge_propagations();
+    let functionized =
+        rt_run_functionized(&witness, RecursiveDescentResidual::MatchScrutineeRecursor);
+    assert_eq!(functionized, "OK Returned(Int(Small(7)))");
+    assert_eq!(
+        (rt_d2_seat_with_pending(), rt_d2_backedge_matches(), rt_d2_backedge_propagations()),
+        (1, 1, 1),
+        "functionized position A: one arrival, one backedge match, one propagation"
+    );
+
+    reset_rt_d2_backedge_propagations();
+    assert_eq!(rt_run(&witness), "OK Returned(Int(Small(7)))");
+    assert_eq!(
+        (rt_d2_seat_with_pending(), rt_d2_backedge_matches(), rt_d2_backedge_propagations()),
+        (1, 0, 0),
+        "retained position A ARRIVES and the guard declines: a measured decline, not an \
+         unvisited seat"
+    );
+
+    for (label, expr, excluded) in [
+        (
+            "position B",
+            rt_lexical_call_argument_recursor_executable(),
+            Some(RecursiveDescentResidual::LexicalCallArgumentRecursor),
+        ),
+        ("non-recursive control", rt_match_over_nonrecursive_computational_match(), None),
+    ] {
+        reset_rt_d2_backedge_propagations();
+        let outcome = match excluded {
+            Some(variant) => rt_run_functionized(&expr, variant),
+            None => rt_run(&expr),
+        };
+        assert!(outcome.starts_with("OK "), "{label} must execute: {outcome}");
+        assert_eq!(
+            (rt_d2_seat_with_pending(), rt_d2_backedge_matches(), rt_d2_backedge_propagations()),
+            (0, 0, 0),
+            "{label} never reaches this seat; its zeros are SCOPE evidence and are not evidence \
+             about the guard's behaviour"
+        );
+    }
+
+    // A/B — suppress only the propagation. The mutated side must show the
+    // detector would have fired, and must reproduce the exact D1 refusal
+    // together with the E event that refusal is downstream of.
+    reset_rt_d2_backedge_propagations();
+    reset_d5a_trace();
+    set_rt_d2_suppress_propagation(true);
+    let _restore = Restore;
+    let suppressed =
+        rt_run_functionized(&witness, RecursiveDescentResidual::MatchScrutineeRecursor);
+    let trace = take_d5a_trace();
+    assert_eq!(
+        (rt_d2_seat_with_pending(), rt_d2_backedge_matches(), rt_d2_backedge_propagations()),
+        (1, 1, 0),
+        "the suppressed run must ARRIVE once and MATCH once while completing zero propagations; \
+         a zero-match reading would mean the suppression skipped the detector rather than the \
+         return, and the A/B would prove nothing"
+    );
+    // ⛔ FULL EQUALITY, not a substring. The rendered form pins all three facts
+    // the claim needs at once -- the COMPILE-TIME status, the `construct`, and
+    // the exact reason. A substring check permits a different status or a
+    // different `UnsupportedLowering.construct` carrying the same text, which
+    // is the same defect as asserting a message and calling it an oracle.
+    assert_eq!(
+        suppressed,
+        "COMPILE-ERR Unsupported(UnsupportedLowering { construct: \"ComputationalMatch\", \
+reason: \"scrutinee is not a constructor value after ordinary expression lowering\" })",
+        "suppressing only this guard must replay the exact D1 refusal -- same status, same \
+         construct, same reason"
+    );
+    let e_events = trace
+        .iter()
+        .filter(|entry| {
+            entry.contains("RT-D2 E COMPOSED-CONSUMER")
+                && entry.contains("actual_kind=RecursiveBackedge")
+        })
+        .count();
+    assert_eq!(
+        e_events, 1,
+        "the suppressed run must produce EXACTLY ONE composed-consumer event carrying the marker \
+         -- that event is what the refusal is downstream of, and asserting the message alone \
+         would let a different failure with the same substring pass. trace: {trace:#?}"
+    );
+}
+
+/// **`RT-RECURSOR-TRANSPORT` `D1` — THE EXACT POSITION-B WITNESS carries
+/// without a port. This is a result about this witness, not about the class.**
+///
+/// With this position excluded from the selector **this program** takes the
+/// functionized lane, **executes**, and produces the **same decoded
+/// observation** as the retained lane. The landed continuation machinery
+/// already carries **this witness**.
+///
+/// ⛔⛔ **"`LexicalCallArgumentRecursor` CLOSES FOR FREE" IS WITHDRAWN AS A
+/// CLASS-WIDE CLAIM**, along with *"nothing needs to be built for it"* and
+/// *"this position needs no port"*. This doc and this control's name asserted
+/// all three of the whole B population, on the strength of this one witness.
+///
+/// **The counterexamples are eight expressions across five test families**, each
+/// enumerating exactly `{LexicalCallArgumentRecursor}` and each refusing on the
+/// functionized lane under B-only exclusion — `px8j_owned_scope_deletion_...`,
+/// `px8j_all_three_producer_paths_...`, `px8j_siblings_share_an_origin_...`,
+/// `px8j_one_two_three_scope_segments_...` at depths 1, 2 and 3, and
+/// `px8j_selected_scope_partitions_...` before and after the hole. They reach
+/// four distinct boundaries. `RT-LEXICAL-RECURSOR-CONSUMERS` owns them.
+///
+/// ⇒ **What `D1` measured is exact and stands: this witness needs no port.**
+/// What it does not license is the step from one witness to the class, and that
+/// step was mine. A single executable witness cannot close a population whose
+/// members differ in scope depth, sibling origin and hole placement — the very
+/// dimensions the counterexamples vary.
+///
+/// ⛔ The raw native result token differs between the lanes (`0` retained,
+/// `517` functionized) and is deliberately not compared — see `rt_run`. It is a
+/// pre-decode lane-internal value, and the decoded observation is what the two
+/// lanes are required to agree on.
+///
+/// **Promise class: transition sentinel.** It pins that **this witness** needs
+/// no port. It reds if the functionized lane stops carrying it, and `D3`
+/// rewrites it when the variant and its test-only selector hook are retired
+/// together.
+#[test]
+fn rt_d1_the_exact_position_b_witness_carries_without_a_port() {
+    let empty: BTreeMap<&str, &RuntimeDeclaration> = BTreeMap::new();
+    let witness = rt_lexical_call_argument_recursor_executable();
+
+    assert_eq!(
+        enumerate_recursive_descent_residuals(&witness, &empty),
+        BTreeSet::from([RecursiveDescentResidual::LexicalCallArgumentRecursor]),
+        "single-variant witness, for the same reason as position A"
+    );
+
+    let retained = rt_run(&witness);
+    assert_eq!(
+        retained,
+        "OK Returned(Constructor { constructor: \"ctor:fixture::rt::Leaf\", args: [] })",
+        "positive control on the retained lane"
+    );
+
+    let functionized = rt_run_functionized(
+        &witness,
+        RecursiveDescentResidual::LexicalCallArgumentRecursor,
+    );
+    assert_eq!(
+        functionized, retained,
+        "D1 FOR THIS WITNESS ONLY: the functionized lane must EXECUTE and agree with the retained \
+         lane. A compile-time refusal here would mean this witness needs a port after all. This \
+         does NOT say the LexicalCallArgumentRecursor class needs no port -- eight px8j \
+         expressions in this same population refuse on the functionized lane, and \
+         RT-LEXICAL-RECURSOR-CONSUMERS owns them"
+    );
+    assert!(
+        functionized.starts_with("OK "),
+        "the outcome must be an executed one, not a refusal: {functionized}"
+    );
+}
+
+/// Pulls `key=` ... up to the next space out of one trace entry.
+#[cfg(test)]
+fn rt_trace_field<'a>(entry: &'a str, key: &str) -> Option<&'a str> {
+    let rest = entry.split_once(key)?.1;
+    Some(rest.split(' ').next().unwrap_or(rest))
+}
+
+/// **`D2` control 2 — the corrected ordered chain, and the event that is now
+/// ABSENT.**
+///
+/// ⛔ **This supersedes two earlier readings of mine, both wrong.** The first
+/// called an empty generated-context population "the edge"; it is the planner's
+/// documented mixed-population state, and step `A` shows why — the emission
+/// owner is `Predeclared`, so no context is minted. The second called
+/// `RecursiveBackedge` a *mis-presented value*; it is **not a value at all**.
+/// It is a protocol marker saying a tail-recursive edge has already been
+/// emitted as a CFG jump and the current block is predecessor-free, so
+/// enclosing combinators must propagate it. `lower_carried_computational_match`
+/// was right to return it.
+///
+/// **The defect was the next consumer**, and the repair is that
+/// `resume_active_continuation` propagates the marker instead of handing it to
+/// the outer ordinary eliminator.
+///
+/// The chain `A`-`D` is unchanged and still correlated on one
+/// `body_origin`/`continuation_origin`/`recursive_position`. What changed is
+/// the end: exactly one propagation, and **no composed-consumer event carrying
+/// `RecursiveBackedge`** — the absence is the point, so it is asserted rather
+/// than left to be noticed.
+///
+/// **Promise class: durable invariant.** It pins that the marker reaches the
+/// suffix boundary and stops there.
+#[test]
+fn rt_d2_trace_shows_the_marker_propagated_and_never_reaching_the_composed_consumer() {
+    use crate::cranelift_backend::lowering::core::{
+        reset_rt_d2_backedge_propagations, rt_d2_backedge_propagations,
+    };
+    use crate::cranelift_backend::lowering::{reset_d5a_trace, take_d5a_trace};
+    let witness = rt_match_scrutinee_recursor_executable();
+
+    reset_d5a_trace();
+    reset_rt_d2_backedge_propagations();
+    let functionized =
+        rt_run_functionized(&witness, RecursiveDescentResidual::MatchScrutineeRecursor);
+    let trace = take_d5a_trace();
+
+    assert_eq!(functionized, "OK Returned(Int(Small(7)))", "the repaired run must execute");
+    assert_eq!(
+        rt_d2_backedge_propagations(),
+        1,
+        "exactly one active-resume backedge propagation"
+    );
+
+    let (a, a_entry) = trace
+        .iter()
+        .enumerate()
+        .find(|(_, entry)| entry.contains("RT-D2 A INSTALLED"))
+        .unwrap_or_else(|| panic!("no install step: {trace:#?}"));
+    let continuation = rt_trace_field(a_entry, "continuation_origin=")
+        .unwrap_or_else(|| panic!("no continuation origin: {a_entry}"));
+    let position = rt_trace_field(a_entry, "recursive_position=")
+        .unwrap_or_else(|| panic!("no recursive position: {a_entry}"));
+    let body = rt_trace_field(a_entry, "body=Some(")
+        .map(|body| body.trim_end_matches(')'))
+        .unwrap_or_else(|| panic!("no body: {a_entry}"));
+    assert!(
+        a_entry.contains("owner=Some(Predeclared("),
+        "the emission owner is what makes an absent generated context expected: {a_entry}"
+    );
+
+    let step = |from: usize, needle: &str, must: &[&str]| -> usize {
+        trace
+            .iter()
+            .enumerate()
+            .skip(from + 1)
+            .find(|(_, entry)| entry.contains(needle) && must.iter().all(|f| entry.contains(f)))
+            .map(|(index, _)| index)
+            .unwrap_or_else(|| panic!("no {needle} after {from} with {must:?}: {trace:#?}"))
+    };
+
+    let returned = step(
+        a,
+        "RT-D2 B RETURNED",
+        &[
+            &format!("body={body}"),
+            &format!("continuation_origin={continuation}"),
+            &format!("recursive_position={position}"),
+            "phase=Carried",
+        ],
+    );
+    let applied = step(
+        returned,
+        "RT-D2 C APPLY-RECURSOR-SELECTION",
+        &[&format!("layer_origin={continuation}")],
+    );
+    let resumed = step(
+        applied,
+        "RT-D2 D COMPUTATIONAL-MATCH-SCRUTINEE",
+        &[&format!("match_origin={continuation}"), "input[phase=Carried"],
+    );
+    assert!(a < returned && returned < applied && applied < resumed, "the chain must be ordered");
+
+    assert!(
+        !trace
+            .iter()
+            .any(|entry| entry.contains("RT-D2 E COMPOSED-CONSUMER")
+                && entry.contains("actual_kind=RecursiveBackedge")),
+        "THE ABSENCE IS THE REPAIR: the protocol marker must never reach the composed consumer. \
+         trace: {trace:#?}"
+    );
+}
+
 /// **`AC-2` positive control 2 — every variant is reachable by the
 /// instrument.**
 ///

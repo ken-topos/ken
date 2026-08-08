@@ -136,6 +136,168 @@ fn residual_enumeration_mutation() -> ResidualEnumerationMutation {
     RESIDUAL_ENUMERATION_MUTATION.with(std::cell::Cell::get)
 }
 
+/// **`RT-RECURSOR-TRANSPORT` `D1` — the per-variant selector exclusion.**
+///
+/// Test-only. It answers one question and no other: *if this variant did not
+/// retain the monolithic root, what would this position actually do on the
+/// functionized lane?* That is the activation probe, and it cannot be asked
+/// without temporarily removing the retention.
+///
+/// ⭐ **It is built on [`enumerate_recursive_descent_residuals`], the landed
+/// non-short-circuiting walk, and not on a second walker.** The selector's own
+/// classifier short-circuits at the first residual, so subtracting one variant
+/// from *its* answer would silently also drop every variant it never reached —
+/// the probe would then read "nothing retains this" from an instrument that
+/// stopped looking. Enumerating first and removing exactly one member is the
+/// only subtraction that means what it says.
+///
+/// ⛔ Production is unchanged: with no exclusion set, the selector takes its
+/// original path, and the `#[cfg(test)]` gate means the branch does not exist
+/// in a production build.
+#[cfg(test)]
+thread_local! {
+    static SELECTOR_VARIANT_EXCLUSION: std::cell::Cell<Option<RecursiveDescentResidual>> =
+        const { std::cell::Cell::new(None) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn set_selector_variant_exclusion(
+    excluded: Option<RecursiveDescentResidual>,
+) {
+    SELECTOR_VARIANT_EXCLUSION.with(|cell| cell.set(excluded));
+}
+
+
+/// **`RT-RECURSOR-TRANSPORT` `D2` trace helpers.** Test-only.
+///
+/// The ordered continuation stack, top first. `SourceContinuation` has no
+/// `Debug`, and the ruling asks for *ordered kinds* rather than a rendering of
+/// the payloads, so this walks the `next` chain and names each frame.
+#[cfg(test)]
+fn rt_continuation_kinds(continuation: &SourceContinuation<'_>) -> Vec<&'static str> {
+    let mut kinds = Vec::new();
+    let mut cursor = continuation;
+    loop {
+        let (kind, next): (&'static str, Option<&SourceContinuation<'_>>) = match cursor {
+            SourceContinuation::Terminal(_) => ("Terminal", None),
+            SourceContinuation::CheckedRecursiveInvocationReturn { next, .. } => {
+                ("CheckedRecursiveInvocationReturn", Some(next))
+            }
+            SourceContinuation::CheckedComputationalIHInvocationReturn { next, .. } => {
+                ("CheckedComputationalIHInvocationReturn", Some(next))
+            }
+            SourceContinuation::ReturnFromSelectedCase { next, .. } => {
+                ("ReturnFromSelectedCase", Some(next))
+            }
+            SourceContinuation::LetBody { next, .. } => ("LetBody", Some(next)),
+            SourceContinuation::ApplyRecursorSelection { next, .. } => {
+                ("ApplyRecursorSelection", Some(next))
+            }
+            SourceContinuation::UnwindRecursorSegment { next, .. } => {
+                ("UnwindRecursorSegment", Some(next))
+            }
+            SourceContinuation::IfScrutinee { next, .. } => ("IfScrutinee", Some(next)),
+            SourceContinuation::ConstructArgument { next, .. } => ("ConstructArgument", Some(next)),
+            SourceContinuation::MatchScrutinee { next, .. } => ("MatchScrutinee", Some(next)),
+            SourceContinuation::ComputationalMatchScrutinee { next, .. } => {
+                ("ComputationalMatchScrutinee", Some(next))
+            }
+            SourceContinuation::ProjectRecord { next, .. } => ("ProjectRecord", Some(next)),
+            SourceContinuation::CallCallee { next, .. } => ("CallCallee", Some(next)),
+            SourceContinuation::CallArgument { next, .. } => ("CallArgument", Some(next)),
+        };
+        kinds.push(kind);
+        match next {
+            Some(next) => cursor = next,
+            None => break,
+        }
+    }
+    kinds
+}
+
+/// An operand's PHASE and concrete value kind, which the ruling asks for
+/// separately: "carried" and "specialized as a constructor" are different
+/// facts and conflating them is how a non-constructor reads as fine.
+#[cfg(test)]
+fn rt_operand_desc(operand: &LoweringOperand) -> String {
+    match operand {
+        LoweringOperand::Carried(_) => "phase=Carried kind=<carried word>".to_string(),
+        LoweringOperand::Specialized(lowered) => {
+            format!("phase=Specialized kind={}", lowered_value_kind(lowered))
+        }
+    }
+}
+
+/// **`RT-RECURSOR-TRANSPORT` `D2` — the backedge-propagation counter and its
+/// suppression mutation.** Test-only.
+///
+/// The counter is not bookkeeping: the repair's claim is that the protocol
+/// marker is propagated *exactly once*, at the suffix-consumption boundary. A
+/// guard that never fired would leave the old refusal, and a guard that fired
+/// on an ordinary value would return early from a consumer that still owes its
+/// eliminator. Counting separates those from "it works".
+#[cfg(test)]
+thread_local! {
+    static RT_D2_BACKEDGE_PROPAGATIONS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static RT_D2_SUPPRESS_PROPAGATION: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// The DENOMINATOR. Counts arrivals at this seat with a real pending
+    /// suffix, so "zero propagations" can be read as "the guard declined" and
+    /// not as "the seat was never reached" -- a negative check passes for any
+    /// reason, and this is its positive control.
+    static RT_D2_SEAT_WITH_PENDING: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// Backedge values SEEN at this seat, counted **before** the production
+    /// guard, so suppression cannot make it zero.
+    ///
+    /// ⛔ Without this the suppression arm proves nothing: the production guard
+    /// is `!suppress && matches!(..)`, which SHORT-CIRCUITS, so under
+    /// suppression the `matches!` is never evaluated and a zero propagation
+    /// count is guaranteed by construction rather than measured. The A/B needs
+    /// the mutated side to show the detector *would* have fired.
+    static RT_D2_BACKEDGE_MATCHES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn rt_d2_backedge_matches() -> usize {
+    RT_D2_BACKEDGE_MATCHES.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn rt_d2_seat_with_pending() -> usize {
+    RT_D2_SEAT_WITH_PENDING.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn record_rt_d2_backedge_propagation() {
+    RT_D2_BACKEDGE_PROPAGATIONS.with(|count| count.set(count.get() + 1));
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn rt_d2_backedge_propagations() -> usize {
+    RT_D2_BACKEDGE_PROPAGATIONS.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn reset_rt_d2_backedge_propagations() {
+    RT_D2_BACKEDGE_PROPAGATIONS.with(|count| count.set(0));
+    RT_D2_SEAT_WITH_PENDING.with(|count| count.set(0));
+    RT_D2_BACKEDGE_MATCHES.with(|count| count.set(0));
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn set_rt_d2_suppress_propagation(suppress: bool) {
+    RT_D2_SUPPRESS_PROPAGATION.with(|cell| cell.set(suppress));
+}
+
+#[cfg(test)]
+fn rt_d2_suppress_propagation() -> bool {
+    RT_D2_SUPPRESS_PROPAGATION.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+fn selector_variant_exclusion() -> Option<RecursiveDescentResidual> {
+    SELECTOR_VARIANT_EXCLUSION.with(std::cell::Cell::get)
+}
+
 /// The residual set the last compilation on this thread observed, or `None` if
 /// no compilation has run since the last reset.
 ///
@@ -974,6 +1136,25 @@ fn select_body_emission_authority(
     expr: &RuntimeExpr,
     declarations: &BTreeMap<&str, &RuntimeDeclaration>,
 ) -> BodyEmissionAuthority {
+    // `RT-RECURSOR-TRANSPORT` `D1` activation probe. Enumerate the FULL residual
+    // set, remove exactly the one variant under test, and let the remainder
+    // decide -- so a program still retained by some other variant keeps the
+    // retained lane and cannot be mistaken for this position working.
+    #[cfg(test)]
+    if let Some(excluded) = selector_variant_exclusion() {
+        let mut found = enumerate_recursive_descent_residuals(expr, declarations);
+        let was_present = found.remove(&excluded);
+        debug_assert!(
+            was_present,
+            "the D1 exclusion was set for a variant this program does not fire; the probe would \
+             then measure an ordinary functionized program rather than this position"
+        );
+        return if found.is_empty() {
+            BodyEmissionAuthority::FunctionizedUnits
+        } else {
+            BodyEmissionAuthority::RecursiveDescent
+        };
+    }
     if recursive_descent_residual(expr)
         .or_else(|| {
             declarations
@@ -1735,6 +1916,54 @@ impl<'a> Lowering<'a> {
         let Some((head, tail)) = active.pending.split_first() else {
             return Ok(value);
         };
+        #[cfg(test)]
+        RT_D2_SEAT_WITH_PENDING.with(|count| count.set(count.get() + 1));
+        // ⭐⭐ **`RT-RECURSOR-TRANSPORT` `D2` — PROPAGATE THE BACKEDGE PROTOCOL
+        // MARKER** (Architect `evt_bqg3gjwkp350`).
+        //
+        // `Lowered::RecursiveBackedge` is **not a value**. It says a
+        // tail-recursive edge has ALREADY been emitted as a CFG jump, the
+        // current block is predecessor-free, and every enclosing combinator
+        // must propagate the marker rather than consume it. Handing it to the
+        // outer ordinary eliminator asks a protocol token to be a constructor,
+        // which is the refusal `D1` measured.
+        //
+        // ⛔ The guard sits HERE, before `mint_continuation_cursor`, the
+        // successor `Active` frame and any eliminator work, so the
+        // predecessor-free path emits no suffix block, allocation, call, claim
+        // or occurrence-plan consumption. ⛔ It is deliberately NOT inside
+        // `lower_computational_match_value_composed`: that consumer should not
+        // hide an invalid caller handing it protocol machinery.
+        //
+        // ⛔ Matches `Specialized(RecursiveBackedge)` only — not `Trap`, not
+        // `Carried`, not any ordinary specialized variant. A pending active
+        // continuation over an ordinary value still consumes its next
+        // eliminator.
+        // ⛔ Counted BEFORE the guard, and deliberately not folded into it: the
+        // guard short-circuits on `!suppress`, so a suppressed run would never
+        // evaluate the `matches!` and its zero would be an artifact of the
+        // mutation rather than a measurement.
+        #[cfg(test)]
+        if matches!(
+            &value,
+            LoweringOperand::Specialized(Lowered::RecursiveBackedge)
+        ) {
+            RT_D2_BACKEDGE_MATCHES.with(|count| count.set(count.get() + 1));
+        }
+        #[cfg(test)]
+        let suppress = rt_d2_suppress_propagation();
+        #[cfg(not(test))]
+        let suppress = false;
+        if !suppress
+            && matches!(
+                &value,
+                LoweringOperand::Specialized(Lowered::RecursiveBackedge)
+            )
+        {
+            #[cfg(test)]
+            record_rt_d2_backedge_propagation();
+            return Ok(value);
+        }
         let cursor = self.mint_continuation_cursor();
         let successor = EliminatorFrame::Active(ActiveContinuationFrame {
             activation: active.activation,
@@ -2357,7 +2586,7 @@ impl<'a> Lowering<'a> {
                         // `BoundedNat` arm below uses. ⛔ Not `specialized_at`,
                         // ⛔ not a reconstructed `Lowered`, ⛔ not the producer.
                         if let LoweringOperand::Carried(word) = base {
-                            if let Some(body) = recursive_unit_body.filter(|_| {
+                    if let Some(body) = recursive_unit_body.filter(|_| {
                                 matches!(
                                     self.body_emission_authority,
                                     BodyEmissionAuthority::FunctionizedUnits
@@ -3528,6 +3757,22 @@ impl<'a> Lowering<'a> {
                 eliminators,
             );
         }
+        #[cfg(test)]
+        d5a_trace(format!(
+            "RT-D2 E COMPOSED-CONSUMER owner={:?} actual_kind={} eliminators={:?}",
+            self.defining_emission_owner,
+            lowered_value_kind(&scrutinee),
+            eliminators
+                .iter()
+                .map(|frame| match frame {
+                    EliminatorFrame::Computational(f) => ("Computational", Some(f.static_origin)),
+                    EliminatorFrame::Ordinary(f) => ("Ordinary", Some(f.static_origin)),
+                    EliminatorFrame::PendingLet(_) => ("PendingLet", None),
+                    EliminatorFrame::InvocationReturn => ("InvocationReturn", None),
+                    EliminatorFrame::Active(_) => ("Active", None),
+                })
+                .collect::<Vec<_>>(),
+        ));
         let Lowered::Constructor {
             constructor,
             synthesized_identity,
@@ -4997,6 +5242,14 @@ impl<'a> Lowering<'a> {
                         }
                         SourceContinuation::ApplyRecursorSelection { layer, next } => {
                             #[cfg(test)]
+                            d5a_trace(format!(
+                                "RT-D2 C APPLY-RECURSOR-SELECTION consumed \
+layer_origin={:?} layer_role={:?} next_top={:?}",
+                                layer.static_origin,
+                                layer.role,
+                                rt_continuation_kinds(next.as_ref()),
+                            ));
+                            #[cfg(test)]
                             match layer.role {
                                 RecursorLayerRole::SelectsOccurrence { origin } => {
                                     px8j_record_source_event(Px8jSourceTraceEvent::Selection {
@@ -5357,6 +5610,13 @@ impl<'a> Lowering<'a> {
                             next,
                         } => 'computational_scrutinee: {
                             self.enter_source_occurrence_plan(static_origin)?;
+                            #[cfg(test)]
+                            d5a_trace(format!(
+                                "RT-D2 D COMPUTATIONAL-MATCH-SCRUTINEE consumed \
+match_origin={static_origin:?} input[{}] frame_route={answer_route:?} next_top={:?}",
+                                rt_operand_desc(&value),
+                                rt_continuation_kinds(next.as_ref()),
+                            ));
                             // ⭐⭐ `AC-C4` — THE RESUMPTION POINT. An induction
                             // hypothesis over a carried child hands its word back
                             // as the machine's value, and it lands **here**: this
@@ -7433,6 +7693,16 @@ impl<'a> Lowering<'a> {
                         invocation,
                         checked_ih_invocation,
                     )?;
+                    #[cfg(test)]
+                    d5a_trace(format!(
+                        "RT-D2 A INSTALLED owner={:?} continuation_origin={:?} \
+recursive_position={:?} body={:?} installed=ok top={:?}",
+                        self.defining_emission_owner,
+                        carried_coordinates.continuation_origin,
+                        carried_coordinates.recursive_position,
+                        recursive_unit_body,
+                        rt_continuation_kinds(&suspended.continuation),
+                    ));
                     if let Some(body) = recursive_unit_body.filter(|_| {
                         matches!(
                             self.body_emission_authority,
@@ -7447,6 +7717,15 @@ impl<'a> Lowering<'a> {
                             &args,
                             Some(coordinates),
                         )?;
+                        #[cfg(test)]
+                        d5a_trace(format!(
+                            "RT-D2 B RETURNED body={body:?} continuation_origin={:?} \
+recursive_position={:?} returned[{}] still_installed_top={:?}",
+                            coordinates.continuation_origin,
+                            coordinates.recursive_position,
+                            rt_operand_desc(&value),
+                            rt_continuation_kinds(&suspended.continuation),
+                        ));
                         return Ok(SourceCallOutcome::Continue(SourceMachineState::Value {
                             // ⛔ `D6a`: a declared recursive-position UNIT call is
                             // not a lawful producer, and its result crosses a
@@ -11589,6 +11868,22 @@ impl<'a> Lowering<'a> {
                 ),
             ));
         }
+        // `RT-RECURSOR-TRANSPORT` `D2` trace: the CONTEXT POPULATION this
+        // resolution was answered from, so "raw target" can be read as "no
+        // context exists for this body" rather than merely "none was returned".
+        #[cfg(test)]
+        d5a_trace(format!(
+            "  RT-D2 CONTEXT-POPULATION body={body_origin:?} contexts={:?}",
+            self.static_transition_plan
+                .continuation_contexts()?
+                .iter()
+                .map(|context| (
+                    context.id(),
+                    context.worker_body_origin(),
+                    context.enclosing_specialization()
+                ))
+                .collect::<Vec<_>>()
+        ));
         #[cfg(test)]
         d5a_trace(format!(
             "  CARRIED-INVOCATION body={body_origin:?} coords={:?} -> {}",
