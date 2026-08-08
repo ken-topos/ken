@@ -1,8 +1,10 @@
-# RT-RECURSOR-TRANSPORT — `D0` re-census and `D1` activation probe
+# RT-RECURSOR-TRANSPORT — `D0` re-census, `D1` activation probe, `D2` repair
 
 **Base, pinned: `f4212c2cc8a990410f6a58c48ff482b681f2e706`.** Frame blob
 `80311af5`, node blob `ed829abd`, both verified present at that base before any
-edit. Every measurement below was taken on that tree.
+edit. **`D0` and `D1`'s measurements were taken on that tree; `D2`'s were taken
+on the `D2` candidate**, which is a different object — each section names the
+SHA its figures belong to.
 
 **`D1`'s answer is asymmetric.** One position closes for free; the other does
 not and is routed as a refusal. That is the input to the Steward's re-size, and
@@ -85,6 +87,10 @@ remainder after removal is empty by construction rather than by luck.
 
 ### Position A — `MatchScrutineeRecursor`: does NOT close for free
 
+⚠ **This section is the `D1` finding, measured at `2e5e6a8b`. It is HISTORY.**
+`D2` repairs this position and both lanes now execute — see the `D2` section.
+The refusal below is what `D1` measured, not what the current object does.
+
 | lane | outcome |
 |---|---|
 | retained (no exclusion) | **executes**, `Returned(Int(Small(7)))` |
@@ -156,8 +162,15 @@ the same shapes closed over a real constructor.
   one of them needs no transport at all. Whether the remaining position's
   transport is materially different from anything is a `D2` question.
 
-**Suite at this candidate: 814 passed, 0 failed, 4 ignored** — the 812 baseline
-plus the two `D1` witnesses.
+**Suite at the `D1` checkpoint `2e5e6a8b`: 814 passed, 0 failed, 4 ignored** —
+the 812 delta-free baseline plus exactly the two `D1` witnesses
+(`rt_d1_position_a_...`, `rt_d1_position_b_...`).
+
+⛔ **That figure is bound to `2e5e6a8b` and is not a current-candidate count.**
+`D2` adds controls, so the population moves; the count for whatever object you
+are reading is in that deliverable's own section, never here. A count that says
+"this candidate" is true only until the next commit, which is the defect this
+line previously had.
 
 ---
 
@@ -210,3 +223,14 @@ times**, so their zeros say the repair is scoped, not that the guard declined
 on them; that is stated in the control rather than implied. The genuine
 same-seat non-backedge control is **position A's own retained lane**, which
 arrives, is declined, and still consumes its eliminator.
+
+### Validation
+
+**Suite at the `D2` candidate: 816 passed, 0 failed, 4 ignored** — the 814 at
+`2e5e6a8b` plus the two `D2` controls. Targeted, same shell, anchor quoted
+before and after; never `--workspace`.
+
+Every count in this document is bound to the SHA it was measured at, and no
+count in it describes "the current candidate". A suite figure is destroyed by
+the next commit that adds a test, so a count labelled by position rather than
+by object is stale the moment it is true.
