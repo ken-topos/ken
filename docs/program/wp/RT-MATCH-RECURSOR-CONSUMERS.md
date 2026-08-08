@@ -101,6 +101,32 @@ under A-only exclusion at the pre-retirement base. **A mutation at each repaired
 root recreates the attributed refusal while proving the detector was reached.**
 Unaffected same-family controls stay green.
 
+> ### `D3` OWNS GIVING THE `D2` COUNTERS A CONSUMER — THEY CURRENTLY HAVE NONE
+>
+> **Added 2026-08-08 from an Adversary finding on merged `3061a645`; no
+> correctness defect, and the sequencing is not being reversed.**
+>
+> The accepted partial landed four `#[cfg(test)]` accessors and a mutation knob
+> — `mrc_d2_backedge_arms_seen`, `mrc_d2_inert_words`, `reset_mrc_d2_counts`,
+> `set_mrc_d2_suppress_inert_word` — with **zero callers anywhere in the repo**.
+> No test reads either counter, nothing ever sets the suppression, so the
+> `if !suppress_inert_word` guard has one reachable side. **No lint catches
+> this**: `dead_code` does not fire on `#[cfg(test)]` items at that visibility,
+> and CI is green.
+>
+> **The risk is citation, not correctness.** The denominator counter carries a
+> careful anti-vacuity rationale — counted *before* the representation arm, so
+> suppression cannot drive it to zero and "no inert word" reads as "the arm
+> declined" rather than "the seat was never reached." That reasoning is right
+> and currently **inert**. A future reader greps the counter, finds a documented
+> denominator with an explicit anti-vacuity argument beside it, and reasonably
+> concludes the property is **measured**. It is only **measurable**, and only
+> the first is what a reader takes away.
+>
+> ⇒ **`D3` either gives the accessors their consumer — which it needs anyway —
+> or states at the declaration site that they are unread until it does.** Either
+> discharges this; leaving them silent does not.
+
 ## 4. Acceptance criteria
 
 - **AC-1 — the population is closed by measurement, not by grep.**
