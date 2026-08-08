@@ -299,6 +299,14 @@ this is a strict sequence, not a fan-out.
 
 > ### ⛔⛔ CORRECTED 2026-07-29 — `PX8` IS **NOT** RELEASED AT #3
 >
+> **STATUS 2026-08-08: this block is now a record. Every gate it names has
+> merged** — `RT-DECL-CLOSURE-PORT` (#3, carrying `D7`) and
+> `RT-PRODUCER-MATCH-PORT`, to which it moved the ABI release gate, are both
+> `merged`. Its surviving lesson is the last paragraph, which still binds. Note
+> that `D7` did **not** in the end land atomically with anything; the atomic-pair
+> plan described further down this document is withdrawn — see the
+> non-operative-history fence.
+>
 > **#3 absorbs a consumer-matrix deliverable instead.**
 >
 > This section previously claimed *"`PX8` is released at #3… Foundation resumes
@@ -363,6 +371,43 @@ graph LR
 | 6 | `RT-FNUNIT-RESULT-TOKEN` | M | **Trap 2, filed 2026-08-08** — retiring `SeedClosureCall` made a shape newly reachable that the `FunctionizedUnits` lane does not support (`native result token 265 is not in the result table`). Owns `nc22`, currently `#[ignore]`d. **Gates #7**: it is the only program exercising a shape supported *only* by the lane #7 deletes. Its `M` is a **scoping** figure, not a measured one — the family width is unestablishable from a corpus holding one instance |
 | 7 | `RT-DESCENT-RETIRE` | M | delete the selector, enum, authority and lane; bank the win. Gated on **five** nodes — the four migration nodes **and #6** |
 | 8 | `RT-BACKEND-MODULE-SPLIT` | M | ⭐ **operator, 2026-07-31** — split the oversized `ken-runtime` backend files. ⛔ **After #7, never before** — see below |
+
+## NON-OPERATIVE HISTORY — superseded, down to the "#8" heading
+
+**Fenced 2026-08-08 by the Steward, on Architect finding `evt_4a8eb00h5349t`,
+under recut ruling `evt_237tbdsacqbk4`.**
+
+**Do not take an instruction from any block below this line and above the `#8`
+heading.** They are the 2026-07-29 to 2026-07-31 chronology of a plan that no
+longer exists. They are preserved because their *reasoning* is instructive and
+because several record real measurements — but every imperative in them is
+withdrawn, and they are written in the campaign author's present tense, which is
+exactly why this fence has to be categorical rather than clause-by-clause.
+
+Specifically, and these are the claims that will mislead you:
+
+| the fenced text says | the truth at `main` |
+|---|---|
+| `RT-DECL-CLOSURE-PORT` and `RT-RECURSOR-TRANSPORT` assemble **atomically** — one branch, one candidate, one PR, both flipping together | **Withdrawn.** `RT-DECL-CLOSURE-PORT` merged on its own. `RT-RECURSOR-TRANSPORT` branches from post-`RT-CONTSPEC-WITNESS` `main` and lands alone |
+| **"Cut from `c45a59a9`, not `820d3e53`"**; `c45a59a9` is preservation-only and the repair base | **Withdrawn.** Neither is a base |
+| `07ce6ef1` is the built ordering repair and the resume point | **Withdrawn, and this one is dangerous.** `07ce6ef1` is **not an ancestor of `main`**. Its `StaticRecursorWorker` has zero hits on `main`; the four core files have diverged by roughly +44,986/-16,942. Resuming or cherry-picking it would overwrite the landed continuation-specialization, ownership, ABI and ledger architecture |
+| the work grew into a planner **population re-derivation**: one `BoundaryUse` record per static lowering event, a choke-point API, unforgeable planned-edge tokens, a planned-vs-emitted ledger | **Withdrawn as superseded, not as unfinished.** `BoundaryUse` has **zero hits in `crates/`**. `D7`'s landed authority is `PlannedEffectSeat`, discharged for its own host-effect domain. There is no universal per-lowering-event authority and none is owed — separate exact authorities per semantic population is the design |
+| the recursor node is **#3-atomic** | It is **#6b**, size **M** provisional, gated on `RT-CONTSPEC-WITNESS` (merged) |
+| `#27` / the ordering repair / "what is owed" | All superseded by the recut. Read `docs/program/wp/RT-RECURSOR-TRANSPORT.md`, which is the only current statement of what that node owes |
+
+**Where the current contract lives:** `docs/program/wp/RT-RECURSOR-TRANSPORT.md`
+and `docs/program/issues/RT-RECURSOR-TRANSPORT.md`. If those and anything below
+disagree, they win and the text below is the stale one.
+
+**Why this is fenced rather than deleted.** Three of these blocks record
+measurements that were real when taken — the `1/7` parity run on `483ef7ab`, the
+`#27` refusal coordinates, the file-size table — and one records a genuinely
+useful general lesson (a probe "runnable at any time" was not "informative at any
+time"). Deleting them would lose that. But a dated heading dates the
+*observation*, not the *instruction* underneath it, and these blocks put live
+imperatives under dated headings. That is the trap this fence exists to close.
+
+---
 
 > ### ⭐⭐ REORDERED 2026-07-29 — THE HARDEST NODE MOVED FROM #6 TO #3-ATOMIC
 >
@@ -528,63 +573,81 @@ back **stronger** than the deliverable was scoped for — the node was framed to
 *build a transport*, and the ruling instead **eliminates the crossing**. ⛔ A frame
 that had only asked "build the transport" would have had no slot for that answer.
 
-### ⭐ #8 — the module split goes AFTER the capstone (operator, 2026-07-31)
+## END OF NON-OPERATIVE HISTORY — the rest of this document is live
+
+### #8 — the module split goes AFTER the capstone (operator, 2026-07-31)
+
+**Restated 2026-08-08 against the landed tree.** The ruling is the operator's
+and is unchanged; every measurement and every supporting ground below was
+re-derived at `main = 837f9296`, because the original was argued from
+`1e6eb5c6` and from a "#3-atomic" that no longer exists.
 
 The `ken-runtime` backend files are oversized again. A previous interlude of this
 exact shape produced the `cranelift_backend/` directory, and the operator asked
 whether to repeat it **now**, as a pause in this campaign, or after it.
 
-**Ruling: after.** ⛔ The split is `RT-BACKEND-MODULE-SPLIT`, node #8, gated on
-`RT-DESCENT-RETIRE`. Measured sizes on `main = 1e6eb5c6` (crate: 97,881 lines
-across 49 files):
+**Ruling: after.** The split is `RT-BACKEND-MODULE-SPLIT`, node #8, gated on
+`RT-DESCENT-RETIRE`. Measured at `main = 837f9296` — crate **155,921 lines across
+49 files**, up from 97,881 across the same 49 at `1e6eb5c6`:
 
-| file | lines |
-|---|---|
-| `cranelift_backend/lowering/mod.rs` | 11,197 |
-| `cranelift_backend/lowering/core/tests/control.rs` | 9,847 (test) |
-| `cranelift_backend/lowering/core.rs` | 9,788 |
-| `cranelift_backend/planning/static_transition.rs` | 9,034 → **>20,858** in #3-atomic's delta |
-| `boundary_value_clif.rs` | 8,691 |
+| file | lines | then, at `1e6eb5c6` |
+|---|---:|---:|
+| `cranelift_backend/lowering/core/tests/control.rs` | 26,443 (test) | 9,847 |
+| `cranelift_backend/planning/static_transition.rs` | 23,798 | 9,034 |
+| `cranelift_backend/lowering/mod.rs` | 19,604 | 11,197 |
+| `cranelift_backend/lowering/core.rs` | 16,640 | 9,788 |
+| `boundary_value_clif.rs` | 9,116 | 8,691 |
+| `cranelift_backend/lowering/core/tests/constructors.rs` | 9,283 (test) | — |
 
 **Three grounds, in order of weight.**
 
-1. ⭐⭐ **#7 SUBTRACTS FROM EXACTLY THESE FILES.** `RT-DESCENT-RETIRE` deletes
-   the classifiers, the enum, the authority and the whole lane across
-   `lowering/core.rs` (22 occurrences), `core/tests/control.rs` (16),
-   `lowering/mod.rs` (4), `planning/static_transition.rs` (3) and
-   `object_linker_packaging.rs` (1), and its `D6` retires or re-homes the lane's
-   tests. ⇒ Splitting first means **re-homing a lane into new modules and then
-   deleting it out of those new homes one node later** — paid twice, and the
-   second payment discards the first.
-2. **#4 and #5 are CONSUMERS of the transport, not authors of it.** The growth in
+1. **#7 subtracts from exactly these files.** `RT-DESCENT-RETIRE` deletes the
+   classifiers, the enum, the authority and the whole lane. `RecursiveDescent`
+   occurrences at `837f9296`: `core/tests/control.rs` **39**, `lowering/core.rs`
+   **28**, `lowering/mod.rs` **5**, `planning/static_transition.rs` **3**,
+   `lowering/units.rs` **1**, `object_linker_packaging.rs` **1**. Its `D6`
+   retires or re-homes the lane's tests. ⇒ Splitting first means **re-homing a
+   lane into new modules and then deleting it out of those new homes one node
+   later** — paid twice, and the second payment discards the first.
+2. **The transport is built; what remains are its consumers.** The growth in
    `static_transition.rs` came from *building* the continuation-specialization
-   mechanism at #3-atomic. Both remaining ports **ban a second transport** in
-   their frames and make needing one a hard stop and a re-cut. ⇒ The peak is
-   roughly **now**, not later.
-3. ⛔ **They contend on the same files** and cannot run concurrently, so this is
+   mechanism, which has now landed across `RT-DECL-CLOSURE-PORT` and the four
+   ContinuationSpecialization seams — all merged. `RT-SEED-CALL-PORT` and
+   `RT-PRODUCER-MATCH-PORT` are merged too. ⇒ **The peak has passed**, and a
+   split now would be sized against a tree #7 is about to shrink.
+3. **They contend on the same files** and cannot run concurrently, so this is
    purely an ordering question — and campaign-first is the order without rework.
 
-⚠ **The counter-hypothesis, stated so it can be revisited:** that large files are
-themselves making this work harder. No evidence was found for it here — #3's
-three hard stops were **semantic** (a false scalar-recursor premise; the dynamic
-same-tag continuation fork; census fidelity), and none gets easier in a smaller
-file. ⛔ But that is inferred from reports; the implementer and Architect are
-better placed to judge it than the Steward.
+**The counter-hypothesis, stated so it can be revisited:** that large files are
+themselves making this work harder. It has **not** been tested and the original
+grounds for dismissing it are weaker than they read — they were inferred from
+reports, and the hard stops cited as evidence were from one node. Since then the
+files have grown by another 58,000 lines crate-wide, and `RT-CONTSPEC-WITNESS`
+alone took **five bounded review corrections**, four of them one defect class
+(a withdrawn claim surviving in a leading sentence). Whether file size
+contributed to that is unmeasured in both directions. The implementer and
+Architect are better placed to judge it than the Steward.
 
-⭐ **The one place the counter-hypothesis could still win, and the cheap test.**
-#5 is the only remaining node that must do real work inside a 20k-line
-`static_transition.rs`. **At #3-atomic's merge, ask the Architect whether a
-narrow split of that one file should ride ahead of #5.** One exchange — far
-cheaper than an interlude, and it does not disturb this ordering if the answer
-is no.
+**The cheap test the original proposed is spent, and here is its replacement.**
+It said to ask the Architect, at "#3-atomic's merge", whether a narrow split of
+`static_transition.rs` should ride ahead of `RT-PRODUCER-MATCH-PORT`. Both that
+merge point and that node are now behind us, so the question was never put.
 
-⭐ **And #8 is cheaper than the precedent it is modelled on.**
-`static_transition.rs` **already has** a `static_transition/` subdirectory
-(`semantic_ir.rs` 2,729, `abi.rs` 1,601). The seam exists, so #8 **extends an
-established split** rather than inventing an architecture the way the original
-`cranelift_backend` extraction did. ⛔ #8 is deliberately left unframed until #7
-merges — the deletion changes where the natural module seams are, so a frame
-written now would be sized against a tree that is about to disappear.
+Re-aim it: **`RT-RECURSOR-TRANSPORT`'s `D2` may add a planner-owned binding, and
+that would land in a 23,798-line `static_transition.rs`.** Whether it does is
+exactly what its `D1` determines — `D1` may close both classes for free and add
+nothing. ⇒ **Ask the question at `D1`'s checkpoint, not before**, when there is a
+measured answer about whether any remaining node must do real work inside that
+file. One exchange, far cheaper than an interlude, and it does not disturb this
+ordering if the answer is no.
+
+**#8 is cheaper than the precedent it is modelled on.** `static_transition.rs`
+**already has** a `static_transition/` subdirectory (`semantic_ir.rs` 3,010,
+`abi.rs` 2,571). The seam exists, so #8 **extends an established split** rather
+than inventing an architecture the way the original `cranelift_backend`
+extraction did. #8 is deliberately left unframed until #7 merges — the deletion
+changes where the natural module seams are, so a frame written now would be
+sized against a tree that is about to disappear.
 
 ## 5. What "done" means
 
