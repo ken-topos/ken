@@ -274,6 +274,40 @@ general, little or nothing remains here.
   `sub_int` with argument `5` and capture `2`, expecting `3`. A swap yields
   `-3`.** Do not discharge this AC with a commutative operator.
 
+  **`AC-6.3` LANDED AND IS A GENUINE NON-DEGENERATE PAIR** (Adversary, on the
+  `D2` merge). The two mechanisms by which such a control goes green-under-swap
+  are both structurally closed: the expected value is a fresh literal
+  `RuntimeObservation::Returned(Int(3))` rather than a re-read of
+  `example.observation`, so the oracle is a constant and not a re-run; and the
+  callee unit's ABI is planner-owned and fixed before the arm runs, so a swap
+  delivers `[capture, parameter]` into a callee still expecting
+  `[parameter, capture]` — same arity, both `Int`, nothing refuses, and it
+  silently computes `-3`. **Nobody has executed it or committed a swap
+  mutation.** Structural closure of both blindness routes is a stronger claim
+  than "the assertions exist and are ordered"; it is not an execution.
+- **`AC-7` — `D3` MUST REACH THE PORTED ARM BY THE ROUTE IT SHIPS.** Added
+  2026-08-08 from the Adversary's `D2` hunt.
+
+  **Every `AC-6` control reaches the ported arm by ARMING A WITNESS. `D3`
+  reaches that same arm by REMOVING `SeedClosureCall` from the residual set.
+  Those are two different routes to one arm**, and the controls' promise class
+  already asserts they coincide — *"`D3` removes the witness, not the
+  property."*
+
+  ⇒ **That is an assertion, not a measurement**, and nothing before `D3` can
+  measure it, because production is inert until the residual goes.
+
+  **If the routes differ at all** — a check the witness short-circuits that
+  residual-removal does not, or the reverse — **every `AC-6` control transfers
+  its greenness to a path it never exercised.** A green is only as strong as
+  the space it ranged over, and that space is witness-armed, which is not the
+  space `D3` ships.
+
+  **Discharge:** one assertion that the ported arm is reached **with the
+  witness absent and the residual removed.** If the routes coincide it costs a
+  few lines; if they do not, it catches something that would otherwise have
+  shipped behind six green controls.
+
 ## 5. Banned scope
 
 - **Building a second transport** parallel to `RT-DECL-CLOSURE-PORT`'s.
