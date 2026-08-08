@@ -54,10 +54,29 @@ Trace the **exact** missing `ContinuationCallIdentity` — construct origin,
 continuation origin, alternative, recursive position, call-site sequence,
 target, and emission owner — **through the same program in both lanes.**
 
-**The retained lane is the control and it closes the same program.** Record
-whether the same identity is discharged **directly** or **compositionally**
-there. That answer is the single most informative fact available, and it is free
-because both lanes already run.
+> ### THE RETAINED-LANE CONTROL THIS FRAME PROMISED DOES NOT EXIST — MEASURED
+>
+> Steward, corrected 2026-08-08 at `evt_jzrg3nq5pggd` on the `D0` return.
+>
+> This frame claimed the retained lane's disposition for the identity was *"the
+> single most informative fact available, and free because both lanes already
+> run."* **`D0` measured it: the retained lane never opens a claim ledger for
+> this program.** No `OPEN`, no `LEDGER`, compile `Ok`. The identity is not
+> discharged directly, not compositionally, and **not planned** there.
+>
+> **The reasoning error was inferring from *both lanes run the same program* to
+> *both lanes traverse the same mechanism*.** They lower by different
+> strategies, so different causal populations are expected. **The shared input
+> is the program, not the ledger** — and a lane pair is a control only over
+> machinery both lanes actually enter.
+>
+> ⇒ **Any argument of the form "the retained lane discharges it as X" has
+> nothing under it.** It is equally **not** evidence the activated plan is
+> wrong.
+>
+> **What made this visible:** an `open` census, added because `close`
+> structurally cannot distinguish *not planned* from *never reached*. Keep that
+> instrument; the distinction is load-bearing for option 3.
 
 Denominators, one disposition per arrival, zero orphans, and **committed
 controls excluded from the denominator and named**. The **two independent A rows
@@ -97,9 +116,14 @@ require any of the following; all four are Architect-forbidden:
 
 ### `D3` — the end-state control
 
-**The activated lane closes the same program the retained lane closes.** That is
-the assertion held at `65639a13`, and this node inherits it verbatim as its
-acceptance control.
+**The activated lane compiles `Ok` on the program the retained lane compiles
+`Ok`.** That is the assertion held at `65639a13`, and this node inherits it as
+its acceptance control.
+
+**Read that as compilation, not as discharge parity.** `D0` measured that the
+retained lane never opens a claim ledger for this program at all, so there is no
+retained-lane disposition for this identity to agree with. The corrected
+statement of both `AC-5` and `AC-6` is in §3.
 
 **Assert the mechanism, not merely the absence of the refusal.**
 [[RT-CARRIED-ORDINARY-COMPOSITION]]'s `D3` established the trap: asserting the
@@ -126,8 +150,8 @@ has **no downstream effect**. Assert `> 0` for the mutated denominator and
 | `AC-2` | Exactly one of the three classifications is chosen, with the other two refuted on evidence | `D1` record |
 | `AC-3` | The repair sits at the authority `D1` named, and nowhere else | diff scope, stated against **both** the merge base and the `D0`/`D1` checkpoint |
 | `AC-4` | The ledger law is unchanged: exact set equality, both-sets refusal intact, `composed` still fed only from `function_local.composed_discharges` | verbatim check at the three sites |
-| `AC-5` | The activated lane closes the program the retained lane closes | the `65639a13` assertion, committed green |
-| `AC-6` | The retained lane's disposition for this identity is unchanged by the repair | lane-pair, both directions |
+| `AC-5` | The activated lane **compiles `Ok`** on the program the retained lane compiles `Ok` | the `65639a13` assertion, committed green. **Not "discharges the same identity"** — the retained lane discharges nothing here |
+| `AC-6` | The repair does not make the retained lane acquire a ledger obligation or stop compiling | lane-pair, both directions. A **guard**, not a discriminator |
 | `AC-7` | `D3` is non-vacuous on this candidate — suppressing the mechanism reds it | mutation, with the reached-count proven `> 0` |
 | `AC-8` | No `#[ignore]` added; `issues/` untouched; the five landed repairs intact | mechanical |
 | `AC-9` | Workspace green **in CI** | CI, never a local `--workspace` run |
@@ -136,6 +160,18 @@ has **no downstream effect**. Assert `> 0` for the mutated denominator and
 silently.** A repair that makes the activated lane close by changing what the
 retained lane does has not validated the campaign premise — it has hidden the
 divergence.
+
+**Both were re-stated on the `D0` return** (`evt_jzrg3nq5pggd`), because the
+retained lane turns out never to open a ledger for this program. `AC-6` survives
+as a **guard** — it still catches a repair that gives the retained lane an
+obligation it does not have — but it is **not** the discriminator this frame
+originally claimed, and it must not be cited as one.
+
+**The genuine free control `D0` produced instead** is the 213-identity
+population: `DIRECT 170`, `COMPOSED 34`, and — with all nine
+undischarged-or-double rows identified as committed controls — **no independent
+program reaching `close` undischarged**. Both discharge forms are well
+populated, so neither mechanism is exotic and this identity is the outlier.
 
 ## 4. Contention
 
