@@ -1555,10 +1555,43 @@ pub(super) fn define_continuation_bodies<M: Module>(
         })
         .collect::<Result<Vec<_>, CraneliftBackendError>>()?;
 
-    // Shape index for the `D4` redirect control: declared arity and capture
-    // count per specialization, which is the only same-shaped definition.
+    // Shape index for the `D7` definition-binding control: declared arity and
+    // capture count per specialization, which is the only same-shaped
+    // definition. Built BEFORE the loop because the loop consumes `emissions`.
+    //
+    // ⛔ Over the CALLABLE population, not over `emissions`. Measured, not
+    // reasoned: this fixture plans exactly one continuation specialization, so
+    // an index over specializations has a single entry and the control refuses
+    // for want of a partner that was never going to be there. The two
+    // same-shaped things are the worker BODIES, which is what `AC-9` means by
+    // "a distinct same-shaped target".
+    #[cfg(test)]
+    let d7_callable_index: Vec<((usize, usize), StaticOriginId)> = compiler
+        .static_transition_plan
+        .emittable_units()?
+        .iter()
+        .map(|emittable| {
+            (
+                (
+                    emittable
+                        .slots()
+                        .iter()
+                        .filter(|slot| slot.kind == AbiSlotKind::Parameter)
+                        .count(),
+                    emittable
+                        .slots()
+                        .iter()
+                        .filter(|slot| slot.kind == AbiSlotKind::Capture)
+                        .count(),
+                ),
+                emittable.origin(),
+            )
+        })
+        .collect();
+
     let mut defined = 0usize;
-    for unit in emissions {
+    #[cfg_attr(not(test), expect(unused_mut, reason = "only the D7 control mutates it"))]
+    for mut unit in emissions {
         // Resolve the EXACT target first; the control below perturbs only what
         // the definition is handed.
         let exact_id = bundle.continuation(unit.id).ok_or_else(|| {
@@ -1567,6 +1600,51 @@ pub(super) fn define_continuation_bodies<M: Module>(
             )
         })?;
         let id = exact_id;
+
+        // `RT-CONTSPEC-WITNESS` `D7`/`AC-9` — bind a DISTINCT same-shaped body
+        // under this exact declared `FuncId`.
+        //
+        // ⛔ `id` is `exact_id` and stays that way: the declared function, the
+        // specialization id, the causal token, the header, slots, offsets,
+        // inputs, owner and the emitted call are all untouched, and
+        // `verify_emitted_continuation_calls` remains enabled. The ONLY thing
+        // that moves is which body this declared function executes -- which is
+        // the residual the finished-CLIF equality gate explicitly cannot see.
+        #[cfg(test)]
+        if crate::cranelift_backend::lowering::CONTINUATION_EMISSION_MUTATION
+            .with(std::cell::Cell::get)
+            == ContinuationEmissionMutation::SubstituteContinuationBodyDefinition
+        {
+            let exact_shape = d7_callable_index
+                .iter()
+                .find(|(_, origin)| *origin == unit.worker_body_origin)
+                .map(|(shape, _)| *shape)
+                .ok_or_else(|| {
+                    backend_module(
+                        "the D7 definition-binding control could not read the exact worker \
+                         body's declared arity and capture count; a control that cannot \
+                         establish the shape it matches on must refuse rather than bind an \
+                         arbitrary body"
+                            .to_string(),
+                    )
+                })?;
+            let substitute = d7_callable_index
+                .iter()
+                .find(|(shape, origin)| {
+                    *shape == exact_shape && *origin != unit.worker_body_origin
+                })
+                .map(|(_, origin)| *origin)
+                .ok_or_else(|| {
+                    backend_module(
+                        "the D7 definition-binding control found no distinct same-shaped \
+                         callable body to bind under this declared function; that is a \
+                         missing fixture precondition, not a discharge"
+                            .to_string(),
+                    )
+                })?;
+            unit.worker_body_origin = substitute;
+            crate::cranelift_backend::lowering::record_d7_definition_binding_substitution();
+        }
 
         let offsets = unit.offsets.as_slice();
         let envelope = &unit.envelope;

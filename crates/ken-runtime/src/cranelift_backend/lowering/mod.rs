@@ -1365,6 +1365,68 @@ enum ContinuationEmissionMutation {
     /// integrated fixture must supply two distinct same-shaped targets in one
     /// lawful callable population.
     SubstituteEmittedFuncRef,
+    /// **`RT-CONTSPEC-WITNESS` `D7` — the two-target same-shaped call-site
+    /// redirect.**
+    ///
+    /// Selects a **distinct** target whose **declared arity and capture count**
+    /// equal the exact target's, per `RT-WORKER-BIND`'s definition of
+    /// same-shaped. Distinctness is on the emitted callable, never on origin
+    /// inequality; sameness is on the two declared counts, never on widths,
+    /// alignments, offsets, carriers, ownership or the frame header.
+    ///
+    /// ⛔ **REACHABILITY EVIDENCE ONLY. This control's mutated arm never
+    /// executes, and it is not an executed-result oracle.** The finished-CLIF
+    /// equality gate compares the emitted callee against
+    /// `bundle.continuation(identity.target())`, so moving only the emitted
+    /// `FuncRef` is rejected before the program runs. That is
+    /// `RT-CONTSPEC-ACTIVATE`'s static face.
+    ///
+    /// ⭐ **What it does prove, which is worth keeping.** In `ACTIVATE` the
+    /// same-shaped redirect refused with "found no distinct same-shaped call
+    /// target" **before** reaching the call, so it was not a control at all.
+    /// With a two-target population it resolves a distinct same-shaped target
+    /// and the seam is entered. That is a statement about **reach**, and it must
+    /// not be read as one about behaviour.
+    ///
+    /// ⇒ `AC-9`'s behavioural obligation is discharged elsewhere, by
+    /// [`ContinuationEmissionMutation::SubstituteContinuationBodyDefinition`],
+    /// which perturbs the declaration-to-body binding the equality gate cannot
+    /// see and yields a changed **executed** answer.
+    ///
+    /// ⛔ No fall back to exact. If this function declares no distinct
+    /// same-shaped target the control fails loudly rather than silently
+    /// becoming the identity.
+    RedirectToDistinctSameShapedTarget,
+    /// **`RT-CONTSPEC-WITNESS` `D7`/`AC-9` — the behavioural witness, at the
+    /// continuation DEFINITION-BINDING seat.** Architect ruling 2026-08-08.
+    ///
+    /// ⭐ **Why this seat and not the call site.** A call-site `FuncRef`
+    /// redirect is *structurally* unable to execute while the equality gate is
+    /// present: finished CLIF is compared against
+    /// `bundle.continuation(identity.target())`, so moving only the emitted
+    /// callee must reject before anything runs. But that left-hand side is
+    /// **not** a planner population — `UnitBundle::continuation` is the
+    /// lowering forward-declaration naming authority, and
+    /// `define_continuation_bodies` is the producer that binds each declared
+    /// continuation function to the body it executes.
+    ///
+    /// ⇒ The gate proves planner-identity to emitted-callee routing. It does
+    /// **not** prove that the declaration-to-body binding is right, or what the
+    /// bound body computes. That residual is `RT-CONTSPEC-ACTIVATE`'s own
+    /// stated one, and it is exactly what `AC-9` needs.
+    ///
+    /// This mutation substitutes the **body authority defined under the exact
+    /// continuation `FuncId`**, selected by the same declared-arity and
+    /// capture-count predicate as
+    /// [`ContinuationEmissionMutation::RedirectToDistinctSameShapedTarget`].
+    /// The causal token, specialization id, declared `FuncId`, header, slots,
+    /// offsets, inputs, owner and emitted call are all preserved, and
+    /// `verify_emitted_continuation_calls` stays enabled and **green
+    /// naturally** — so a red here cannot be the static gate firing.
+    ///
+    /// ⛔ No fall back to exact, and the application is counted: a control that
+    /// silently becomes a no-op would pass while measuring nothing.
+    SubstituteContinuationBodyDefinition,
     /// `4b` closure seam: emit the direct call but do not record it against its
     /// causal token, so the finished-CLIF sweep must notice an emission the
     /// records do not account for.
@@ -4726,6 +4788,36 @@ pub(in crate::cranelift_backend) fn record_d8o_body_key(
 #[cfg(test)]
 pub(in crate::cranelift_backend) fn d8o_body_keys() -> Vec<(Option<FuncId>, D8oBodyKey)> {
     D8O_BODY_KEYS.with(|log| log.borrow().clone())
+}
+
+/// **`D7`/`AC-9` positive application counter.**
+///
+/// ⛔ Required by the Architect's ruling, and it is not bookkeeping: the
+/// definition-binding mutation's whole claim is that a *different body* was
+/// bound under the exact declared `FuncId`. A mutation that quietly applied to
+/// nothing would leave the program executing its exact answer, and the test
+/// would then read an unchanged result as "the substitution had no effect"
+/// rather than as "no substitution happened". Those are opposite conclusions
+/// from identical evidence, so the count is what separates them.
+#[cfg(test)]
+thread_local! {
+    static D7_DEFINITION_BINDING_SUBSTITUTIONS: std::cell::Cell<usize> =
+        const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn record_d7_definition_binding_substitution() {
+    D7_DEFINITION_BINDING_SUBSTITUTIONS.with(|count| count.set(count.get() + 1));
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d7_definition_binding_substitutions() -> usize {
+    D7_DEFINITION_BINDING_SUBSTITUTIONS.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn reset_d7_definition_binding_substitutions() {
+    D7_DEFINITION_BINDING_SUBSTITUTIONS.with(|count| count.set(0));
 }
 
 /// **`D8o`** — the emitter body of every composed claim actually reached.

@@ -8262,31 +8262,90 @@ impl<'a> Lowering<'a> {
         // no other unit-call target the control rejects loudly rather than
         // silently becoming the identity.
         #[cfg(test)]
-        let target = if CONTINUATION_EMISSION_MUTATION.with(std::cell::Cell::get)
-            == ContinuationEmissionMutation::SubstituteEmittedFuncRef
-        {
-            let substitute = self
-                .function_local
-                .worker_calls
-                .values()
-                .chain(self.function_local.unit_calls.values())
-                .chain(self.function_local.declaration_calls.values())
-                .map(|call| call.function)
-                .find(|function| *function != exact_target.function)
-                .ok_or_else(|| {
-                    unsupported(
-                        "ContinuationSpecialization",
-                        "the D4 emitted-ref substitution found no other unit-call target declared \
-                         into this function; that is a fact about this function's declarations, \
-                         not a licence to import a FuncRef from another function",
-                    )
-                })?;
-            units::DeclaredUnitCall {
-                function: substitute,
-                ..exact_target
+        let target = match CONTINUATION_EMISSION_MUTATION.with(std::cell::Cell::get) {
+            ContinuationEmissionMutation::SubstituteEmittedFuncRef => {
+                let substitute = self
+                    .function_local
+                    .worker_calls
+                    .values()
+                    .chain(self.function_local.unit_calls.values())
+                    .chain(self.function_local.declaration_calls.values())
+                    .map(|call| call.function)
+                    .find(|function| *function != exact_target.function)
+                    .ok_or_else(|| {
+                        unsupported(
+                            "ContinuationSpecialization",
+                            "the D4 emitted-ref substitution found no other unit-call target \
+                             declared into this function; that is a fact about this function's \
+                             declarations, not a licence to import a FuncRef from another \
+                             function",
+                        )
+                    })?;
+                units::DeclaredUnitCall {
+                    function: substitute,
+                    ..exact_target
+                }
             }
-        } else {
-            exact_target
+            // `RT-CONTSPEC-WITNESS` `D7` reachability sentinel: redirect to a
+            // DISTINCT SAME-SHAPED target to show this seam is REACHED.
+            //
+            // ⛔ Not a behavioural oracle. The mutated arm is rejected by the
+            // finished-CLIF equality gate and never executes; `AC-9`'s executed
+            // witness is `SubstituteContinuationBodyDefinition`, at the
+            // definition-binding seat this gate cannot see.
+            //
+            // ⛔ The predicate is `RT-WORKER-BIND`'s: equal declared arity and
+            // equal capture count, read as the counts of this unit's own
+            // declared `Parameter` and `Capture` slots. It is deliberately NOT
+            // a comparison of ABI layout -- no width, alignment, offset,
+            // carrier, ownership or header is consulted -- and NOT origin
+            // inequality, which would make any other target qualify.
+            ContinuationEmissionMutation::RedirectToDistinctSameShapedTarget => {
+                // ⛔ Both sides are read from the SAME source -- each call's own
+                // declared record -- so the comparison cannot be an artefact of
+                // two different derivations disagreeing. The exact target is a
+                // continuation specialization and is not an `emittable_units`
+                // member, so a plan-side lookup answers `None` for it and the
+                // control would refuse for its own reason rather than measure
+                // anything. Measured, not reasoned: it did exactly that.
+                let declared_shape = |call: &units::DeclaredUnitCall| {
+                    (
+                        call.slots
+                            .iter()
+                            .filter(|slot| slot.kind == AbiSlotKind::Parameter)
+                            .count(),
+                        call.slots
+                            .iter()
+                            .filter(|slot| slot.kind == AbiSlotKind::Capture)
+                            .count(),
+                    )
+                };
+                let exact_shape = declared_shape(&exact_target);
+                let substitute = self
+                    .function_local
+                    .worker_calls
+                    .values()
+                    .chain(self.function_local.unit_calls.values())
+                    .chain(self.function_local.declaration_calls.values())
+                    .find(|call| {
+                        call.function != exact_target.function
+                            && declared_shape(call) == exact_shape
+                    })
+                    .map(|call| call.function)
+                    .ok_or_else(|| {
+                        unsupported(
+                            "ContinuationSpecialization",
+                            "the D7 same-shaped redirect found no DISTINCT target with the same \
+                             declared arity and capture count declared into this function; per \
+                             the frame that is a missing fixture precondition, not a discharge",
+                        )
+                    })?;
+                units::DeclaredUnitCall {
+                    function: substitute,
+                    ..exact_target
+                }
+            }
+            _ => exact_target,
         };
         #[cfg(not(test))]
         let target = exact_target;

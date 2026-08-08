@@ -10644,6 +10644,253 @@ fn d4_substituting_the_emitted_funcref_reds_the_emission_equality() {
     );
 }
 
+#[cfg(test)]
+fn d7_ctor(name: &str) -> RuntimeExpr {
+    RuntimeExpr::Construct {
+        constructor: name.to_string(),
+        args: Vec::new(),
+    }
+}
+
+#[cfg(test)]
+fn d7_run(expr: &RuntimeExpr) -> String {
+    match crate::cranelift_backend::artifact::compile_expr_for_lowering_tests(
+        expr,
+        &NativeSeedEnvironment::empty(),
+    ) {
+        Err(error) => format!("COMPILE-ERR {error:?}"),
+        Ok(compiled) => match compiled.run(None) {
+            Err(error) => format!("RUN-ERR {error:?}"),
+            Ok(observation) => format!("OK {observation:?}"),
+        },
+    }
+}
+
+/// **`RT-CONTSPEC-WITNESS` `D7` — the two same-shaped targets in one lawful,
+/// executing callable population.**
+///
+/// This is the fixture precondition the frame assigns to this seam, and it is
+/// the thing [[RT-CONTSPEC-ACTIVATE]] lacked: its generated function held
+/// exactly one call target, so a same-shaped redirect refused *before* the call
+/// seam and was never a control at all.
+///
+/// ⭐ **The second target is bound in the ENCLOSING scope, not as a second
+/// field of the aggregate, and that is forced rather than stylistic.** Two
+/// closures inside one `Construct` refuse with *"a closure cannot cross the
+/// boundary: it is runtime-local and live-domain only, and it has no durable
+/// lane"* — measured here at both `recursive_positions` configurations, `[0]`
+/// and `[0, 1]`. That is the same ordinary-`Closure` wall that stopped seam 2's
+/// six shapes. Binding the sibling in the enclosing scope keeps one closure per
+/// aggregate and lowers lawfully.
+///
+/// Both targets are same-shaped under `RT-WORKER-BIND`'s definition: declared
+/// arity 1, capture count 0. They differ only in the constructor their body
+/// returns, so **which one runs is observable in the result** — `Alpha` for the
+/// exact target, `Beta` for the other.
+#[cfg(test)]
+fn d7_two_same_shaped_targets_in_one_population() -> RuntimeExpr {
+    // One closure in the aggregate (the lawful ACTIVATE shape), and a SECOND
+    // same-shaped closure bound and called in the enclosing scope, so the two
+    // same-shaped targets never share an aggregate.
+    RuntimeExpr::Let {
+        value: Box::new(RuntimeExpr::LexicalClosure {
+            captures: Vec::new(),
+            params: vec!["unit".to_string()],
+            body: Box::new(d7_ctor("ctor:fixture::d7::Beta")),
+        }),
+        body: Box::new(RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(RuntimeExpr::Construct {
+                constructor: "ctor:fixture::d7::Node".to_string(),
+                args: vec![RuntimeExpr::LexicalClosure {
+                    captures: Vec::new(),
+                    params: vec!["unit".to_string()],
+                    body: Box::new(d7_ctor("ctor:fixture::d7::Alpha")),
+                }],
+            }),
+            cases: vec![
+                crate::RuntimeComputationalMatchCase {
+                    constructor: "ctor:fixture::d7::Node".to_string(),
+                    argument_binders: 1,
+                    recursive_positions: vec![0],
+                    body: RuntimeExpr::Call {
+                        callee: Box::new(RuntimeExpr::Var(0)),
+                        args: vec![d7_ctor("ctor:prelude::Unit::MkUnit")],
+                    },
+                },
+                crate::RuntimeComputationalMatchCase {
+                    constructor: "ctor:fixture::d7::Alpha".to_string(),
+                    argument_binders: 0,
+                    recursive_positions: Vec::new(),
+                    body: d7_ctor("ctor:fixture::d7::Alpha"),
+                },
+                crate::RuntimeComputationalMatchCase {
+                    constructor: "ctor:fixture::d7::Beta".to_string(),
+                    argument_binders: 0,
+                    recursive_positions: Vec::new(),
+                    body: d7_ctor("ctor:fixture::d7::Beta"),
+                },
+            ],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "d7 variant c is total".to_string(),
+            },
+        }),
+    }
+}
+
+#[cfg(test)]
+const D7_ALPHA: &str =
+    "OK (Returned(Constructor { constructor: \"ctor:fixture::d7::Alpha\", args: [] }), Some(517))";
+#[cfg(test)]
+const D7_BETA: &str =
+    "OK (Returned(Constructor { constructor: \"ctor:fixture::d7::Beta\", args: [] }), Some(517))";
+
+/// **`RT-CONTSPEC-WITNESS` `AC-9` — a wrong same-shaped target changes an
+/// EXECUTED result.** Architect ruling 2026-08-08.
+///
+/// Both runs **execute**. The mutation binds a distinct same-shaped body under
+/// the exact declared continuation `FuncId`, preserving the causal token,
+/// specialization id, declared `FuncId`, header, slots, offsets, inputs, owner
+/// and the emitted call — so `verify_emitted_continuation_calls` stays enabled
+/// and green naturally, and **the observed answer moves `Alpha` to `Beta`.**
+///
+/// ⭐ **Why this is `AC-9` and the call-seam redirect is not.** The finished-CLIF
+/// equality gate proves planner-identity to emitted-callee routing. It cannot
+/// see which *body* is bound to a declared function, which is
+/// `RT-CONTSPEC-ACTIVATE`'s own stated residual. This asserts the property that
+/// residual leaves open: **the declared target's behaviour depends on the body
+/// bound to it, so same-shaped bodies cannot alias unnoticed.**
+///
+/// ⛔ **The application counter is load-bearing, not bookkeeping.** A mutation
+/// that applied to nothing would leave the program returning `Alpha`, and an
+/// unchanged result would then read as "the substitution had no effect" when it
+/// means "no substitution happened" — opposite conclusions from identical
+/// evidence. Asserting `0` before and `1` after is what separates them.
+///
+/// The trailing re-run is the scope check: a mutation that leaked would redden
+/// every later test in this thread instead of this one.
+///
+/// **Promise class: durable invariant.** The subject is that a declared
+/// continuation executes the body bound to it. Every intended extension that
+/// keeps the declaration-to-body binding honest keeps this green.
+#[test]
+fn d7_binding_a_distinct_same_shaped_body_changes_the_executed_result() {
+    use crate::cranelift_backend::lowering::{
+        d7_definition_binding_substitutions, reset_d7_definition_binding_substitutions,
+    };
+    let witness = d7_two_same_shaped_targets_in_one_population();
+
+    reset_d7_definition_binding_substitutions();
+    let exact = d7_run(&witness);
+    assert_eq!(
+        exact, D7_ALPHA,
+        "positive control: the exact assembly must EXECUTE to the exact target's answer"
+    );
+    assert_eq!(
+        d7_definition_binding_substitutions(),
+        0,
+        "the exact run must apply no substitution; a control that fires unasked is measuring \
+         something other than the mutation"
+    );
+
+    let mutated = with_continuation_emission_mutation(
+        ContinuationEmissionMutation::SubstituteContinuationBodyDefinition,
+        || d7_run(&witness),
+    );
+    assert_eq!(
+        d7_definition_binding_substitutions(),
+        1,
+        "the mutation must actually have bound a distinct body; without this a no-op passes \
+         by returning the exact answer"
+    );
+    assert_eq!(
+        mutated, D7_BETA,
+        "AC-9: binding the other same-shaped body under the same declared function must change \
+         the EXECUTED result. A compile-time refusal here would be the wrong oracle"
+    );
+    assert_ne!(exact, mutated, "the two runs must be distinguishable");
+
+    reset_d7_definition_binding_substitutions();
+    assert_eq!(
+        d7_run(&witness),
+        D7_ALPHA,
+        "the mutation must not leak past its scope"
+    );
+}
+
+/// **`D7` part one — the fixture precondition is discharged: two same-shaped
+/// targets in one lawful population that actually EXECUTES.**
+///
+/// The frame assigns this precondition to this seam, and it is the half of
+/// `AC-9` that was genuinely missing. The assembly runs and returns the exact
+/// target's constructor.
+///
+/// **Promise class: durable invariant.** The subject is that this population is
+/// lawful and executable, and that the executed answer names which of the two
+/// same-shaped targets ran. Any extension preserving the declared-call contract
+/// keeps it green.
+#[test]
+fn d7_the_two_same_shaped_target_population_executes() {
+    assert_eq!(
+        d7_run(&d7_two_same_shaped_targets_in_one_population()),
+        "OK (Returned(Constructor { constructor: \"ctor:fixture::d7::Alpha\", args: [] }), Some(517))",
+        "the two-target population must execute and return the EXACT target's \
+         constructor; if this stops executing, D7's precondition has regressed \
+         and the redirect below is measuring nothing"
+    );
+}
+
+/// **`D7` part two — the same-shaped redirect now REACHES the call seam.**
+///
+/// ⭐ **This is the state change this seam produced, and it is not `AC-9`.**
+/// In [[RT-CONTSPEC-ACTIVATE]] the same-shaped redirect refused with *"found no
+/// distinct same-shaped call target"* **before** reaching the call, so it
+/// proved nothing about targets; that is why the Architect replaced it with
+/// [`ContinuationEmissionMutation::SubstituteEmittedFuncRef`]. With a real
+/// two-target population it now resolves a distinct same-shaped target and the
+/// call seam is entered.
+///
+/// ⛔ **REACHABILITY ONLY. This row observes no executed result and is not a
+/// behavioural oracle.** The redirect is caught by the finished-CLIF
+/// emission-equality gate -- the emitted callee disagrees with the declared
+/// continuation target -- so **the mutated arm never executes**. Read as a
+/// behavioural claim it would be [[RT-CONTSPEC-ACTIVATE]]'s `AC-2` restated,
+/// which observes the mutation changing the field it mutates.
+///
+/// ⇒ **`AC-9` is discharged, and not here.** Its executed witness is
+/// `d7_binding_a_distinct_same_shaped_body_changes_the_executed_result`, which
+/// perturbs the declaration-to-body binding this gate cannot see. **These two
+/// rows are complementary and neither substitutes for the other:** this one
+/// says the seam is reached, that one says the bound body determines the
+/// answer.
+///
+/// **Promise class: transition sentinel.** It reds when the emission-equality
+/// gate stops being what catches a same-shaped call-site redirect. That is a
+/// real event to be told about -- it would mean the reachability claim above
+/// needs re-establishing, and that `AC-9`'s witness is no longer isolated from
+/// the static gate. **It retires when the call-site redirect stops being a
+/// meaningful perturbation of this seam**, not when `AC-9` is discharged; `AC-9`
+/// already is.
+#[test]
+fn d7_the_same_shaped_redirect_reaches_the_call_seam_and_is_caught_by_the_emission_oracle() {
+    let witness = d7_two_same_shaped_targets_in_one_population();
+    let rendered = with_continuation_emission_mutation(
+        ContinuationEmissionMutation::RedirectToDistinctSameShapedTarget,
+        || d7_run(&witness),
+    );
+    assert!(
+        !rendered.contains("found no DISTINCT target"),
+        "the redirect must REACH the call seam, not refuse before it for want of \
+         a second same-shaped target -- that pre-call refusal is what made this \
+         control vacuous in ACTIVATE. got: {rendered}"
+    );
+    assert!(
+        rendered.contains("disagrees with the planner-issued continuation target"),
+        "the redirect must be caught by the emission-equality oracle, naming the \
+         target disagreement. got: {rendered}"
+    );
+}
+
 /// **`4b` closure — an emitted call that is not recorded is still caught.**
 ///
 /// Without this the gate would be complete only over the set it built itself:
