@@ -33,7 +33,7 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-07 ~22:1xZ · `D0`-`D4b` merged, `D5` kicked; operator set the sequence
+## LIVE — 2026-08-08 ~00:0xZ · `D5` publishing; the node closes on it
 
 > ### OPERATOR SEQUENCING RULING — 2026-08-07, verbatim intent. THIS GOVERNS.
 >
@@ -64,88 +64,99 @@
 
 > ### NEXT ACTION ON RESUME — read this line first
 >
-> **NOTHING IS OWED BY ME. `D5` is with the ring; wait for its handoff.**
-> Kicked at `evt_695b5s1dv3v0s` from `origin/main` `70d6c384`; the claim sweep
-> was added at `evt_andxjqnc2srb`. `main` is now **`ed0eb80c`**.
+> **`D5` IS MERGED. `RT-CARRIER-BYTESPAN-OBSERVE` IS CLOSED.** PR #1555 from
+> exact `f49a2255`, squashed to `origin/main` **`e0fc15c3`**. **M6 done — all
+> 15 paths blob-verified.** M7 done in this same commit: node flipped `merged`,
+> tracker regenerated.
 >
-> **`D0` THROUGH `D4b` ARE MERGED.** `D4b` landed as **PR #1549** from exact
-> `fe6bd4f4`, four paths blob-verified; M8 sent (`evt_45r2dzea3trk`).
-> Doc follow-ups: **#1550** (the `AC-10` narrowing), **#1551** (the headline
-> rewrite).
+> **⇒ `RT-SEED-CALL-PORT` IS THE NEXT ACTION.** The operator's named entry
+> point: `ready`, dep merged, frame glyph-clean as of PR #1553. Compact the
+> Runtime ring first (§15 — Steward compacts the team before delivering a WP,
+> gated on retros being in), then kick it.
+>
+> **STILL OWED BY ME after this publish — two items, neither optional:**
+>
+> 1. **M8 — notify the Adversary.** Code merge, 15 crates files. **No
+>    acknowledgement of any kind, ever** (§10⁻a). If you cannot find an M8 post
+>    for `e0fc15c3`, it was not sent.
+> 2. **M3 FOLLOW-UP — route TWO cited sources to the LIBRARIAN:**
+>    `crates/ken-cli/tests/px4b_native_production.rs` and
+>    `crates/ken-cli/tests/rt_parity_native.rs` are in
+>    `library/SOURCE-ATTESTATIONS`. **Never into the ring's frame.**
+>
+> ## `D5` WAS HARD-STOPPED AND RE-CUT — 2026-08-07 (PR #1554)
+>
+> **29 of the 30 quarantined rows do not discharge from the byte-span
+> mechanism.** Each `Fs*` path seat is read twice: once as a wire span, which
+> the observer satisfies, and once as `SiteOperand(0)` of the synthesized
+> `FileError`, which demands a **compile-time `Lowered` template**. Supplying
+> that from a boundary word is the `Carried -> Lowered` inverse §5 bans.
+>
+> **I confirmed it structurally, independent of the implementer's runtime
+> measurement:** `site_operand_argument` (`lowering/mod.rs:11354-11362`) calls
+> `seats.specialized(...)?`, and `mod.rs:11650-11654` states the refusal in the
+> code's own voice. **Activating a seat and reading it as `SiteOperand` are in
+> direct structural conflict.**
+>
+> **The recut, all three parts landed:**
+>
+> - **`D5` re-scoped** — the all-30 un-skip bar is retired, replaced by an
+>   **attributed-residue** bar (remove what the byte-span gap caused, restate
+>   every remaining row with its measured cause, pin the count). **Not a
+>   reduction in rigour** — an unattributed residue is how a quarantine outlives
+>   its defect.
+> - **[[RT-SITEOP-CARRIED-WITNESS]] filed `draft`** — owns the 29 rows, the four
+>   `SPECIALIZED_ONLY` seats, and the mechanism. **`draft` because a design fork
+>   is OPEN, not because it is unscoped.**
+> - **`D6` MOVED there** — its premise was "`D5` is the activation" and the
+>   activation is now split. **That is what lets this node close on `D5`.**
+>
+> **OWED BY ME, DEFERRED DELIBERATELY: route the `RT-SITEOP-CARRIED-WITNESS`
+> mechanism fork to the Architect when that node approaches the frontier — NOT
+> now.** Routing it now inserts work ahead of the campaign, which the operator's
+> sequencing forbids without asking. The node cannot go `ready` until it is
+> ruled.
+>
+> **`(FsWriteFile, Argument(2))` is activated with NO end-to-end row** — its
+> sibling path seat blocks every program that reaches it. That satisfies `AC-4`
+> as written (per-seat evidence), and the implementer flagged it rather than
+> letting it ride. **The hazard is ATTRIBUTION**: the receiving node is the first
+> that can exercise it, so a failure there traceable to the activation belongs to
+> `RT-CARRIER-BYTESPAN-OBSERVE`, not to that node. Recorded in its frame §7.
+>
+> ## Carried from the prior window — still true
 >
 > **`AC-10` IS DISCHARGED ONLY IN THE NARROWED FORM — construction authority,
-> NOT provenance. I PUBLISHED THE STRONGER CLAIM AND IT WAS WRONG.**
-> `rebuild_from_collected(self, pointer, len)` returns `Self { pointer, len }`
-> — **the receiver is never read**, so it proves a caller *holds* a span
-> without constraining the values it returns. That is a **bearer/warrant
-> condition, not a dataflow proof.** Caught by Adversary `evt_6fkpg1wyh6mzr`;
-> ruled by the Architect at **`dec_5ghh87fvg7skn`** — take the claim
-> correction.
+> NOT provenance. I published the stronger claim and it was wrong.**
+> `rebuild_from_collected(self, pointer, len)` returns `Self { pointer, len }` —
+> **the receiver is never read**. A bearer/warrant condition, not a dataflow
+> proof. Architect `dec_5ghh87fvg7skn`.
 >
 > ⇒ **DO NOT "derive the new values from `self`"**, which I had offered as the
 > expensive option. At `rebuild_recursive_argument`, `self` holds **preheader**
 > SSA handles while the arguments are **new loop-header block parameters**;
 > reusing `self` would discard the phi-like recursive values and can break
-> dominance. A real provenance mechanism would have to own the whole
-> flatten → block-parameter → rebuild mapping — a separate WP, never a
-> comment-sized repair.
+> dominance.
 >
-> **My execution check did not cover this, and that is the lesson.** Running
-> the evasion probe to `E0451` proved the **braced literal** is refused. It said
+> **My execution check did not cover this, and that is the lesson.** Running the
+> evasion probe to `E0451` proved the **braced literal** is refused. It said
 > nothing about whether a *permitted* mint constrains its own values.
 > **Verifying a mechanism refuses the bypass you thought of is not verifying it
 > enforces what you wrote down.**
 >
-> **`D5` carries a CLAIM SWEEP** (Architect-listed, wider than the two sentences
-> I named): `lowering/mod.rs` `:10031 :10043 :10049 :10082 :10089 :10149-10152
-> :19042-19044`, and `core/tests/constructors.rs:9246-9250`. The frame headline
-> was mine and is fixed. **No artifact may say the rebuilt pair "inherits" or
-> "carries forward".**
->
-> **`RT-CARRIER-BYTESPAN-OBSERVE` remains `active` — `D4`, `D5`, `D6` are
-> unbuilt.** `D2` and `D3` were partial-WP merges of accepted work; the node is
-> not closed and **must not be flipped `merged`** — M7 applied mechanically here
-> would close a node with three deliverables unbuilt.
->
-> **Eight publishes landed this window, all blob-verified:** **#1535**
-> (RT-WORKER-FIXTURE-DECODE framed), **#1536** (the `D1` census, a ring
-> candidate I resolved under §14a), **#1537** (`D1` currency banner), **#1538**
-> (RT-CARRIER-PRODUCER-OCCURRENCE framed), **#1539** (CI-IGNORED-SWEEP framed),
-> **#1540** (`D2` code — M8 `evt_602ay3mrrt9r2`), **#1541** (the `AC-10`
-> amendment), **#1542** (`D3` code — M8 `evt_7cp3nvh9mnx57`). **Zero open PRs.**
->
-> **FRAMING DEBT IS CLEARED.** Twelve nodes are `ready` with a written frame, so
-> stay-one-ahead is satisfied with room. There is no framing job queued.
->
-> **THE LEADER HAS NOW MIS-ROUTED THE MERGE GATE TWICE, in opposite
-> directions.** On `dec_18y4zh9ex4xf3` it called a `proposed` Decision "ready
-> for publisher validation and merge" when **my vote** was the owed act
-> (§14a: a `docs/program/`-confined ring candidate merges on QA + Steward, no
-> Architect — **I am the reviewer on that domain**, so read the diff, do not
-> count votes). On `dec_3m6g9w1y3xkgy` the Architect explicitly asked the
-> **leader** to open *and resolve*, and the leader opened it and routed the
-> resolve to me. **Both times the Decision object said `proposed` while the
-> request prose said merge.** ⇒ **Always read the Decision from the object and
-> read the cited approval events themselves** — never infer a vote from a
-> reviewer named in prose. Corrected to the leader in `evt_491qrgc0mf7qn`.
->
 > **`integrator` "PR #365 awaiting Steward routing" is NOT work.** That seat was
 > **retired by the operator 2026-07-26**; no `moot.toml` entry, no pane, and
-> Ken's PRs are in the 1500s. The status is frozen at 15:08 and was already
-> dispositioned on 2026-07-21. **It has fooled a Steward twice — do not route
-> it a third time.**
+> Ken's PRs are in the 1500s. **It has fooled a Steward twice — do not route it a
+> third time.**
 >
 > **Fleet is still SINGLE-THREADED** (operator, 2026-08-07).
 > `KERNEL-NESTED-IND` stays stood down despite a written frame and an idle
 > kernel ring. **A posture, not an oversight — do not "fix" it.**
 >
-> **UNPUBLISHED, on `steward/work`, deliberately batched (§10⁻ rule 2):** this
-> block only. Publish it with the next ring candidate's tracker sync.
->
 > **STALENESS — READ THE DIRECTION.** A moved `main` proves this block is
 > stale; **an unmoved `main` proves nothing**, because a ring advancing
 > `D3`→`D4` merges no ref until its candidate lands. ⇒ **Re-derive ring state
-> from `thr_2w9jmt85jrphw` and `list_participants`, never from this paragraph.**
+> from `thr_36ey6e0byg9r8` and `list_participants`, never from this paragraph.**
 
 ### OPEN, MINE: M8's doc-only discriminator contradicts the Adversary's scope
 
