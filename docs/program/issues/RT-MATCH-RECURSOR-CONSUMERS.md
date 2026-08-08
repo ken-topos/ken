@@ -5,7 +5,7 @@ status: active
 owner: runtime
 size: M
 gate: none
-depends_on: []
+depends_on: [RT-CARRIED-CONTINUATION-RESUME]
 blocks: [RT-RECURSOR-TRANSPORT]
 github: null
 origin: Architect re-rule evt_3r4j14fv1jtj2 (2026-08-08) on the nine-expression census evt_16cmej481q7ns, partitioning RT-RECURSOR-TRANSPORT hard stop 4 by measured residual population. Row 6 (d8d) is a D2 completeness defect in Position A, not a lexical-successor row. Campaign docs/program/16-recursive-descent-retirement.md node #6d. Steward-filed (agents cannot create tracked work per COORDINATION §2).
@@ -101,20 +101,33 @@ partition before coding** if it does.
 ## Sequence
 
 1. `10369776252861e8b15e613576256a3682c70066` stays **held evidence only**.
-2. The bounded `D2` record correction lands (a fresh child over `8efdfdb3`; no
-   production or test-logic change; fresh SHA, QA, Architect, Decision).
-3. **This node releases and merges.**
-4. [[RT-LEXICAL-RECURSOR-CONSUMERS]] releases and merges.
-5. [[RT-RECURSOR-TRANSPORT]] `D3` resumes from the resulting `main`, reapplies
+2. **DONE** — the bounded `D2` record correction landed at `89aa1550`.
+3. **DONE** — this node's `D0`/`D1` closed the A population at two rows, one
+   root; its `D2` repaired `carried_join_arm` at `50808c11`. That repair is
+   **correct and lands as an accepted partial**; it is not this node's
+   completion, because it advanced the refusal to a sibling authority.
+4. **[[RT-CARRIED-CONTINUATION-RESUME]] releases and merges** — inserted here
+   2026-08-08. It gates this node's `AC-1`.
+5. **This node completes and merges.**
+6. [[RT-LEXICAL-RECURSOR-CONSUMERS]] releases and merges.
+7. [[RT-RECURSOR-TRANSPORT]] `D3` resumes from the resulting `main`, reapplies
    the retirement and the `AC-2b` dispositions, and proves all six old-green
    rows green **without exclusion**.
 
 Both successor nodes block `D3`. [[RT-DESCENT-RETIRE]] remains downstream.
 
-## The edge that is not in the frontmatter
+## The edges, and the one that is deliberately absent
 
-This node's base is **post-`D2`-correction `main`**, and that correction is a
-*partial* merge of [[RT-RECURSOR-TRANSPORT]], not its completion. A `depends_on`
-naming that node would be a **cycle**, since its `D3` is blocked on this one.
-`depends_on` is empty; the base is stated here and in the frame. The
-machine-checked edge is `blocks: [RT-RECURSOR-TRANSPORT]`.
+`depends_on: [RT-CARRIED-CONTINUATION-RESUME]` — **added 2026-08-08** on the
+Architect's sibling-authority ruling `evt_2pt95vbja6447`. This node's `D2`
+repair at `carried_join_arm` is built and correct, and it advanced both A rows
+to a **new** owner, `lower_computational_match_value_composed`. That is a
+sibling authority, so **`AC-1` cannot close here** until
+[[RT-CARRIED-CONTINUATION-RESUME]] lands.
+
+**[[RT-RECURSOR-TRANSPORT]] is still not in `depends_on`, and that is
+deliberate.** This node's base is post-`D2`-correction `main`, and that
+correction is a *partial* merge of that node, not its completion. Naming it
+would be a **cycle**, since its `D3` is blocked on this one. The base is stated
+here and in the frame; the machine-checked edge is
+`blocks: [RT-RECURSOR-TRANSPORT]`.
