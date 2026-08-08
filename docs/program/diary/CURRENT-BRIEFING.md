@@ -64,18 +64,59 @@
 
 > ### NEXT ACTION ON RESUME — read this line first
 >
-> **`RT-SEED-CALL-PORT` IS IN FLIGHT WITH THE RUNTIME RING. WAIT FOR ITS `D1`.**
-> `main` is **`211a208a`**, worktree clean, **zero open PRs, nothing owed by
-> me.** Two outcomes to expect, and both are fine:
+> **`D1` IS ANSWERED AND IT INVERTED THE PREDICTION. `SeedClosureCall` FIRES —
+> THIS NODE DOES NOT CLOSE FOR FREE.** `main` `11a9f767`, worktree clean, zero
+> open PRs.
 >
-> - **A free close** — `SeedClosureCall` fires nowhere. **Do not accept it
->   without the exact-set control having been RUN** (see the correction block
->   below). Then hand it back and close the node.
-> - **A hard stop**, if the class fires only under a later-owned predicate or
->   the existing transport is insufficient.
+> **Candidate `fd6a3996a2508f6c46a9ae25cd756a5dc55e5f12`**, two `ken-runtime`
+> files, merge base `211a208a`, awaiting exact-SHA review.
 >
-> **Do NOT expect a re-size request — I withdrew it.** If one arrives anyway,
-> the ring did not read `evt_60kx15saf97ve`.
+> **MERGE `D1` ON ITS RESOLVED DECISION. Do NOT hold it behind the `D2` fork.**
+> It is complete accepted work and **three later campaign nodes consume its
+> production-site enumeration hook** (`RT-PRODUCER-MATCH-PORT`,
+> `RT-RECURSOR-TRANSPORT`, `RT-DESCENT-RETIRE`). Operator partial-merge policy,
+> 2026-08-06.
+>
+> **The `D2` design fork is with the Architect** (`evt_5s44nwfcgw33r`); my
+> ruling is `evt_515av8hnnr15`. **No port until they rule** — building the M
+> port and then learning the answer was "retire the capability" wastes an M;
+> the reverse costs nothing.
+>
+> **The node is NOT deferred.** "Buys no per-function-ceiling benefit" is not
+> grounds: the operator's directive is that a half-migrated state is debt for
+> no benefit, and `RT-DESCENT-RETIRE` is blocked on this class either way.
+>
+> ### The population is FIXTURE-ONLY, and I verified that myself
+>
+> `SeedClosureCall` fires only on hand-authored `RuntimeExample` IR. The
+> implementer labelled their elaborator census **MEASURED-BY-SOURCE-CENSUS, NOT
+> EXECUTED** and handed it over rather than absorbing it. **I re-derived it and
+> it holds** — do not re-derive it a third time:
+>
+> - `ken-elaborator` has **5 `RuntimeExpr::Closure` constructions, 4 match
+>   arms**. `erasure.rs:268`/`:2072` construct into
+>   `RuntimeDeclarationKind::Transparent`; `:3956` is `lower_top_level_body`
+>   whose **sole** caller `:3915` wraps it `Transparent`; `:4550`/`:4556` is
+>   `shift_runtime_vars`, position-preserving; `:6468` is under
+>   `#[cfg(test)] mod px7l_tests`.
+> - `CheckedCoreBodyTerm::Lambda` lowers to `LexicalClosure` at `:4325`.
+> - **I closed the domain gap the implementer flagged.** `px7l:115` and
+>   `px8l:63` are **match arms, not constructions**, and `ken-interp`
+>   references neither variant ⇒ no crate outside `ken-elaborator` and
+>   `ken-runtime`'s fixtures constructs the shape. The wider domain **cannot**
+>   add members.
+>
+> **THE FACT THAT CUTS THE OTHER WAY, and it is the Architect's to weigh:**
+> `RuntimeExpr` is **public API** — `ken-runtime/src/lib.rs:38` `pub mod ir;`
+> and `:68` `pub use ir::*;`. ⇒ *"No elaborated Ken program produces it"* is
+> **not** *"unreachable"*; deleting the variant narrows a **published**
+> surface.
+>
+> ⇒ **An executed elaborator proof is owed ONLY under the
+> delete-the-capability branch.** A source census is sound for "no in-tree
+> producer constructs this" — a closed enumeration, verified. It is **not**
+> sufficient to justify deleting a published variant. Under "port it", no
+> proof is owed.
 >
 > `RT-CARRIER-BYTESPAN-OBSERVE` is **CLOSED** (PR #1555, exact `f49a2255`, 15
 > paths blob-verified; M7/M8/Librarian all discharged). Nothing owed on it.
