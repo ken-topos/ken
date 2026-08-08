@@ -277,20 +277,192 @@ census is not an input to any of its deliverables.
 does not exist on the lawful base* - it does **not** mean work was silently
 dropped, and it does not mean a seam resolved it.
 
-### The disposition table
+### The 138 rows hold 137 distinct tests - one row is a duplicate
 
-Every one of the 138 rows carries exactly one terminal disposition. The
-partition was computed by intersecting the census row names against the lawful
-base's actual test list, not by inferring coverage from the aggregate pass
-count.
+**Stated first, because every count below depends on it.** The census has 138
+rows and **137 distinct test names**. `object_linker_packaging::tests::each_of_
+the_eight_authorized_limits_is_part_of_the_package_identity` appears **twice**,
+at census table lines 156 and 158, with a different test between them at 157.
+The two rows are **byte-identical** - same first refusal, same phase, same `D8`
+class, same causal owner - so this is a duplicated record, not two observations.
 
-| disposition | rows | basis |
+⇒ **A per-row mapping keyed on test name therefore has 137 entries, not 138**,
+and that is the only way "each row exactly once" can be true. Emitting 138
+entries would mean asserting two dispositions for one test.
+
+**This also corrects an aggregate in my own earlier handoff.** I reported "130
+present, ran and passed", counting the census rows rather than the distinct
+tests, so the duplicated name was counted twice. The distinct figure is **129**
+present-and-passing plus the 1 renamed row = **130 live/pass**. The disposition
+totals are unchanged; the derivation was wrong by one and would have stayed
+invisible without the per-row listing. This is the defect the per-row
+requirement exists to catch, arriving in the record that was supposed to be
+above suspicion.
+
+### The disposition summary
+
+| disposition | distinct tests | basis |
 |---|---:|---|
-| **live**, verdict **pass** | **130** | present in the binary's test list and passing in the `D1` run at `47ef28b1` |
+| **live**, verdict **pass** | **129** | present in the binary's test list and passing in the `D1` run |
+| **live**, verdict **pass**, under a new name | **1** | renamed by a landed node; passes |
 | **open**, with named owner | **2** | present but `#[ignore]`d, so they carry no verdict |
 | **superseded** | **5** | absent from the lawful base; the assertion belongs to a mechanism that is not here |
-| **live**, verdict **pass**, under a new name | **1** | renamed by a landed node, and it passes |
-| total | **138** | |
+| **total distinct** | **137** | plus the 1 duplicate row = the census's 138 |
+
+### The per-row mapping - all 137 distinct census tests, each exactly once
+
+Sorted by module path so the exactly-once property is auditable by inspection.
+Dispositions were computed by intersecting these names against the candidate's
+own `--list` output and its `--ignored --list` output, not asserted.
+
+`live, pass` means the test is present in the binary's test list, is not
+`#[ignore]`d, and the `D1` run reported **0 failures** across the suite that
+contains it. `renamed` and `inverted` are detailed in `D2` and `D5` above;
+`held-lineage only` means the name appears on no merged mainline commit.
+
+| census test | disposition |
+|---|---|
+| `boundary_value_clif::tests::b2v_helper_population_does_not_grow_with_the_value_population` | **live, pass** |
+| `boundary_value_clif::tests::b2v_the_tag_set_is_closed_in_both_directions` | **live, pass** |
+| `cranelift_backend::artifact::api::tests::nc22_cranelift_agrees_with_runtime_ir_report_for_broad_starter_shapes` | **open** - `RT-FNUNIT-RESULT-TOKEN` |
+| `cranelift_backend::artifact::api::tests::nc22_imported_dependency_lowers_as_stable_unsupported_native_lane` | **live, pass** |
+| `cranelift_backend::artifact::api::tests::program_runner_preflights_metadata_before_backend_lowering` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::constructors::b2f_d9_a_bytes_literal_crosses_with_its_content` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::constructors::b2f_d9_a_no_pair_spillable_crosses_on_its_own_tag` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::constructors::b2f_d9_a_real_native_big_crosses_as_an_owned_region_limbed_copy` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::constructors::b2f_d9_a_value_inside_the_field_takes_the_immediate_arm` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::constructors::b2f_d9_a_value_past_the_field_takes_the_spill_arm` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::constructors::b2f_d9_one_compiled_body_takes_both_arms_at_runtime` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::constructors::b2f_d9_the_same_body_takes_the_small_arm_on_a_trimmed_pair` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::constructors::b2f_d9_the_same_emitter_builds_the_string_class` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::constructors::c1_d3_a_carried_operand_survives_case_env_and_nested_lowering` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::constructors::c1_d3_ac_c3_a_constructor_outside_the_case_set_reaches_the_closed_default` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::constructors::c1_d3_ac_c4_a_carried_hypothesis_applied_to_arguments_fails_closed` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::constructors::c1_d3_ac_c4_a_carried_recursive_position_builds_its_hypothesis_and_eliminates` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::constructors::c1_d3_ac_c4_each_case_binder_reads_its_own_constructor_field` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::constructors::c1_d3_ac_c4_the_recursive_positions_ownership_comes_from_the_frame` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::constructors::c1_d3_ac_c4_the_recursor_capsule_is_refused_before_its_residual_is_read` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::constructors::c1_d3_ac_c4_the_residual_holds_the_declared_positions_projected_child` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::constructors::c1_d3_ac_c7_computational_match_eliminates_a_carried_value_non_recursively` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::constructors::c1_d3_ac_c7_match_eliminates_a_carried_value_and_selects_the_right_case` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::constructors::c1_d3_producer_screens_admissibility_before_it_touches_the_carrier` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::constructors::c1_d4_ac_c5_a_reordered_record_projects_the_same_field` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::constructors::c1_d4_ac_c7_project_eliminates_a_carried_record_by_static_field_identity` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::constructors::c2_ac4_runtime_host_result_selects_a_separately_generated_nested_payload` | **open** - `RT-CARRIER-PRODUCER-OCCURRENCE` |
+| `cranelift_backend::lowering::core::tests::constructors::c2_ac6_host_result_covers_resource_token_and_response_bytes_payloads` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::constructors::constructor_field_composes_through_computational_consumer` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::constructors::constructor_field_middle_binder_preserves_trailing_environment_order` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::constructors::constructor_field_missing_case_owns_default_before_fields` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::constructors::constructor_field_recursive_ih_offset_selects_argument_binder` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::constructors::constructor_field_selected_case_composes_before_field_lowering` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::constructors::cranelift_runs_constructor_match_and_record_projection_seeds` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::constructors::dynamic_constructor_mixed_present_and_omitted_keeps_default_distinct` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::constructors::dynamic_host_result_producer_carrier_final_kind_is_runtime_guarded` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::constructors::heterogeneous_frame_environment_and_binder_order_are_preserved` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::constructors::nested_computational_carrier_final_kind_is_runtime_guarded` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::constructors::nested_computational_malformed_recursive_position_rejects_specifically` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::constructors::nested_computational_producer_well_formed_control_emits` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::constructors::recursive_computational_aggregate_traverses_ordinary_frame` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::control::a_retained_body_is_defined_once_even_when_called_twice` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::control::an_unrepresentable_transfer_is_refused_before_any_unit_is_declared` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::control::b2v_ac10_every_boundary_input_receives_one_policy_entailed_outcome` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::control::c1_d5_a_closure_is_inadmissible_at_the_root_and_at_every_depth` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::control::computational_match_declaration_ref_emits_and_runs_the_declaration_owned_unit` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::control::d8_every_required_join_plan_is_consumed_exactly_once` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::control::every_origin_to_expression_resolution_goes_through_the_single_route` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::control::governed_nested_brackets_n3_through_n7_emit_complete_functionized_bundles` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::control::oriented_edge_mutations_reject_in_all_three_direct_consumers` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::control::px8j_all_three_direct_consumers_propagate_the_role_validator` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::control::px8j_all_three_producer_paths_reach_real_consumers` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::control::px8j_one_two_three_scope_segments_reach_selection_hole_and_unwind` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::control::px8j_owned_scope_deletion_fails_closed_before_another_frame_is_emitted` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::control::px8j_release_validator_rejects_repeated_and_broken_scope_lineage` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::control::px8j_selected_scope_partitions_differ_across_the_real_return_hole` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::control::px8j_siblings_share_an_origin_and_nested_ih_gets_a_child_origin` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::control::recursive_declaration_shape_change_hits_typed_boundary` | **superseded** - inverted |
+| `cranelift_backend::lowering::core::tests::control::recursive_descent_root_translates_a_runtime_reached_trap_exactly` | **live, pass** - renamed |
+| `cranelift_backend::lowering::core::tests::control::retained_closures_carry_a_static_origin_and_no_body_term` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::control::rt_scale_b_governed_n3_through_n7_collect_every_d2_metric` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::control::typed_trap_exit_preserves_the_planner_identity_across_two_unit_calls` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::effects::borrowed_ingress_bytes_at_preserves_safe_none_bounds` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::effects::borrowed_ingress_malformed_metadata_fails_closed` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::effects::budget_eff_native_fails_closed_on_effective_zero_below_count_and_above_raw` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::effects::px8i_positioned_start_and_metadata_promote_u64_above_i64_max` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::effects::px8n_bounded_nat_observes_exact_zero_successor_and_recursive_order` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::effects::px8n_bounded_nat_rejects_zero_over_bound_misaligned_and_wrapping_progress` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::effects::px8n_decrement_and_raw_scalar_mutations_fail_the_structural_oracle` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::effects::px8n_fs_read_at_arm_distinguishes_eof_and_short_read_some` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::effects::px8n_fs_read_at_arm_rejects_over_bound_span_before_observation` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::effects::recursive_computational_host_result_keeps_established_dynamic_lane` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::effects::the_process_pair_reaches_a_retained_body_only_through_declared_slots` | **live, pass** |
+| `cranelift_backend::lowering::core::tests::values::cranelift_runs_closure_seed_with_explicit_runtime_capture_environment` | **live, pass** |
+| `cranelift_backend::planning::static_transition::tests::b2o_ac2_every_non_sentinel_node_has_exactly_one_in_range_function_owner` | **live, pass** |
+| `cranelift_backend::planning::static_transition::tests::b2o_ac3_ownership_composes_down_and_up_for_every_opcode_variant` | **live, pass** |
+| `cranelift_backend::planning::static_transition::tests::boundary_a_nested_resource_brackets_n3_through_n7_are_closed_and_affine` | **live, pass** |
+| `cranelift_backend::planning::static_transition::tests::boundary_b1_negative_controls_fail_at_named_semantic_artifacts` | **live, pass** |
+| `cranelift_backend::planning::static_transition::tests::boundary_b1_nested_resource_brackets_n3_through_n7_are_closed_and_affine` | **live, pass** |
+| `cranelift_backend::planning::static_transition::tests::boundary_b1_semantics_are_discovery_order_and_dynamic_state_independent` | **live, pass** |
+| `cranelift_backend::planning::static_transition::tests::boundary_b1r_control_2_dropping_one_origins_material_record_is_rejected` | **live, pass** |
+| `cranelift_backend::planning::static_transition::tests::boundary_b1r_control_3_duplicating_a_material_record_origin_is_rejected` | **live, pass** |
+| `cranelift_backend::planning::static_transition::tests::boundary_c1_equal_name_bytes_have_one_canonical_span` | **live, pass** |
+| `cranelift_backend::planning::static_transition::tests::boundary_c1_validate_rejects_equal_bytes_interned_at_two_spans` | **live, pass** |
+| `cranelift_backend::planning::static_transition::tests::closed_identity_terminal_and_store_guards_reject_exact_mutations` | **live, pass** |
+| `cranelift_backend::planning::static_transition::tests::d8_join_plan_is_a_bijection_with_source_join_occurrences` | **live, pass** |
+| `cranelift_backend::planning::static_transition::tests::declaration_call_validation_positions_out_of_order_sources_once` | **live, pass** |
+| `cranelift_backend::planning::static_transition::tests::distinct_activations_share_one_helper_key_and_source_return_is_not_terminal` | **live, pass** |
+| `cranelift_backend::planning::static_transition::tests::entry_and_reachability_closure_rejects_balancing_invalid_root` | **live, pass** |
+| `cranelift_backend::planning::static_transition::tests::forced_persistent_worker_environment_reaches_escape_defense` | **superseded** - held-lineage only |
+| `cranelift_backend::planning::static_transition::tests::planner_invariant_failures_have_compiler_bug_attribution` | **live, pass** |
+| `cranelift_backend::planning::static_transition::tests::quartet_edge_sets_and_completed_successor_reject_alternate_calls` | **live, pass** |
+| `cranelift_backend::planning::static_transition::tests::source_return_ownership_guards_fail_closed_on_exact_cross_wires` | **live, pass** |
+| `cranelift_backend::planning::static_transition::tests::static_recursor_worker_environment_meets_ordered_capture_owners` | **superseded** - held-lineage only |
+| `cranelift_backend::planning::static_transition::tests::static_recursor_worker_environment_population_mutations_reject_before_allocation` | **superseded** - held-lineage only |
+| `cranelift_backend::planning::static_transition::tests::static_recursor_worker_environment_token_is_exact_once_and_preallocation` | **superseded** - held-lineage only |
+| `cranelift_backend::planning::static_transition::tests::the_occurrence_table_is_total_over_every_planned_expression` | **live, pass** |
+| `native_execution_differential::tests::asserted_available_interpreter_artifact_mismatch_rejects` | **live, pass** |
+| `native_execution_differential::tests::asserted_available_interpreter_target_mismatch_rejects` | **live, pass** |
+| `native_execution_differential::tests::closeout_classifies_deferred_effect_policy_as_unavailable` | **live, pass** |
+| `native_execution_differential::tests::closeout_classifies_interpreter_mismatch_as_failed` | **live, pass** |
+| `native_execution_differential::tests::closeout_classifies_runtime_ir_mismatch_inventory_as_failed` | **live, pass** |
+| `native_execution_differential::tests::closeout_frames_prerequisite_when_interpreter_lane_is_unavailable` | **live, pass** |
+| `native_execution_differential::tests::closeout_rejects_overclaimed_out_of_phase_proof_lane` | **live, pass** |
+| `native_execution_differential::tests::closeout_report_recommends_nc28_for_full_chain_starter_corpus` | **live, pass** |
+| `native_execution_differential::tests::detached_runtime_ir_report_rejects_before_execution` | **live, pass** |
+| `native_execution_differential::tests::effect_policy_unavailable_still_rejects_stale_executable_artifact` | **live, pass** |
+| `native_execution_differential::tests::foreign_boundary_target_reports_policy_unavailable_before_native_execution` | **live, pass** |
+| `native_execution_differential::tests::forged_object_linker_hash_rejects_unsupported_package_kind` | **live, pass** |
+| `native_execution_differential::tests::hidden_deferred_effect_body_reports_named_unavailable_without_native_execution` | **live, pass** |
+| `native_execution_differential::tests::missing_effect_authority_reports_represented_unavailable` | **live, pass** |
+| `native_execution_differential::tests::non_supported_effect_foreign_lowerability_is_unsupported_not_native_tested` | **live, pass** |
+| `native_execution_differential::tests::recomputed_hash_with_contradictory_backend_verifier_rejects_before_report` | **live, pass** |
+| `native_execution_differential::tests::recomputed_hash_with_mismatched_host_toolchain_rejects_before_report` | **live, pass** |
+| `native_execution_differential::tests::recomputed_hash_with_overclaimed_proof_lane_rejects_before_report` | **live, pass** |
+| `native_execution_differential::tests::reports_tested_native_runtime_and_interpreter_agreement` | **live, pass** |
+| `native_execution_differential::tests::runtime_ir_mismatch_names_package_target_artifact_and_lane` | **live, pass** |
+| `native_execution_differential::tests::stale_effect_metadata_rejects_before_native_execution` | **live, pass** |
+| `native_execution_differential::tests::stale_executable_bytes_reject_before_native_execution` | **live, pass** |
+| `native_execution_differential::tests::stale_object_linker_package_hash_rejects_before_execution` | **live, pass** |
+| `native_execution_differential::tests::suite_runner_preserves_per_case_lane_reports` | **live, pass** |
+| `native_execution_differential::tests::trap_observation_is_first_class_unavailable_native_lane` | **live, pass** |
+| `native_execution_differential::tests::trap_observation_still_rejects_stale_executable_artifact` | **live, pass** |
+| `native_execution_differential::tests::unavailable_interpreter_lane_stays_first_class_not_passed` | **live, pass** |
+| `native_execution_differential::tests::unsupported_capability_facts_remain_unavailable_not_native_tested` | **live, pass** |
+| `object_linker_packaging::tests::aggregate_observation_rejects_as_non_scalar_smoke_lane` | **live, pass** |
+| `object_linker_packaging::tests::an_absent_profile_is_refused_before_packaging_not_at_run` | **live, pass** |
+| `object_linker_packaging::tests::each_of_the_eight_authorized_limits_is_part_of_the_package_identity` | **live, pass** |
+| `object_linker_packaging::tests::generic_object_decodes_terminal_big_before_destroying_its_arena` | **live, pass** |
+| `object_linker_packaging::tests::generic_object_executes_the_same_exact_big_int_helper_graph` | **live, pass** |
+| `object_linker_packaging::tests::linked_process_executes_exact_big_int_support_without_host_dispatch` | **live, pass** |
+| `object_linker_packaging::tests::linked_transport_classifies_all_terminal_arms` | **live, pass** |
+| `object_linker_packaging::tests::nested_post_effect_checked_recursor_reaches_success_and_retains_exact_trap_provenance` | **live, pass** |
+| `object_linker_packaging::tests::packages_and_smokes_scalar_starter_executable` | **live, pass** |
+| `object_linker_packaging::tests::process_artifact_maps_exitcode_and_reports_terminal_traps` | **live, pass** |
+| `object_linker_packaging::tests::same_process_artifact_observes_fresh_byte_exact_os_input` | **live, pass** |
+| `object_linker_packaging::tests::trap_observation_rejects_without_promoting_runtime_error_to_build_success` | **live, pass** |
+
+**Self-check, run on the generated table:** 137 rows, 137 unique names, no name
+unclassified, and every one of the census's 137 distinct names present. The
+generator asserts each of these and fails rather than emitting a short table.
 
 **The 2 `open` rows**, each with the owner named in its own skip reason:
 

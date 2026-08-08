@@ -10850,20 +10850,27 @@ fn d7_the_two_same_shaped_target_population_executes() {
 /// two-target population it now resolves a distinct same-shaped target and the
 /// call seam is entered.
 ///
-/// ⛔ **What this does NOT discharge.** The redirect is caught by the
-/// finished-CLIF emission-equality oracle -- the emitted callee disagrees with
-/// the planner-issued continuation target -- so the assembly never executes and
-/// **no executed result is observed**. `AC-9` refuses exactly that green: it is
-/// [[RT-CONTSPEC-ACTIVATE]]'s `AC-2`, already met, and it observes the mutation
-/// changing the field it mutates.
+/// ⛔ **REACHABILITY ONLY. This row observes no executed result and is not a
+/// behavioural oracle.** The redirect is caught by the finished-CLIF
+/// emission-equality gate -- the emitted callee disagrees with the declared
+/// continuation target -- so **the mutated arm never executes**. Read as a
+/// behavioural claim it would be [[RT-CONTSPEC-ACTIVATE]]'s `AC-2` restated,
+/// which observes the mutation changing the field it mutates.
 ///
-/// ⇒ The behavioural obligation remains open and is routed, not dropped. See
-/// `docs/program/wp/RT-CONTSPEC-WITNESS-CLOSEOUT.md`.
+/// ⇒ **`AC-9` is discharged, and not here.** Its executed witness is
+/// `d7_binding_a_distinct_same_shaped_body_changes_the_executed_result`, which
+/// perturbs the declaration-to-body binding this gate cannot see. **These two
+/// rows are complementary and neither substitutes for the other:** this one
+/// says the seam is reached, that one says the bound body determines the
+/// answer.
 ///
-/// **Promise class: transition sentinel.** It reds when the emission oracle
-/// stops being what catches a same-shaped redirect -- which is precisely the
-/// change that would make a behavioural witness reachable. It retires when
-/// `AC-9` is discharged.
+/// **Promise class: transition sentinel.** It reds when the emission-equality
+/// gate stops being what catches a same-shaped call-site redirect. That is a
+/// real event to be told about -- it would mean the reachability claim above
+/// needs re-establishing, and that `AC-9`'s witness is no longer isolated from
+/// the static gate. **It retires when the call-site redirect stops being a
+/// meaningful perturbation of this seam**, not when `AC-9` is discharged; `AC-9`
+/// already is.
 #[test]
 fn d7_the_same_shaped_redirect_reaches_the_call_seam_and_is_caught_by_the_emission_oracle() {
     let witness = d7_two_same_shaped_targets_in_one_population();

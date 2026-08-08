@@ -8286,9 +8286,13 @@ impl<'a> Lowering<'a> {
                     ..exact_target
                 }
             }
-            // `RT-CONTSPEC-WITNESS` `D7`/`AC-9`: redirect to a DISTINCT
-            // SAME-SHAPED target, so no structural check can separate the two
-            // and only the executed result can.
+            // `RT-CONTSPEC-WITNESS` `D7` reachability sentinel: redirect to a
+            // DISTINCT SAME-SHAPED target to show this seam is REACHED.
+            //
+            // ⛔ Not a behavioural oracle. The mutated arm is rejected by the
+            // finished-CLIF equality gate and never executes; `AC-9`'s executed
+            // witness is `SubstituteContinuationBodyDefinition`, at the
+            // definition-binding seat this gate cannot see.
             //
             // ⛔ The predicate is `RT-WORKER-BIND`'s: equal declared arity and
             // equal capture count, read as the counts of this unit's own

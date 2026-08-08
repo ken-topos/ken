@@ -1375,20 +1375,28 @@ enum ContinuationEmissionMutation {
     /// inequality; sameness is on the two declared counts, never on widths,
     /// alignments, offsets, carriers, ownership or the frame header.
     ///
-    /// ⭐ **Why same-shaped is the whole point, and why this is not
-    /// [`ContinuationEmissionMutation::SubstituteEmittedFuncRef`] again.** That
-    /// one substitutes *any* other callable, so a differently-shaped target is
-    /// caught on shape by the finished-CLIF oracle and the program never runs.
-    /// A same-shaped target passes every structural check there is — same
-    /// declared arity, same capture count, same ABI — so **nothing but the
-    /// executed answer can tell the two apart.** `AC-9` asks for exactly that
-    /// and explicitly refuses a green showing only that the claimed target
-    /// moved.
+    /// ⛔ **REACHABILITY EVIDENCE ONLY. This control's mutated arm never
+    /// executes, and it is not an executed-result oracle.** The finished-CLIF
+    /// equality gate compares the emitted callee against
+    /// `bundle.continuation(identity.target())`, so moving only the emitted
+    /// `FuncRef` is rejected before the program runs. That is
+    /// `RT-CONTSPEC-ACTIVATE`'s static face.
+    ///
+    /// ⭐ **What it does prove, which is worth keeping.** In `ACTIVATE` the
+    /// same-shaped redirect refused with "found no distinct same-shaped call
+    /// target" **before** reaching the call, so it was not a control at all.
+    /// With a two-target population it resolves a distinct same-shaped target
+    /// and the seam is entered. That is a statement about **reach**, and it must
+    /// not be read as one about behaviour.
+    ///
+    /// ⇒ `AC-9`'s behavioural obligation is discharged elsewhere, by
+    /// [`ContinuationEmissionMutation::SubstituteContinuationBodyDefinition`],
+    /// which perturbs the declaration-to-body binding the equality gate cannot
+    /// see and yields a changed **executed** answer.
     ///
     /// ⛔ No fall back to exact. If this function declares no distinct
-    /// same-shaped target the control fails loudly: per the frame, a pre-call
-    /// "found no distinct same-shaped call target" refusal is a missing fixture
-    /// precondition, **not** a discharge.
+    /// same-shaped target the control fails loudly rather than silently
+    /// becoming the identity.
     RedirectToDistinctSameShapedTarget,
     /// **`RT-CONTSPEC-WITNESS` `D7`/`AC-9` — the behavioural witness, at the
     /// continuation DEFINITION-BINDING seat.** Architect ruling 2026-08-08.
