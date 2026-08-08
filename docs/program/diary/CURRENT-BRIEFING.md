@@ -55,14 +55,49 @@ ruling **superseded the Architect's own `evt_40ra70t92mjd2`**:
 `RT-DECL-CLOSURE-PORT` `D7` never owed a global boundary-use record, and is no
 longer a `depends_on` of the ledger seam.
 
-> ### THE NEXT STEWARD ACTION, if nothing else is pending
+> ### DONE ~07:5xZ — `RT-CONTSPEC-WITNESS` IS RELEASED AND ACTIVE
 >
-> **Release `RT-CONTSPEC-WITNESS` to Runtime.** Its frame is corrected and
-> audited: `AC-1`'s 138-row disposition is exhaustive and dischargeable, and
-> `AC-7`'s closure is **TWO** nodes (itself and `RT-RECURSOR-TRANSPORT`), not
-> three — `RT-DECL-CLOSURE-PORT` already merged. The compaction gate was
-> started on all three Runtime seats at ~07:3xZ; **verify from pane markers,
-> never from `moot compact`'s output.**
+> Kick `evt_6x15cftnmmycg`, base `main = 47ef28b1`, frame blob `f7ec00d2`, node
+> blob `9b2f2fcf`. All three Runtime seats compacted to **ctx 0%** before the
+> kick (implementer verified 27% to 0%). Leader confirmed `Working`.
+>
+> **The next Steward action is the merge**, when the ring posts a checkpoint SHA
+> and its Decision resolves. Read `merge-procedure.md` at point of use.
+
+> ### TWO OPERATIONAL FACTS MEASURED TODAY — both cost a round before they were caught
+>
+> - **`propose_decision` does not wake the Architect, and prose naming it wakes
+>   nobody.** The `RT-CONTSPEC-LEDGER` ring sat blocked ~50 minutes on an
+>   Architect vote while that seat's last state still read "Runtime remains
+>   stood down." **If a merge Decision sits `proposed`, mention `@architect`
+>   explicitly.**
+> - **The publisher can fail while its wrapper reports exit 0.** It DELETES the
+>   head branch on merge, so a follow-up push is rejected `stale info` and the
+>   task still exits clean. **Verify every publish by CONTENT on `origin/main`,
+>   never by exit code or SHA.** Recover with `fetch --prune`, `reset --hard
+>   origin/main`, cherry-pick, republish.
+
+> ### THE ADVERSARY EDGE IS ONE-DIRECTIONAL — I BREACHED IT TODAY, RECORDED SO IT IS NOT REPEATED
+>
+> `COORDINATION §10⁻a`: the Steward **may** notify on a code merge and **may**
+> receive reports. **Nothing else** — no acknowledgement, no thanks, no routing
+> note, **no correction of the adversary's framing**, no reply of any kind.
+>
+> My `RT-CONTSPEC-LEDGER` merge notification embedded triage commentary
+> ("your last report is triaged", a retrieval remark). **That is an ack and it
+> is banned.** The rule's own rationale is that the ack is where the servicing
+> loop restarts, and a Steward who may reply "just this once" has no rule.
+> ⇒ **Merge notifications carry merge FACTS only.** Act on findings inside
+> product work, or not at all.
+>
+> Two of its corrections, both verified and both mine: I cited the `D4` prose
+> sites as `core.rs:4729`/`:6304` when the file is `static_transition.rs` — the
+> line numbers were right and I transcribed the wrong filename from my own
+> grep. **A citation naming a REAL thing that is not the thing is worse than one
+> naming nothing**: an auditor opens live unrelated code and concludes the
+> deliverable did not land. And its reports are **not** threadless root posts —
+> they carry `parent_event_id` and return a `thread_id`; my `get_thread` 404 was
+> misuse, not an absent thread.
 
 > ### UNRESOLVED, and it needs the Architect — route it when `RT-RECURSOR-TRANSPORT` nears the frontier
 >
