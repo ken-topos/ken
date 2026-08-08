@@ -208,16 +208,46 @@ the same shapes closed over a real constructor.
   `RT-LEXICAL-RECURSOR-CONSUMERS` is the repair node B does need, and it blocks
   `D3`. What survives is the narrower and still-true statement: **this node's**
   `D2` is scoped to position A.
-- **Position A's refusal is at lowering**, on the shape of the value an ordinary
-  match receives from a computational match with a recursive position. Whether
-  the narrow binding that fixes it is available over the existing continuation
-  machinery, or requires a new planner/ABI population — hard stop 2 — is not
-  answered by `D1` and is not guessed at here.
+- **Position A's WITNESS refuses at lowering**, on the shape of the value an
+  ordinary match receives from a computational match with a recursive position.
+  Whether the narrow binding that fixes it is available over the existing
+  continuation machinery, or requires a new planner/ABI population — hard stop 2
+  — is not answered by `D1` and is not guessed at here.
 - **Hard stop 1 is not triggered by this evidence, and I am not claiming it is
-  cleared either.** The two positions demonstrably differ in *outcome*, but a
-  difference in outcome is not the same as *"materially different transports"* —
-  one of them needs no transport at all. Whether the remaining position's
-  transport is materially different from anything is a `D2` question.
+  cleared either.** The two **witnesses** demonstrably differ in *outcome*, but a
+  difference in outcome is not the same as *"materially different transports"*.
+  Whether either position's transport is materially different from anything is
+  not answered here.
+
+> ### CORRECTION — this whole section was written at class scope
+>
+> **Every bullet above originally said "position" where only a WITNESS had been
+> measured**, and the third one went further: *"one of them needs no transport at
+> all."* **That is withdrawn.** It was inferred from position B's single witness
+> executing on the functionized lane, and the nine-expression census at
+> `8efdfdb3` refutes it — **eight expressions in B's population refuse there**,
+> across four distinct boundaries. B needs a transport repair;
+> `RT-LEXICAL-RECURSOR-CONSUMERS` owns it and it blocks `D3`.
+>
+> The bullets are kept as `D1`'s historical evidence, narrowed to their
+> witnesses, rather than deleted — the outcomes they record are exact and were
+> correctly measured. What was wrong was never a measurement; it was the scope
+> the section claimed for two of them.
+>
+> ⚠ **Note what this does to hard stop 1.** The original bullet argued the
+> outcome difference is not a transport difference **because one side needs no
+> transport**. That reason is gone. The conclusion — *not triggered, not
+> cleared* — happens to survive, but it now rests on **nothing having been
+> measured about either position's transport at class scope**, which is a
+> weaker and different footing. Whoever revisits hard stop 1 should know it is
+> standing on an absence of evidence rather than on the argument written here.
+>
+> **How this one survived the first correction:** I narrowed the sibling bullet
+> in this same list and did not re-read the two below it, and my phrase sweep
+> did not carry *"needs no transport"* — a paraphrase of *"needs no port"* that
+> no exact-phrase family I built would match. Runtime QA found it. ⇒ A sweep
+> keyed on the wordings you already fixed cannot find the synonym one bullet
+> down.
 
 **Suite at the `D1` checkpoint `2e5e6a8b`: 814 passed, 0 failed, 4 ignored** —
 the 812 delta-free baseline plus exactly the two `D1` witnesses, which carried
