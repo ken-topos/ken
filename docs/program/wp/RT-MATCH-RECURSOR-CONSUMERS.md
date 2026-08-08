@@ -158,6 +158,27 @@ causal partition here and [[RT-LEXICAL-RECURSOR-CONSUMERS]]'s appear to share
 one exact production root, **route a subsumption proposal — do not fold.** A
 shared root may not be inferred from shared retirement timing or shared syntax.
 
+> ### FOURTH HARD STOP, added by the Steward on the `D0`/`D1` checkpoint `bcf3218b`
+>
+> **If closing both rows requires BUILDING the reduced-predecessor merge shape,
+> stop and return before building it.**
+>
+> `D1` attributed the owner to `carried_join_arm` (`core.rs:10842`) and flagged
+> that its existing `Trap` arm documents that shape as **not built by this
+> route**. `Trap` can decline it because `Trap` **refuses**; a `RecursiveBackedge`
+> arm has to **succeed**, so it cannot borrow that escape.
+>
+> **This is a checkpoint, not a ban.** I am not forbidding the shape — I am
+> refusing to let it be discovered mid-implementation and absorbed silently into
+> an `M`. Building a new control-flow shape in the lowering route is a component-
+> design call that belongs to the Architect and a sizing call that belongs to me,
+> and neither is dischargeable from inside a coding turn.
+>
+> **If the repair closes both rows by re-routing or re-representing the operand
+> at `carried_join_arm` — the lawful shape `D2` already names — no stop fires
+> and no routing is owed.** That is the expected path. Post the exact SHA and
+> keep going.
+
 ## 7. Base
 
 **Post-`D2`-record-correction `main`.** Not `8efdfdb3` — that object's record
