@@ -69,6 +69,33 @@ destroys it.
 Do not begin deleting and then attempt to prove the lane was dead — by then
 the proof is unavailable and any argument for it is circular.
 
+> ### THIS NODE ACTIVATES PORTED ARMS WHOSE EVIDENCE NOTHING WILL RE-READ
+>
+> **Added 2026-08-08 from an Adversary finding on merged `3061a645`. Carry it
+> as an explicit checklist item rather than discovering it here.**
+>
+> The recursor arc lands repairs under **port-then-activate**: an arm is written,
+> proven correct by reasoning plus a record, and is then **neither
+> production-reachable nor test-exercised** until the variant retires. The
+> `carried_join_arm` backedge representation is the current example — zero
+> arrivals in an unhooked run, so nothing in `crates/` demonstrates it at all.
+>
+> **This node flips both properties at once.** The arm becomes live, and its
+> reasoning — predecessor-free block, the word never read, mirror of the scalar
+> lane — becomes **load-bearing for the first time**, with no control standing
+> behind it.
+>
+> ⛔ **Nothing about the arm changes at that moment, so nothing prompts anyone
+> to re-read its evidence.** That is the whole hazard: a diff-driven review sees
+> an untouched arm and moves on. It is the same **cost-moves-at-activation**
+> shape recorded at [[RT-SEED-CALL-PORT]] `D3`, where unmutated `AC-6` controls
+> went from guarding an inert path to guarding production without changing.
+>
+> ⇒ **Enumerate every arm this retirement activates, and re-read each one's
+> evidence at activation** — not because it was wrong, but because it was never
+> load-bearing before. An arm whose only demonstration lives in a `docs/`
+> record is the priority: the code surface will not remind you it exists.
+
 ## 4. Deliverables
 
 - **`D1` — Capture the spent-oracle evidence, BEFORE any deletion.** On the
