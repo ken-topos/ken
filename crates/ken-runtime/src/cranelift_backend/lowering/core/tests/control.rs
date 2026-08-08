@@ -27118,3 +27118,135 @@ fn ccr_d3_the_active_carried_route_is_taken_and_the_continuation_refusal_is_gone
          means this control is anchored to the wrong root: {suppressed}"
     );
 }
+
+/// **`RT-CARRIED-ORDINARY-COMPOSITION` `D3` — the trailing-suffix continuation
+/// is taken, proven by counters and a mutation rather than by any refusal
+/// string.**
+///
+/// ## Why this control asserts neither of the two obvious things
+///
+/// **It cannot assert compile success.** Both population members still stop one
+/// authority further out, at the successor-owned `ComputationalMatch` refusal.
+///
+/// **It cannot assert the absence of the `D2` refusal either**, which is the
+/// less obvious half. `D2` **deleted** that refusal from production — the only
+/// surviving occurrence is a comment — so `!contains(...)` would be true for
+/// free, forever, and would keep passing if the repair were ripped out and
+/// replaced by anything that did not spell that exact sentence. **A string no
+/// code can produce is absent for free.**
+///
+/// **And it must not key on the fifth wall's message**, which is independently
+/// pinned in full equality and which the successor may legitimately change.
+///
+/// ## What it keys on instead
+///
+/// 1. the arm is **reached** with a nonempty suffix — a non-zero pre-guard
+///    denominator;
+/// 2. **every** such arrival is continued rather than refused, asserted as
+///    `continuations == arrivals` rather than as `> 0`, so one continued arrival
+///    cannot mask a second refused one;
+/// 3. under the mutation the continuation stops, the arrival count is
+///    **unchanged**, and the pre-`D2` refusal becomes producible again — which
+///    is what makes clause 2 falsifiable.
+///
+/// ## What this control is NOT evidence for
+///
+/// **Its own arrival is not evidence that the population exists.** A control that
+/// is a member of the population it observes proves the hook is reachable, not
+/// that any program has the shape. The population evidence is `D0`'s census, and
+/// the independent population there is **two** — this control is the third
+/// counted member and must be excluded from any denominator quoted as
+/// population.
+///
+/// **Promise class: durable invariant.** No assertion depends on the row's
+/// overall outcome, so all of them survive the successor closing the fifth wall.
+#[test]
+fn coc_d3_the_trailing_suffix_is_continued_and_the_mutation_restores_the_refusal() {
+    use crate::cranelift_backend::lowering::core::{
+        coc_d2_suffix_arrivals, coc_d2_suffix_continuations, reset_coc_d2_counts,
+        set_coc_d2_suppress_continuation, set_selector_variant_exclusion,
+    };
+    struct Restore;
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            set_selector_variant_exclusion(None);
+            set_coc_d2_suppress_continuation(false);
+        }
+    }
+    const PRE_D2_REFUSAL: &str = "the carried elimination consumes exactly one frame";
+
+    let witness = RuntimeExpr::Match {
+        scrutinee: Box::new(px8j_deferred_recursive_field_fixture()),
+        cases: ["ctor:prelude::Result::Err", "ctor:prelude::Result::Ok"]
+            .into_iter()
+            .map(|constructor| RuntimeMatchCase {
+                constructor: constructor.to_string(),
+                binders: 1,
+                body: RuntimeExpr::Construct {
+                    constructor: crate::EXIT_SUCCESS_CONSTRUCTOR.to_string(),
+                    args: Vec::new(),
+                },
+            })
+            .collect(),
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "COC D3 witness".to_string(),
+        },
+    };
+
+    let run = |label: &'static str| -> String {
+        let _restore = Restore;
+        reset_coc_d2_counts();
+        set_selector_variant_exclusion(Some(RecursiveDescentResidual::MatchScrutineeRecursor));
+        let (result, _trace) = px8j_capture_source_trace(&witness, false, label);
+        match result.map(|_| ()) {
+            Ok(()) => "Ok".to_string(),
+            Err(error) => format!("{error:?}"),
+        }
+    };
+
+    // ── A: the continuation as landed ───────────────────────────────────────
+    let continued = run("ken_coc_d3_continued");
+    let (arrivals, continuations) = (coc_d2_suffix_arrivals(), coc_d2_suffix_continuations());
+    assert!(
+        arrivals > 0,
+        "the arm must be REACHED with a nonempty suffix, or every claim below is about a path \
+         this program never took: arrivals={arrivals}"
+    );
+    assert_eq!(
+        continuations, arrivals,
+        "EVERY suffix arrival must be continued, not merely one of them. Asserted as equality \
+         rather than `> 0` so a single continued arrival cannot mask a second that refused: \
+         arrivals={arrivals} continuations={continuations}"
+    );
+    assert!(
+        !continued.contains(PRE_D2_REFUSAL),
+        "the pre-D2 refusal must not be what stops this row. This is corroboration only -- the \
+         load-bearing assertions are the counters, because D2 deleted this sentence from \
+         production and an absent-for-free string proves nothing on its own: {continued}"
+    );
+
+    // ── B: the mutation at this exact root ──────────────────────────────────
+    set_coc_d2_suppress_continuation(true);
+    let suppressed = run("ken_coc_d3_suppressed");
+    let (mutated_arrivals, mutated_continuations) =
+        (coc_d2_suffix_arrivals(), coc_d2_suffix_continuations());
+    set_coc_d2_suppress_continuation(false);
+    assert_eq!(
+        mutated_arrivals, arrivals,
+        "the mutation must not change how often the arm is REACHED -- the denominator is taken \
+         before it. A drop here would mean the mutated side proves nothing, because the missing \
+         continuation could be explained by the arm never being entered: {mutated_arrivals} vs \
+         {arrivals}"
+    );
+    assert_eq!(
+        mutated_continuations, 0,
+        "the mutation must suppress the CONTINUATION specifically, or it is mutating something \
+         else"
+    );
+    assert!(
+        suppressed.contains(PRE_D2_REFUSAL),
+        "and it must make the pre-D2 refusal producible again. This is the clause that stops the \
+         A-side absence check being vacuous: {suppressed}"
+    );
+}
