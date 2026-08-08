@@ -133,7 +133,7 @@ addresses move.
 | seam 3 | `RT-CONTSPEC-LEDGER`, must be `merged` before this starts; its frame selects **zero** census rows |
 | the corrected census | seam 1 `D4` — a first-refusal record of the held `1aef3192` lineage, **not** a worklist carried through seams 2 and 3 |
 | the 761 witness gate | `fs_read_at_malformed_offset_narrows_to_invalid_offset`, and its sibling at `crates/ken-cli/tests/rt_parity_native.rs:544` |
-| nodes closed on merge | this node, `RT-RECURSOR-TRANSPORT`, `RT-DECL-CLOSURE-PORT` |
+| nodes closed on merge | **measure it, do not inherit it** -- every node in the set still open at your base. As at 2026-08-08: this node and `RT-RECURSOR-TRANSPORT`. `RT-DECL-CLOSURE-PORT` is already `merged` |
 | prior-slice surfaces | the six, frozen at their `main` blobs |
 
 ## Two preconditions on every suite run, carried from seams 1-3
@@ -185,8 +185,22 @@ Both produced a false hard stop on seam 1 (`evt_3q972fhrnsr0b`, ruled
   ⛔ **State plainly in it that the census recorded first refusals of a mechanism
   that was never merged**, so a later reader does not mistake `superseded` for
   work that was silently dropped.
-- **D6 — the three-node tracker closure**, in one commit: this node,
-  `RT-RECURSOR-TRANSPORT`, `RT-DECL-CLOSURE-PORT`.
+- **D6 — the tracker closure**, in one commit: this node and
+  `RT-RECURSOR-TRANSPORT`.
+
+  > **Corrected 2026-08-08 by the Steward: this was a THREE-node closure and it
+  > is now TWO.** `RT-DECL-CLOSURE-PORT` merged separately under the operator's
+  > partial-merge policy and its node is already `merged`, which is terminal.
+  > **Do not flip it, and do not look for a third node to flip.**
+  >
+  > The old wording was not merely stale, it was actively misleading: `AC-7`
+  > demanded *exactly three* status flips, so an implementer closing the two
+  > genuinely-open nodes would have **failed the AC by doing the right thing**,
+  > and the only way to pass it was to invent a third flip.
+  >
+  > If `RT-RECURSOR-TRANSPORT` has also merged separately by the time you reach
+  > this, the closure is one node — **state the count you found and why**, do
+  > not reconcile it to a number written here.
 
 - **D7 — INHERITED 2026-08-03 from [[RT-CONTSPEC-ACTIVATE]]: the behavioural
   target-dependence witness.** Architect ruling `evt_bz62dah3ecp0`. On the
@@ -246,9 +260,15 @@ Both produced a false hard stop on seam 1 (`evt_3q972fhrnsr0b`, ruled
   *Control:* the candidate's path list — no planner or ABI file appears.
 - **AC-6 — the prior-slice surfaces are blob-identical to the merge base.**
   *Control:* `git rev-parse` per surface, candidate against merge base.
-- **AC-7 — `D6` closes exactly three nodes in one commit**, and each closed node
-  names this seam as what closed it.
-  *Control:* the tracker diff; three `status` flips, one commit.
+- **AC-7 — `D6` closes every still-open node in the set, in one commit**, and
+  each closed node names this seam as what closed it.
+  *Control:* the tracker diff; one commit, and the `status` flips match the set
+  of nodes that were open when you started. **State that set explicitly in the
+  handback.** As measured 2026-08-08 it is two — this node and
+  `RT-RECURSOR-TRANSPORT` — because `RT-DECL-CLOSURE-PORT` is already `merged`.
+  **The count is a measurement you take, not a number this AC pins**; a node
+  that merges separately before you get here leaves the set smaller and that is
+  correct, not a shortfall.
 - **AC-8 — CI green** on the merge.
 
 - **AC-9 — INHERITED from [[RT-CONTSPEC-ACTIVATE]] `D4` item 4 (2026-08-03,
@@ -316,5 +336,5 @@ Stop and route to the Steward, do not improvise, if any of these hold:
    itself is unreadable, which is a finding about seam 1's `D4` record.
 5. **Disk capacity cannot be established** for `D3` and no seat is free to
    release it.
-6. **Closing the three nodes reveals a fourth that depended on them.** The DAG
+6. **Closing the set reveals another node that depended on them.** The DAG
    edge is wrong and the closure is the Steward's call.

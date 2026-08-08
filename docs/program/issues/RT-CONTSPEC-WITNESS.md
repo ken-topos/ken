@@ -1,6 +1,6 @@
 ---
 id: RT-CONTSPEC-WITNESS
-title: "ContinuationSpecialization seam 4 — integrated witness and closeout: the native population, the six formerly shadowed rows reclassified, the two host rows rerun, and the three-node closure"
+title: "ContinuationSpecialization seam 4 — integrated witness and closeout: the native population, the six formerly shadowed rows reclassified, the two host rows rerun, and the tracker closure of every node still open in the set"
 status: ready
 owner: runtime
 size: M
@@ -8,7 +8,7 @@ gate: none
 depends_on: [RT-CONTSPEC-LEDGER]
 blocks: [RT-RECURSOR-TRANSPORT, RT-DECL-CLOSURE-PORT]
 github: null
-origin: "Architect ownership/sizing ruling evt_1yymw1gdszpbs (2026-08-02), outcome (c) on RT-CONTSPEC-LOWER, seam 4 of four — the terminal seam that inherits RT-CONTSPEC-LOWER's three-node closure. Steward-filed (agents cannot create tracked work per COORDINATION section 2)."
+origin: "Architect ownership/sizing ruling evt_1yymw1gdszpbs (2026-08-02), outcome (c) on RT-CONTSPEC-LOWER, seam 4 of four — the terminal seam that inherits RT-CONTSPEC-LOWER's tracker closure (three nodes as originally scoped; two as at 2026-08-08, RT-DECL-CLOSURE-PORT having merged separately). Steward-filed (agents cannot create tracked work per COORDINATION section 2)."
 ---
 
 # Seam 4 — the closeout, and the only seam that closes other nodes
@@ -31,9 +31,16 @@ cumulative branch.
 
 ## Closure
 
-When this merges it closes **three nodes** — itself, [[RT-RECURSOR-TRANSPORT]]
-and [[RT-DECL-CLOSURE-PORT]] — in one tracker commit. That obligation moved here
-from RT-CONTSPEC-LOWER, which does not continue as a single node.
+When this merges it closes, in one tracker commit, **every node in the set that
+is still open at that point**. That obligation moved here from
+RT-CONTSPEC-LOWER, which does not continue as a single node.
+
+**Corrected 2026-08-08:** the set was written as three — itself,
+[[RT-RECURSOR-TRANSPORT]] and [[RT-DECL-CLOSURE-PORT]] — and is now **two**.
+[[RT-DECL-CLOSURE-PORT]] merged separately under the operator's partial-merge
+policy and is already `merged`, which is terminal. The frame's `AC-7` pinned
+*exactly three* flips, which a correct implementer would have failed; it now
+asks for the set measured at the base.
 
 Also carried forward unchanged: the **761 witness gate**.
 `fs_read_at_malformed_offset_narrows_to_invalid_offset` must produce
