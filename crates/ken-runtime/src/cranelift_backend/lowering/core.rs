@@ -10861,7 +10861,7 @@ recursive_position={:?} returned[{}] still_installed_top={:?}",
             // word below is never read at run time because no control ever
             // arrives here.
             //
-            // ⛔ This does NOT relax `emit_carrier_transfer`. That guard is
+            // This does NOT relax `emit_carrier_transfer`. That guard is
             // correct and untouched: protocol machinery is still never a source
             // value at a boundary. What was wrong was ASKING it -- the arm was
             // reaching a value transfer it should never have entered, because
@@ -10869,7 +10869,7 @@ recursive_position={:?} returned[{}] still_installed_top={:?}",
             // `Specialized`) when the property that decides whether an arm can
             // be a join predecessor is whether control already departed.
             //
-            // ⭐ This is the carried mirror of a landed representation, not a
+            // This is the carried mirror of a landed representation, not a
             // new mechanism. The scalar lane already does exactly this: a
             // backedge arm yields an inert pair and then ABSTAINS from result
             // kind agreement (`record_scalar_merge_kind` returns early), and the
