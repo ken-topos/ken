@@ -1,7 +1,7 @@
 ---
 id: RT-CONTSPEC-LEDGER
 title: "ContinuationSpecialization seam 3 — retire the boundary-use schema: the four BoundaryUse axes are compile-time constants that no lowering, ABI, selection, lifetime, or emission consumer reads, so they are deleted from the continuation-specialization contract"
-status: ready
+status: merged
 owner: runtime
 size: S
 gate: none

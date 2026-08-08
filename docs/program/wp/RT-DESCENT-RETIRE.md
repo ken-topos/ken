@@ -83,6 +83,34 @@ the proof is unavailable and any argument for it is circular.
   `RecursiveDescent` lane are testing deleted code. ⛔ Do not delete a test that
   is actually asserting a *semantic* property reachable on the surviving lane —
   re-home those. ⛔ Do not keep a test green by keeping dead code alive for it.
+- **`D6b` — ANSWER THE COVERAGE QUESTION THE ADVERSARY LEFT OPEN.** Folded here
+  2026-08-08 rather than filed as its own node: it is a coverage-accounting
+  question, `AC-5` already forbids a silent net loss, and this node performs the
+  last deletion that can change the answer.
+
+  **The question, in the Adversary's words** (`evt_7fx8em9q24p8h`, on the merged
+  `RT-PRODUCER-MATCH-PORT` `D3`): *"after this retirement, does any live row
+  still exercise the ported shape, or does it now have zero live coverage in
+  either direction?"*
+
+  **It named this as unmeasured on purpose and that is the right disposition.**
+  It had taken three instrument errors from rushing population measurements, and
+  judged a wrong answer here worse than no answer. **Do not read the absence of
+  a figure as evidence either way.**
+
+  **What makes it live rather than academic.** That node's `D3` reverted one row
+  to its original program, so the row no longer exercises the ported shape, and
+  it re-homed two others that **nobody has verified**. If those three were the
+  only coverage, the shape now has none — and the retirement would have removed
+  the lane *and* its witnesses in two separate merges, neither of which could see
+  the other.
+
+  ⇒ **Answer it from the fixture set, in both directions:** which live rows
+  exercise the producer-call-in-scrutinee shape on the surviving lane, and which
+  exercise its refusal. **Zero in either direction is a finding to route, not a
+  gap for you to fill here.** The Adversary states it is cheap for the ring to
+  run; if it is not, say so rather than estimating.
+
 - **`D6a` — SWEEP THE REACHABILITY-PREMISED "CANNOT OCCUR" ARGUMENTS.** Added
   2026-08-08 from a measured falsification, folded here rather than filed as its
   own node because **this node makes the largest reachability change in the
@@ -177,6 +205,15 @@ the proof is unavailable and any argument for it is circular.
 - **`AC-5`.** Every test removed under `D6` is accounted for: retired as
   lane-specific, or re-homed with its semantic property intact.
   ⛔ A silent net loss of coverage fails this.
+
+  **`D6b` is inside this AC, and it extends the accounting backwards.** The
+  coverage that can go silently missing is not only what *this* node removes —
+  `RT-PRODUCER-MATCH-PORT` `D3` already reverted one row and re-homed two
+  unverified ones. **Answering `D6b` in both directions is part of discharging
+  `AC-5`**; a coverage claim that only accounts for this node's own deletions
+  does not discharge it. **Zero live coverage in either direction is a finding
+  to route, not a failure of this AC** — the AC fails when the question is left
+  unanswered, not when the answer is unwelcome.
 
 ## 6. ⛔ Banned scope
 
