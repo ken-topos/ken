@@ -54,7 +54,7 @@ values, especially linear functions and `cast`. The compiler has supplied an
 excellent Ken-specific model problem and an executable checker. It has not
 supplied the missing equality theory.
 
-This finding does **not** reopen product work on Ken-level affine types. The
+The product track `R2` remains closed, and ADR 0021 remains in force. The
 accepted resource design remains valid: enforce ownership in Rust, expose
 copyable generation-checked handles to Ken, and delegate the correlated
 lifetime obligation to Ward
@@ -475,7 +475,7 @@ None of these results follows from the Rust compiler's passing tests.
 The following sequence extracts the discovery without committing Ken's product
 language to research-grade type theory.
 
-### R1 — Specify the causal-obligation calculus
+### Research step 1 — Specify the causal-obligation calculus
 
 Write a small formal syntax for obligation kinds, opaque identities, owners,
 minting, direct discharge, composed discharge, branch partition, and closeout.
@@ -485,7 +485,7 @@ set equations.
 Acceptance evidence should map each formal premise to a current production
 check and each formal failure to a committed mutation or negative witness.
 
-### R2 — Prove the standalone calculus
+### Research step 2 — Prove the standalone calculus
 
 Prove:
 
@@ -500,7 +500,7 @@ Then derive the existing set-based ledger as a decision procedure. A model
 checker or proof assistant may be appropriate, but the first artifact should
 remain independent of Ken's kernel.
 
-### R3 — Embed it beside a frozen OTT layer
+### Research step 3 — Embed it beside a frozen OTT layer
 
 Add a two-context or quantitative program judgment around an unchanged OTT
 logical context. Initially require zero linear usage for:
@@ -513,7 +513,7 @@ logical context. Initially require zero linear usage for:
 This stage should demonstrate elaboration and erasure on compiler-sized
 examples without yet exposing source-level OS resources.
 
-### R4 — Make equality the explicit hard gate
+### Research step 4 — Make equality the explicit hard gate
 
 Develop and compare candidate semantics for equality of linear values:
 
@@ -524,10 +524,10 @@ Develop and compare candidate semantics for equality of linear values:
 
 Proceed only if one account preserves both the linear invariants and Ken's OTT
 goals for decidability, substitution, and canonicity. Failure at this gate does
-not invalidate R1 or R2; it means the calculus remains a verified compiler
-protocol rather than a Ken language feature.
+not invalidate research steps 1 or 2; it means the calculus remains a verified
+compiler protocol rather than a Ken language feature.
 
-### R5 — Consider resources, then borrowing
+### Research step 5 — Consider resources, then borrowing
 
 Only after the equality gate should the model attempt a source-level resource
 API. A useful first case is indexed typestate: an unrestricted state index in
