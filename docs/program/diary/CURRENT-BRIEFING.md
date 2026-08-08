@@ -33,7 +33,7 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-08 ~15:1xZ · #6f CENSUSED AND RE-SIZED TO `S`; `D2` AUTHORIZED
+## LIVE — 2026-08-08 ~15:3xZ · FIFTH WALL RULED A SIBLING; #6g FILED AND FRAMED
 
 **`main = 8c6ab6f9`.** `RT-CARRIED-CONTINUATION-RESUME` is **closed** — all four
 deliverables landed, all eight of its own ACs met. Its `D2` **worked**: the
@@ -242,14 +242,60 @@ per §10⁻a.
 > still has no witness**. It stays — fail-closed on an unported shape is correct —
 > but its presence is not evidence the shape exists.
 >
+> ### THE FIFTH WALL FIRED, AND IT IS THE FIRST THAT IS NOT A CARRIER PROBLEM
+>
+> `D2` at **`1f89a92b`** works: the trailing-suffix refusal is **gone from both A
+> rows**, `lower_carried_match`'s interface is untouched, and termination is a
+> stated lexicographic measure on `(active.pending.len(), eliminators.len())`
+> **plus** an independently enforced fail-closed depth bound. The implementer
+> stated the measure and **then declined to rely on it**, because depth two is
+> unexercised — which is the correct response to the obligation I set.
+>
+> ```
+> Unsupported(ComputationalMatch, "scrutinee is not a constructor value after
+> ordinary expression lowering")
+> ```
+>
+> **Architect ruled it a distinct sibling authority** (`evt_1pw1ng8448mef`) and
+> **approved the `D2` accepted partial** at that exact SHA. Handle assigned:
+> `RT-SPECIALIZED-ACTIVE-RESUME`. **Filed and framed as #6g.**
+>
+> **The carrier has already been eliminated** — the four prior walls were
+> `BoundaryCarrier` refusals about how a carried operand crosses or is consumed.
+> This is the `Lowered::Constructor` destructure, which **sits before the
+> eliminator dispatch**, so an `Active` frame never reaches its resume when the
+> value is an ordinary non-constructor. **Constructor shape is necessary for
+> `Computational` and `Ordinary` elimination and is not a prerequisite for
+> resuming `Active`.**
+>
+> **Do NOT hoist `Active` dispatch above the shape and terminal guards** —
+> `RecursiveBackedge` must propagate and `Trap` must seal. That is the obvious
+> repair and it is the wrong one.
+>
+> **Two things I verified myself rather than repeating from the handback:** the
+> refusal has exactly **one** production site, and it is pinned in **full
+> equality** by a committed suppression control. A repair changing the message
+> reds that assertion **by design** — and the control's continued discrimination
+> is a free check that no protocol machinery leaked into the resume path.
+>
+> **The QA scope correction is worth keeping:** the true original-base cut is
+> `+345/-10` across six paths, not the `+98`/`+171` first quoted. **The `+171`
+> was the `D0`/`D1` parent's contribution read off the wrong anchor** — when a
+> candidate spans two commits, a per-commit stat is not a cut stat. The object was
+> never wrong; only its description was.
+>
 > ### MY NEXT ACTION, so a cold resume does not have to re-derive it
 >
-> **The wait has an address (§1a):** the `D2` candidate SHA for
-> [[RT-CARRIED-ORDINARY-COMPOSITION]], owed by `runtime-leader`, thread
-> `thr_pvxda1tcg20d`, ruling posted at `evt_ds4hwahvc5se`. **A runtime turn
-> legitimately runs hours** (`MODELS.md` — that seat is T1 on genuinely hard
-> work); tens of minutes of silence is not a stall. Read the spinner's **elapsed
-> timer**, never the composer.
+> **The wait has an address (§1a):** the **publisher request on a resolved merge
+> Decision** binding exact `1f89a92b`, owed by `runtime-leader`, thread
+> `thr_pvxda1tcg20d`. QA and the Architect have both approved that SHA; the
+> Decision is the authorization and I read it fresh from the object before
+> publishing (`§14`, `M1`). **It is a code merge** — background the publisher, and
+> M8 notification to the Adversary is owed after it lands.
+>
+> **A runtime turn legitimately runs hours** (`MODELS.md` — that seat is T1 on
+> genuinely hard work); tens of minutes of silence is not a stall. Read the
+> spinner's **elapsed timer**, never the composer.
 >
 > **Order of release from here:** #6f completes →
 > `RT-MATCH-RECURSOR-CONSUMERS` completes → [[RT-LEXICAL-RECURSOR-CONSUMERS]]
