@@ -11541,11 +11541,23 @@ fn d1_census_insert(
 ///
 /// The rows that motivated this node live in `rt_parity_native`. They are
 /// quarantined by other owners, so they run only under `--ignored`; `D0` did run
-/// all six and each refuses earlier, at an effect seat or the closure boundary.
-/// **So they never reach the selector and supply no production observation for
-/// this class** -- which is a different and weaker statement than their being
-/// unexecutable, as an earlier draft of this comment had it. That gap is
-/// reported in `D1`'s handoff rather than papered over here.
+/// all six, and each refuses at an effect seat or the closure boundary. Two
+/// separate facts keep them out of this census, and neither is that they fail to
+/// reach the selector:
+///
+/// 1. **The instrument's domain does not extend to them.** They are `ken-cli`
+///    integration programs, so `ken-runtime` is built as a dependency with
+///    `cfg(test)` unset and the observation hook does not exist in that build.
+///    This is the domain the hook's own doc already states.
+/// 2. **Their refusal is downstream of the selector**, so they supply no
+///    *successfully compiled* member for `D1` or `AC-1b` to quantify over.
+///
+/// **An earlier draft inferred from the refusal that these rows "never reach the
+/// selector". That inference is false**, and the producer says so: the
+/// observation and `select_body_emission_authority` both run at
+/// `compile_expr_into_module_with_root_projection` before the static-transition
+/// plan is built, and the measured Effect and `Closure` refusals arise later
+/// still. A later first refusal is not evidence about an earlier gate.
 ///
 /// **Promise class: transition sentinel.** It reds when any member of these gates
 /// starts or stops firing a class, which is exactly when this node's scope
@@ -11587,9 +11599,9 @@ fn d1_the_measured_population_and_the_classes_each_member_fires() {
             "seed-call-port-producer-match".to_string(),
             BTreeSet::from([RecursiveDescentResidual::ProducerMatchCall]),
         )]),
-        "D1: across both gates exactly one program fires anything, and what it fires is this \
-         node's class alone. A new member here is a program nobody has attributed to a \
-         residual-class owner -- report it rather than widening this expectation"
+        "D1: across the nc5 gate and the compiling witness, exactly one program fires anything, \
+         and what it fires is this node's class alone. A new member here is a program nobody has \
+         attributed to a residual-class owner -- report it rather than widening this expectation"
     );
 }
 
