@@ -1334,9 +1334,7 @@ mod tests {
             operation: HostOpV1::BufferAllocate,
             capability: None,
             resource_bindings: Vec::new(),
-            request: CanonicalRequestV1::BufferAllocate {
-                capacity: u64::MAX,
-            },
+            request: CanonicalRequestV1::BufferAllocate { capacity: u64::MAX },
             outcome: CanonicalOutcomeV1::Error(SemanticErrorV1::Resource(
                 ResourceErrorV1::AllocationFailed,
             )),

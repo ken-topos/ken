@@ -3803,9 +3803,7 @@ mod tests {
         let allocation_failed = allocate(&mut admitted, impossible_capacity);
         assert_eq!(
             allocation_failed.outcome,
-            CanonicalOutcomeV1::Error(SemanticErrorV1::Resource(
-                ResourceErrorV1::AllocationFailed
-            ))
+            CanonicalOutcomeV1::Error(SemanticErrorV1::Resource(ResourceErrorV1::AllocationFailed))
         );
         assert_eq!(
             (
@@ -3828,9 +3826,7 @@ mod tests {
         let buffer_limit = allocate(&mut policy_rejected, impossible_capacity);
         assert_eq!(
             buffer_limit.outcome,
-            CanonicalOutcomeV1::Error(SemanticErrorV1::Resource(
-                ResourceErrorV1::BufferLimit
-            ))
+            CanonicalOutcomeV1::Error(SemanticErrorV1::Resource(ResourceErrorV1::BufferLimit))
         );
         assert_eq!(
             (

@@ -1872,6 +1872,7 @@ mod tests {
         ] {
             assert_eq!(decode_resource_error_reply(tag, zero), Some(expected));
         }
+        assert_eq!(decode_resource_error_reply(u64::MAX, zero), None);
 
         for invalid in [
             (4, zero),
