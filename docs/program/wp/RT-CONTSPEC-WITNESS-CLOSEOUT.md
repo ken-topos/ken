@@ -369,7 +369,7 @@ frame. Both were discovered by trying to execute it.
 | runtime-reached trap translation on the retained root | `RT-DESCENT-RETIRE`, which deletes that root |
 | whether any live row still exercises the ported shape | `RT-DESCENT-RETIRE` `D6b`, bound into its `AC-5` |
 | the active-recursor transport mechanism, unbuilt; `MatchScrutineeRecursor` and `LexicalCallArgumentRecursor` both live | `RT-RECURSOR-TRANSPORT`, still `ready` - see `D6` |
-| the behavioural wrong-same-shaped-target witness | `AC-9`, routed to the Architect - see `D7` |
+| `two_same_shape_workers_are_distinguished`'s own aggregate-result decode, which is a different blocker from `AC-9` and unaffected by it | `RT-WORKER-FIXTURE-DECODE` |
 
 ---
 
@@ -438,97 +438,107 @@ is a caution the text is stale, **not** a ruling the obligation is discharged.
 
 ---
 
-## D7 / AC-9 - precondition discharged, behavioural witness ROUTED
+## D7 / AC-9 - DISCHARGED, at the definition-binding seat
 
-**`AC-9` is not discharged. It is routed, with the refusal quoted, exactly as
-the frame's own escape clause directs.** What follows is what moved and what
-did not, because the two are easy to conflate here.
+**`AC-9` is discharged.** On the integrated, executed assembly, binding the
+wrong same-shaped body under a declared continuation changes the observed
+result from `Alpha` to `Beta`. Both runs execute; neither is a compile-time
+refusal.
 
-### What this seam did discharge: the fixture precondition
+This section previously recorded `AC-9` as routed, on my inference that
+reaching execution required moving the planner-issued target. **That inference
+was wrong and the Architect corrected it** (ruling 2026-08-08). The correction
+is recorded below rather than overwritten, because the reason I was wrong is
+reusable.
 
-The frame assigns this seam one precondition: *"at least two distinct
-same-shaped targets in one lawful callable population"*, and states that a
-pre-call *"found no distinct same-shaped call target"* refusal is a missing
-fixture, not a discharge. **That precondition is now met.**
+### The fixture precondition, which was the half this seam owns
 
-`d7_two_same_shaped_targets_in_one_population` supplies two targets that are
+`d7_two_same_shaped_targets_in_one_population` supplies two callables that are
 same-shaped under `RT-WORKER-BIND`'s definition - declared arity 1, capture
-count 0 - differing only in the constructor their body returns. It **executes**:
+count 0 - differing only in the constructor their body returns. It executes.
 
-```
-OK (Returned(Constructor { constructor: "ctor:fixture::d7::Alpha", args: [] }), Some(517))
-```
+**Its shape is forced by measurement, not taste.** Putting both closures in one
+aggregate refuses with *"a closure cannot cross the boundary: it is
+runtime-local and live-domain only, and it has no durable lane"*, at **both**
+`recursive_positions` configurations, `[0]` and `[0, 1]` - the same
+ordinary-`Closure` wall the frame records as stopping seam 2's six shapes.
+Binding the sibling in the enclosing scope keeps one closure per aggregate and
+lowers lawfully.
 
-**The shape of that fixture is forced, not stylistic, and the forcing is a
-measurement.** Putting both closures in one aggregate refuses:
+### Where I went wrong, and why the seat is not the call site
 
-```
-Unsupported(UnsupportedLowering { construct: "Closure",
-  reason: "a closure cannot cross the boundary: it is runtime-local and
-           live-domain only, and it has no durable lane" })
-```
+A call-site `FuncRef` redirect is **structurally unable to execute** while the
+equality gate is present: finished CLIF is compared against
+`bundle.continuation(identity.target())`, so moving only the emitted callee must
+reject before anything runs. I read that as "the gate's left-hand side is the
+planner-issued target, therefore reaching execution needs planner state to move,
+therefore this is banned scope."
 
-measured at **both** `recursive_positions` configurations, `[0]` and `[0, 1]`.
-That is the same ordinary-`Closure` wall the frame records as stopping seam 2's
-six shapes. Binding the sibling target in the enclosing scope keeps one closure
-per aggregate and lowers lawfully.
+**The left-hand side is not a planner population.** `UnitBundle::continuation`
+is the *lowering* forward-declaration naming authority, and
+`define_continuation_bodies` is the producer that binds each declared
+continuation function to the body it executes.
 
-### What moved: the redirect now reaches the call seam
+⇒ The gate proves planner-identity to emitted-callee **routing**. It does not
+prove the declaration-to-body binding is right, nor what the bound body
+computes. That is `RT-CONTSPEC-ACTIVATE`'s own stated residual, and it is
+precisely the property `AC-9` needs.
 
-`ContinuationEmissionMutation::RedirectToDistinctSameShapedTarget` selects a
-distinct target whose declared arity and capture count equal the exact target's.
-Distinctness is on the emitted callable and sameness on the two declared counts
-- never origin inequality, never widths, alignments, offsets, carriers,
-ownership or the frame header.
+**The generalizable error:** I inferred the *ownership* of a guard's operand
+from *where the guard fired*. A rejection tells you a comparison failed; it does
+not tell you which subsystem authored either side. I never read what produced
+`bundle.continuation`, and the answer was one definition away.
 
-With a real two-target population it **resolves a distinct same-shaped target
-and enters the call seam**, which is the thing `RT-CONTSPEC-ACTIVATE` could not
-do: there the same-shaped redirect refused before the call and, in the
-Architect's words, *"was never a control at all."* Both facts are pinned by
-`d7_the_same_shaped_redirect_reaches_the_call_seam_and_is_caught_by_the_emission_oracle`,
-whose first assertion is that the pre-call refusal does **not** occur.
+### The witness
 
-### Why AC-9 still does not discharge, and the exact first refusal
+`ContinuationEmissionMutation::SubstituteContinuationBodyDefinition`, at the
+definition-binding seat in `define_continuation_bodies`, after the exact planned
+specialization and its declared `FuncId` are known. It selects a distinct
+callable by the same declared-arity and capture-count predicate the call-seam
+control uses, and substitutes the body authority bound under the exact
+continuation `FuncId`.
 
-The redirect is caught at compile time:
+Preserved, deliberately and completely: the causal token, specialization id,
+declared `FuncId`, header, slots, offsets, inputs, owner, and the emitted call.
+`bundle.continuation`, the emitted `FuncRef` and
+`verify_emitted_continuation_calls` are untouched, and **the equality gate stays
+enabled and green naturally** - so a red here cannot be the static gate firing.
 
-```
-Backend(Module("the emitted direct-call target funcid40 disagrees with the
-  planner-issued continuation target funcid43 for a causal token; the call that
-  was built is not the call that was planned"))
-```
+| run | substitutions applied | executed result |
+|---|---:|---|
+| exact | **0** | `ctor:fixture::d7::Alpha` |
+| definition-binding mutation | **1** | `ctor:fixture::d7::Beta` |
 
-**The assembly therefore never executes and no result is observed.** `AC-9`
-refuses precisely this green: it is `RT-CONTSPEC-ACTIVATE`'s `AC-2`, already
-met, and it observes the mutation changing the field it mutates. Recording it
-as a discharge would be the exact substitution the AC was written to forbid.
+**The application counter is load-bearing.** A mutation that applied to nothing
+would leave the program returning `Alpha`, and an unchanged result would read as
+*"the substitution had no effect"* when it means *"no substitution happened"* -
+opposite conclusions from identical evidence. Asserting 0 before and 1 after is
+what separates them. The trailing re-run checks the mutation did not leak past
+its scope.
 
-⇒ **The open design question, which is the Architect's and not mine.** For a
-redirect to reach execution, the emitted call and its planner-issued record must
-*agree* on the wrong target - the emission-equality oracle is doing its job by
-rejecting a disagreement. Making them agree means moving the **planner-issued**
-target, not only the emitted `FuncRef`. That lands on this frame's banned scope
-(no planner or ABI repair, no change to planner populations), so I did not
-attempt it. Whether a behavioural witness is reachable without touching a banned
-surface - or whether `AC-9` needs recutting against a seam that is guarded
-compile-time by construction - is a design ruling.
+**One index correction, measured rather than reasoned.** The shape index was
+first built over continuation *specializations*. This fixture plans exactly one,
+so the control refused for want of a partner that was never going to exist. The
+two same-shaped things are the worker **bodies** - which is what `AC-9` means by
+a distinct same-shaped target - so the index is over the callable population.
 
-**Nothing was weakened to get closer.** `boundary_transfer_admissibility` is
-untouched, no durable or borrowed closure lane was fabricated, no planner or ABI
-population changed, and there is no `0/0` witness.
+### What the call-seam redirect is now, stated precisely
 
-### One instrument correction, recorded because it nearly passed as evidence
+`RedirectToDistinctSameShapedTarget` remains, **as a transition sentinel and
+nothing more.** It proves the redirected path reaches
+`claim_and_call_resolved_continuation` and is caught by the finished-CLIF
+equality gate.
 
-The redirect's first implementation read the exact target's declared shape from
-`StaticTransitionPlan::emittable_units()`. The exact target is a continuation
-specialization and is **not** a member of that population, so the lookup
-answered `None` and the control refused with *its own* error - "could not read
-the exact target's declared arity and capture count".
+⛔ **It is not an executed-result oracle: its mutated arm never executes.** Its
+value is that it converts `RT-CONTSPEC-ACTIVATE`'s *"found no distinct
+same-shaped call target"* - a pre-call refusal that proved nothing about targets
+- into a control that actually reaches the seam. That is a statement about
+reachability, not about behaviour, and the two must not be conflated: conflating
+them is exactly what `AC-9` forbids when it refuses a green showing only that
+the claimed target changed.
 
-**That refusal is a red, and a red is what a working control looks like.** Had I
-read it as the mutation being caught, I would have recorded a control that never
-compared two shapes at all. It was caught only by reading which message came
-back. The fix reads both sides from the same source - each call's own declared
-record - so a disagreement cannot be an artefact of two derivations. This is the
-same failure family the frame warns about when it says a green mutation is a
-reach question before it is a defect; it holds for reds too.
+**Nothing was weakened.** `boundary_transfer_admissibility` untouched, no
+durable or borrowed closure lane fabricated, no planner or ABI population
+changed, no frozen prior-slice surface edited, no `0/0` witness.
+`lowering/units.rs` is neither a planner/ABI path nor one of `AC-6`'s frozen
+surfaces.

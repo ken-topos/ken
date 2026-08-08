@@ -10738,6 +10738,86 @@ fn d7_two_same_shaped_targets_in_one_population() -> RuntimeExpr {
     }
 }
 
+#[cfg(test)]
+const D7_ALPHA: &str =
+    "OK (Returned(Constructor { constructor: \"ctor:fixture::d7::Alpha\", args: [] }), Some(517))";
+#[cfg(test)]
+const D7_BETA: &str =
+    "OK (Returned(Constructor { constructor: \"ctor:fixture::d7::Beta\", args: [] }), Some(517))";
+
+/// **`RT-CONTSPEC-WITNESS` `AC-9` — a wrong same-shaped target changes an
+/// EXECUTED result.** Architect ruling 2026-08-08.
+///
+/// Both runs **execute**. The mutation binds a distinct same-shaped body under
+/// the exact declared continuation `FuncId`, preserving the causal token,
+/// specialization id, declared `FuncId`, header, slots, offsets, inputs, owner
+/// and the emitted call — so `verify_emitted_continuation_calls` stays enabled
+/// and green naturally, and **the observed answer moves `Alpha` to `Beta`.**
+///
+/// ⭐ **Why this is `AC-9` and the call-seam redirect is not.** The finished-CLIF
+/// equality gate proves planner-identity to emitted-callee routing. It cannot
+/// see which *body* is bound to a declared function, which is
+/// `RT-CONTSPEC-ACTIVATE`'s own stated residual. This asserts the property that
+/// residual leaves open: **the declared target's behaviour depends on the body
+/// bound to it, so same-shaped bodies cannot alias unnoticed.**
+///
+/// ⛔ **The application counter is load-bearing, not bookkeeping.** A mutation
+/// that applied to nothing would leave the program returning `Alpha`, and an
+/// unchanged result would then read as "the substitution had no effect" when it
+/// means "no substitution happened" — opposite conclusions from identical
+/// evidence. Asserting `0` before and `1` after is what separates them.
+///
+/// The trailing re-run is the scope check: a mutation that leaked would redden
+/// every later test in this thread instead of this one.
+///
+/// **Promise class: durable invariant.** The subject is that a declared
+/// continuation executes the body bound to it. Every intended extension that
+/// keeps the declaration-to-body binding honest keeps this green.
+#[test]
+fn d7_binding_a_distinct_same_shaped_body_changes_the_executed_result() {
+    use crate::cranelift_backend::lowering::{
+        d7_definition_binding_substitutions, reset_d7_definition_binding_substitutions,
+    };
+    let witness = d7_two_same_shaped_targets_in_one_population();
+
+    reset_d7_definition_binding_substitutions();
+    let exact = d7_run(&witness);
+    assert_eq!(
+        exact, D7_ALPHA,
+        "positive control: the exact assembly must EXECUTE to the exact target's answer"
+    );
+    assert_eq!(
+        d7_definition_binding_substitutions(),
+        0,
+        "the exact run must apply no substitution; a control that fires unasked is measuring \
+         something other than the mutation"
+    );
+
+    let mutated = with_continuation_emission_mutation(
+        ContinuationEmissionMutation::SubstituteContinuationBodyDefinition,
+        || d7_run(&witness),
+    );
+    assert_eq!(
+        d7_definition_binding_substitutions(),
+        1,
+        "the mutation must actually have bound a distinct body; without this a no-op passes \
+         by returning the exact answer"
+    );
+    assert_eq!(
+        mutated, D7_BETA,
+        "AC-9: binding the other same-shaped body under the same declared function must change \
+         the EXECUTED result. A compile-time refusal here would be the wrong oracle"
+    );
+    assert_ne!(exact, mutated, "the two runs must be distinguishable");
+
+    reset_d7_definition_binding_substitutions();
+    assert_eq!(
+        d7_run(&witness),
+        D7_ALPHA,
+        "the mutation must not leak past its scope"
+    );
+}
+
 /// **`D7` part one — the fixture precondition is discharged: two same-shaped
 /// targets in one lawful population that actually EXECUTES.**
 ///
