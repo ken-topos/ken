@@ -495,4 +495,3 @@ back. The fix reads both sides from the same source - each call's own declared
 record - so a disagreement cannot be an artefact of two derivations. This is the
 same failure family the frame warns about when it says a green mutation is a
 reach question before it is a defect; it holds for reds too.
-
