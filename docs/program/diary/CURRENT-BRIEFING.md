@@ -96,12 +96,15 @@
 >    It says five `assert_narrowed_alike` rows await
 >    `RT-CARRIER-BYTESPAN-OBSERVE`; that node **closed without re-arming them**,
 >    so a reader who checks it concludes the differential is restored when it is
->    not. **Routed to the Librarian** (`evt_6eayw0w0hgc0`) — `library/` is
->    theirs and runs concurrently. **The lesson is bigger than the fix: the
->    `LIB-ASBUILT` guard argued the passage could not silently invert BECAUSE it
->    named both owner nodes — that assumed the node would land AND re-arm. It
->    landed and closed. A guard written for a whole deferral points the wrong
->    way when only part of it lands.**
+>    not. **FIXED AND MERGED — PR #1558**, `dec_3wpsmg08xmvaa` resolved by me
+>    under §14a (`library/`-confined ⇒ Librarian verdict + diff-scope, no
+>    Architect). **The chapter now states the CAUSE and names no node id at
+>    all** — verified: zero occurrences of `RT-CARRIER-BYTESPAN-OBSERVE` in it.
+>    **The lesson is bigger than the fix: the `LIB-ASBUILT` guard argued the
+>    passage could not silently invert BECAUSE it named both owner nodes — that
+>    assumed the node would land AND re-arm. It landed and closed. A guard
+>    written for a whole deferral points the wrong way when only part of it
+>    lands**, and the naming meant to protect the passage is what misled.
 > 2. **The 5 rows in `rt_parity_native.rs` say "awaiting Steward recut" — the
 >    recut already happened.** Folded into
 >    [[RT-SITEOP-CARRIED-WITNESS]] `D1a`: repair the pointer, keep the
