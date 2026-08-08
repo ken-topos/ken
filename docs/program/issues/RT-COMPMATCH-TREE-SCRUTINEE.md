@@ -22,6 +22,36 @@ origin: Measured by the RT-SRCBODY-BIND-ORDER D12 complete no-fail-fast enumerat
 ComputationalMatch: tree-producing match scrutinee is not Bool or a constructor
 ```
 
+## IT IS THE DESCENT CAMPAIGN'S ONLY REAL-PROGRAM WITNESS FOR THIS CLASS
+
+Steward, 2026-08-08, `evt_27jwdbz9h2t4c`, routed from
+[[RT-SPECIALIZED-ACTIVE-RESUME]]'s cross-crate census.
+
+That census ran the descent campaign's boundary instrument inside `ken-cli` and
+`ken-verify` with `--include-ignored`. **The sole failure was this node** — and
+that makes it load-bearing for a question the campaign has carried since node
+#6b.
+
+The campaign's Trap 1 is *"a hand-built `RuntimeExpr` fixture proves the
+classifier sees the class, not that a real Ken program exhibits it."* Its
+population is two hand-built values. **This node is a real Ken program producing
+a non-constructor `ComputationalMatch` scrutinee** — the same class, failing at a
+**different consumer**.
+
+> ### IT SPLITS A QUESTION THAT WAS BEING CARRIED AS ONE
+>
+> - *Do real programs exhibit this shape?* **Yes** — this node is the witness.
+> - *Is the descent campaign's specific cell reachable in production?* **No**,
+>   and that is a property of the `#[cfg(test)]` activation seam, **not of the
+>   language.**
+>
+> Only the first was ever what Trap 1 was about. Recording the split here
+> because this node is where a reader arrives holding the witness.
+
+**This does not make the node startable and does not change its owner.** It
+raises what closing it is worth: it is the only place the class can be studied
+on a real program rather than a fixture.
+
 ## Why it is not one of the released owners
 
 **Distinct refusal class.** Not an effect-seat \`Need\`/\`Avail\` membership
