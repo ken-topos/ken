@@ -368,36 +368,73 @@ frame. Both were discovered by trying to execute it.
 | `two_same_shape_workers_are_distinguished` executable | `RT-WORKER-FIXTURE-DECODE` |
 | runtime-reached trap translation on the retained root | `RT-DESCENT-RETIRE`, which deletes that root |
 | whether any live row still exercises the ported shape | `RT-DESCENT-RETIRE` `D6b`, bound into its `AC-5` |
+| the active-recursor transport mechanism, unbuilt; `MatchScrutineeRecursor` and `LexicalCallArgumentRecursor` both live | `RT-RECURSOR-TRANSPORT`, still `ready` - see `D6` |
+| the behavioural wrong-same-shaped-target witness | `AC-9`, routed to the Architect - see `D7` |
 
 ---
 
-## D6 - the tracker closure
+## D6 - the measured still-open set, and why this candidate changes no tracker
 
-**The set was measured at `47ef28b1`, not inherited.** Reading `status:` from
-every node in the closure set at that base:
+**This candidate makes no tracker change at all.** Both
+`docs/program/issues/RT-CONTSPEC-WITNESS.md` and
+`docs/program/issues/RT-RECURSOR-TRANSPORT.md` are byte-identical to
+`47ef28b1`. `AC-7` is discharged by this section stating the set, not by a
+tracker diff.
 
-| node | status at base | action |
+**The set measured at `47ef28b1`**, reading `status:` from every node in the
+closure set:
+
+| node | status at base | disposition |
 |---|---|---|
-| `RT-CONTSPEC-WITNESS` | `ready` | flipped |
-| `RT-RECURSOR-TRANSPORT` | `ready` | flipped to `closed` |
-| `RT-DECL-CLOSURE-PORT` | `merged` | **not touched** - already terminal |
-| `RT-CONTSPEC-ASSEMBLY` / `-ACTIVATE` / `-LEDGER` | `merged` | not touched |
+| `RT-CONTSPEC-WITNESS` | `ready` | still open; the Steward flips it post-merge under `merge-procedure.md` **M7** |
+| `RT-RECURSOR-TRANSPORT` | `ready` | **still open, and it must stay open** - see below |
+| `RT-DECL-CLOSURE-PORT` | `merged` | already terminal, not re-closed |
+| `RT-CONTSPEC-ASSEMBLY` / `-ACTIVATE` / `-LEDGER` | `merged` | terminal |
 
-**The set is two**, which matches the frame's 2026-08-08 correction. No third
-flip was invented, and `RT-DECL-CLOSURE-PORT` was not re-closed.
+### Why this node does not record its own closure
 
-`RT-RECURSOR-TRANSPORT` names this seam as what closed it, and records that its
-residual coverage question lives in `RT-DESCENT-RETIRE` `D6b` rather than being
-carried as an unowned gap.
+A candidate that marks its own node `merged` asserts something false at exactly
+the moments it is read - during QA, during CI, during Architect review - and if
+it is rejected or superseded, that falsehood sits on the branch for anything cut
+from it to inherit. **A node cannot truthfully record its own merge, because the
+event it records is the one that has not happened yet.** The flip is the
+Steward's at M7.
 
-**One flip to check against convention rather than accept.** This node's own
-`status` is set to `merged` here because `AC-7` asks `D6` to close every node in
-the measured set, and this node is in it. The landed practice is different: the
-Steward flipped `RT-CONTSPEC-LEDGER` to `merged` in a separate post-merge commit
-(`43e5903f`), not in the candidate. Until this candidate merges, that line
-asserts something untrue of the tree it sits in. **It is a single frontmatter
-line and it is the one to drop** if the convention should win over the AC's
-literal reading; the rest of `D6` does not depend on it.
+### Why `RT-RECURSOR-TRANSPORT` must not be closed, in any form
+
+This is the substantive half, and it is a correction to the frame rather than to
+the candidate. Steward ruling, 2026-08-08.
+
+`RT-RECURSOR-TRANSPORT` is `size: L` and **its mechanism has never been built**.
+Both residual classes it owns are live in production - `MatchScrutineeRecursor`
+and `LexicalCallArgumentRecursor` - and `RT-DESCENT-RETIRE` lists it in
+`depends_on` and deletes the `RecursiveDescent` lane.
+
+⇒ **Closing it would mark an unbuilt L-sized node resolved and unblock the lane
+deletion while two classes can still select it.** That is `RT-DESCENT-RETIRE`'s
+own banned scope verbatim: *"A partial deletion is strictly worse than none: it
+removes the fallback while a class can still select it."*
+
+**Where the instruction came from.** The three-node closure was inherited from
+`RT-CONTSPEC-LOWER`, written when `RT-RECURSOR-TRANSPORT` was to land in the
+same atomic candidate. The recut split them and the list was never re-derived;
+the 2026-08-08 correction fixed the *arithmetic* - three entries to two - without
+asking whether the remaining entry belonged in the set at all.
+
+**The node's own text is what made this look settled**, and it is the trap worth
+recording: its banner reads *"THIS NODE NO LONGER DELIVERS DIRECTLY - it closes
+when the terminal seam merges."* That is true of the delivery *shape* and says
+nothing about whether the mechanism was built. **An instruction to close is not
+evidence that the work behind it is done**, and a banner asserting the closure
+timing is not a statement about the closure's correctness. The check that
+settles it is the one the ruling ran: are the classes this node owns still live
+in production?
+
+`RT-RECURSOR-TRANSPORT` remains `ready` and is the next node after this one.
+Carried forward for whoever picks it up: its "what this node now owes" paragraph
+predates `RT-DECL-CLOSURE-PORT` `D7` landing, and the `BoundaryUse` record it
+names is the **host-effect** population, not the four axes seam 3 deleted. That
+is a caution the text is stale, **not** a ruling the obligation is discharged.
 
 ---
 

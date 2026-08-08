@@ -1,7 +1,7 @@
 ---
 id: RT-RECURSOR-TRANSPORT
 title: "Active-recursor transport — an active computational recursor's invocation-local scope/return-hole state cannot cross a functionized unit boundary, retaining two residual classes"
-status: closed
+status: ready
 owner: runtime
 size: L
 gate: none
@@ -10,22 +10,6 @@ blocks: [RT-DESCENT-RETIRE]
 github: null
 origin: Operator directive 2026-07-29 — prioritize replacement of RecursiveDescent, migrate the remaining residual classes, do not linger half-migrated. Campaign docs/program/16-recursive-descent-retirement.md. Steward-filed (agents cannot create tracked work per COORDINATION §2).
 ---
-
-> # CLOSED 2026-08-08 BY [[RT-CONTSPEC-WITNESS]], THE TERMINAL SEAM
->
-> This node did not deliver directly. Under the 2026-08-01 recut it closes when
-> the terminal seam merges, and that is what closed it -- `D6` of
-> [[RT-CONTSPEC-WITNESS]], measured against the set of nodes still open at base
-> `47ef28b1`. That set was **two**: this node and the seam itself.
-> [[RT-DECL-CLOSURE-PORT]] had already merged separately under the operator's
-> partial-merge policy and was not flipped again.
->
-> **What is closed here is this node's tracker obligation, not an open question
-> about the mechanism.** The residual coverage question the campaign surfaced --
-> whether any live row still exercises the ported shape -- was folded into
-> [[RT-DESCENT-RETIRE]] `D6b` and bound into that node's `AC-5`, because that
-> node performs the last deletion that can change the answer. It is not carried
-> as an unowned gap.
 
 > # SUPERSEDED EDGE 2026-08-02 — READ THIS BEFORE ANY REFERENCE BELOW
 >
