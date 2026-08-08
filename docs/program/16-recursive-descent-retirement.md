@@ -371,6 +371,7 @@ graph LR
 | 6 | `RT-FNUNIT-RESULT-TOKEN` | M | **Trap 2, filed 2026-08-08** — retiring `SeedClosureCall` made a shape newly reachable that the `FunctionizedUnits` lane does not support (`native result token 265 is not in the result table`). Owns `nc22`, currently `#[ignore]`d. **Gates #7**: it is the only program exercising a shape supported *only* by the lane #7 deletes. Its `M` is a **scoping** figure, not a measured one — the family width is unestablishable from a corpus holding one instance |
 | 7 | `RT-DESCENT-RETIRE` | M | delete the selector, enum, authority and lane; bank the win. Gated on **five** nodes — the four migration nodes **and #6** |
 | 8 | `RT-BACKEND-MODULE-SPLIT` | M | **operator, 2026-07-31** — split the oversized `ken-runtime` backend files. **After #7, never before** — see below |
+| 9 | `NATIVE-HANDLE-CARRIER` | M | **operator, 2026-08-08 — slotted after #8.** Not a residual-class node: a native build-pipeline completeness gap (`BufferHandle` fails checked-core body-view lowering across the higher-order `withBuffer` boundary). Its elaborator half is done and preserved at `c07e63c2`; the remainder is the `int_to_uint64_raw` identity arm plus the six-axis matrix. Sequencing it here means it rebases onto the post-split module layout **once**. It gates [[PX8-F-CAP-41]] Phase 2 and so `PX8` clause-(a) |
 
 ## NON-OPERATIVE HISTORY — superseded, down to the "#8" heading
 

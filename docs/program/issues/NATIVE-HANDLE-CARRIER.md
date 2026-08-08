@@ -5,13 +5,40 @@ status: ready
 owner: runtime
 size: M
 gate: none
-depends_on: [RT-NATIVE-FNSPLIT, RT-JOIN-DISPOSITION, RT-DECL-CLOSURE-PORT]
+depends_on: [RT-NATIVE-FNSPLIT, RT-JOIN-DISPOSITION, RT-DECL-CLOSURE-PORT, RT-BACKEND-MODULE-SPLIT]
 blocks: [PX8-F-CAP-41]
 github: null
 origin: discovered under [[PX8-F-CAP-41]] Phase 2 impl (foundation-implementer hard-stop evt_563ss8821n7f); Architect means/representation ruling evt_2zkjr68y1sdgf (thr_570t9qzcthjv9, 2026-07-23). Steward-filed (agents cannot create tracked work per COORDINATION §2).
 ---
 
-> # ⛔ HELD 2026-07-29 — 11/12 GREEN, STOPPED ON [[RT-DECL-CLOSURE-PORT]]'s `AC-1` ROW
+> # SEQUENCED 2026-08-08 — RESUMES AFTER [[RT-BACKEND-MODULE-SPLIT]], campaign node #8
+>
+> **Operator instruction, 2026-08-08: slot this node after
+> `RT-BACKEND-MODULE-SPLIT`.** Recorded as a `depends_on` edge, which is the
+> only thing `gen-progress.sh` reads — a prose note would not have held it back.
+>
+> **Read the hold banner below as HISTORY, not as the current blocker.** Its
+> gate — `RT-DECL-CLOSURE-PORT`'s `AC-1` row — **merged**, and all three of the
+> original dependencies are now merged. This node was genuinely resumable
+> between that merge and this instruction. It is now held by a **new and
+> deliberate** edge, not by the old one.
+>
+> **Consequence, stated because it is a real cost and the decision is the
+> operator's:** this node blocks [[PX8-F-CAP-41]] Phase 2, which is on the
+> critical path to **`PX8` clause-(a) closure**. That chain now sits behind the
+> entire RecursiveDescent retirement *and* the module split — five nodes, not
+> zero. The elaborator half is already done and preserved at `c07e63c2`, so
+> nothing rots; the cost is latency on `PX8`, not rework.
+>
+> **What resuming will cost, unchanged by the wait:** a rebase over
+> `RT-DECL-CLOSURE-PORT`'s `core.rs` rewrite — and now over the module split's
+> file moves too, which is the one item this sequencing makes *cheaper* rather
+> than dearer. Doing the split first means this node rebases onto the new module
+> layout once, instead of landing against the old layout and being moved by #8.
+
+> # HELD 2026-07-29 — 11/12 GREEN, STOPPED ON [[RT-DECL-CLOSURE-PORT]]'s `AC-1` ROW
+>
+> **Superseded as the blocking reason — see the sequencing banner above.**
 >
 > **Steward disposition `evt_5mtkdft1nxmwp`.** This node was released, picked up,
 > rebased, and ran its first outward validation pass. It stopped on one row —

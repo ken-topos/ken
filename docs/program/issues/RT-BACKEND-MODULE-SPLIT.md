@@ -6,7 +6,7 @@ owner: runtime
 size: M
 gate: none
 depends_on: [RT-DESCENT-RETIRE]
-blocks: []
+blocks: [NATIVE-HANDLE-CARRIER]
 github: null
 origin: Operator directive 2026-07-31 — the ken-runtime backend files are oversized again; a previous interlude of this shape produced the cranelift_backend/ directory. Operator asked whether to repeat it now or after the campaign, and confirmed AFTER on the Steward's recommendation. Campaign docs/program/16-recursive-descent-retirement.md §4 node #8. Steward-filed (agents cannot create tracked work per COORDINATION §2).
 ---
