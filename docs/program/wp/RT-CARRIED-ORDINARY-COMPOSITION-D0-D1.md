@@ -169,3 +169,68 @@ measured, not assumed, at each of the last two nodes.
   independent program. The independent population is two.
 - **CI has not run.** `AC-9` is a CI claim; no local `--workspace` run, per
   `COORDINATION §12`.
+
+---
+
+# `D2` outcome — the suffix is continued, and the refusal advanced a FIFTH time
+
+## What was built
+
+The trailing-suffix cell only. `lower_carried_match`'s returned `LoweringOperand`
+is composed against `eliminators[1..]` and re-entered into the same consumer.
+**Its interface is untouched** — still exactly cases / default / origin / env —
+so hard stop 3 did not fire.
+
+The two empty cells are unchanged and stay fail-closed as measured-at-base zeros.
+
+## Termination is a property of the code, not of an argument
+
+The lexicographic measure is `(active.pending.len(), eliminators.len())`: a
+composed re-entry leaves every pending suffix untouched and consumes one
+eliminator, and a resume splits `active.pending` into a head and a **strictly
+shorter** tail. Both components are non-increasing and one strictly decreases at
+every step.
+
+**That argument is stated and deliberately not relied on.** Every measured member
+has `suffix_len = 1`, so depth two is unexercised, and a termination argument
+whose only witness is the argument is not evidence. A **bounded re-entry depth
+fails closed** past the limit. It is expected never to bind; if a real program
+ever reaches it, the refusal is the signal to measure that shape and raise the
+bound deliberately.
+
+## What was measured
+
+**The fourth wall is gone from both rows** — the trailing-suffix refusal does not
+appear anywhere in the excluded run. Both rows then fail **identically** at a
+fifth authority:
+
+```
+Unsupported(ComputationalMatch, "scrutinee is not a constructor value after
+ordinary expression lowering")
+```
+
+**Different construct and different owned fact.** The previous four walls were
+`BoundaryCarrier` refusals about how a carried operand may cross or be consumed.
+This one is a `ComputationalMatch` refusal about the **value shape a scrutinee
+has after ordinary lowering** — the specialized path's `Lowered::Constructor`
+destructure inside the same consumer.
+
+**It is already a controlled shape elsewhere.** An existing
+`RT-RECURSOR-TRANSPORT`-era control pins this exact rendered refusal, in full
+equality, as the replay of a suppressed guard. So the successor inherits a
+message that is **load-bearing in a committed assertion** — a repair that changes
+or removes it will red that control, and that is a feature rather than an
+obstacle.
+
+## Status
+
+- Retained suite green at **817 / 0 / 4**; `diff --check` clean; production build
+  warning-neutral at 50.
+- **`RT-MATCH-RECURSOR-CONSUMERS AC-1` is not discharged and no row closes.** The
+  node stops here under the frame's fourth hard stop, armed in advance.
+- `AC-5` landed guards intact; `AC-6` zero added `#[ignore]`; `AC-7` both
+  variants, both insertions and the hook unchanged; `AC-8` `issues/` untouched.
+- `D3` remains subsequent work. Its counters are present and `#[cfg(test)]`-only,
+  and per the Steward it must **exclude itself** from population evidence: a
+  control that is a member of the population it observes proves the hook is
+  reachable, not the shape.

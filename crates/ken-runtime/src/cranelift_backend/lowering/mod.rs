@@ -2499,6 +2499,21 @@ struct Lowering<'a> {
     next_source_join: u64,
     next_source_predecessor: u64,
     live_source_continuations: usize,
+    /// `RT-CARRIED-ORDINARY-COMPOSITION` `D2` — re-entry depth for continuing a
+    /// composed suffix behind a carried ordinary elimination.
+    ///
+    /// The termination argument is lexicographic on
+    /// `(active.pending.len(), eliminators.len())`: a composed re-entry leaves
+    /// every pending suffix untouched and consumes one eliminator, and a resume
+    /// splits `active.pending` into head plus a strictly shorter tail. So both
+    /// components are non-increasing and one strictly decreases at every step.
+    ///
+    /// This counter does not rest on that argument. Every measured member of
+    /// this node's population has a suffix of length one, so depth two was never
+    /// exercised, and a termination argument that is only true is still a
+    /// termination argument nobody ran. The bound fails closed instead, and is
+    /// expected never to bind.
+    carried_suffix_reentries: usize,
     source_control_root: Option<ContinuationCursorId>,
     active_oriented_semantic_regions: usize,
     /// ⛔⛔ **`AC-C4`'s TERMINATION GUARD — the carried computational
