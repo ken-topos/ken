@@ -5209,10 +5209,14 @@ fn the_body_authority_selector_narrows_only_completed_ports_and_stays_fail_close
         }),
         args: Vec::new(),
     };
+    // `RT-SEED-CALL-PORT` `D3` inverted this row. It read "a retained
+    // seed-Closure call was admitted by default", guarding a variant that no
+    // longer exists; the call is now a COMPLETED port, so admitting it is
+    // correct and retaining the lane would be the defect.
     assert_eq!(
         select_body_emission_authority(&seed_closure_call, &declarations),
-        BodyEmissionAuthority::RecursiveDescent,
-        "a retained seed-Closure call was admitted by default"
+        BodyEmissionAuthority::FunctionizedUnits,
+        "D3: a seed-Closure call is a completed port and must select FunctionizedUnits"
     );
 }
 
@@ -5254,26 +5258,41 @@ fn retained_authority_residual_is_the_typed_selector_accounting() {
         BodyEmissionAuthority::RecursiveDescent
     );
 
-    let seed_closure_call = RuntimeExpr::Call {
-        callee: Box::new(RuntimeExpr::Closure {
-            captures: Vec::new(),
-            params: Vec::new(),
-            body: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
-        }),
-        args: Vec::new(),
-    };
-    let wrapped_seed = RuntimeExpr::Let {
+    // `RT-SEED-CALL-PORT` `D3` — this pair used to carry a seed-closure call,
+    // whose variant is now retired. The PROPERTY under test is the wrapper's
+    // propagation of a child's retained reason, not the particular reason, so
+    // the fixture moves to a surviving variant rather than the row being
+    // dropped. A retirement should cost the class, not the coverage.
+    let wrapped_producer_match = RuntimeExpr::Let {
         value: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(false))),
-        body: Box::new(seed_closure_call),
+        body: Box::new(d1_producer_match_call_witness()),
     };
     assert_eq!(
-        recursive_descent_residual(&wrapped_seed),
-        Some(RecursiveDescentResidual::SeedClosureCall),
+        recursive_descent_residual(&wrapped_producer_match),
+        Some(RecursiveDescentResidual::ProducerMatchCall),
         "a wrapper failed to propagate its child's retained reason"
     );
     assert_eq!(
-        select_body_emission_authority(&wrapped_seed, &BTreeMap::new()),
+        select_body_emission_authority(&wrapped_producer_match, &BTreeMap::new()),
         BodyEmissionAuthority::RecursiveDescent
+    );
+
+    // And the retired shape, kept as the paired negative: a wrapper around a
+    // seed-closure call must now propagate NOTHING and select the functionized
+    // lane. Without this row the edit above would read as coverage moving, when
+    // what it must also show is the old shape genuinely going quiet.
+    let wrapped_seed = RuntimeExpr::Let {
+        value: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(false))),
+        body: Box::new(d1_seed_closure_call_witness()),
+    };
+    assert_eq!(
+        recursive_descent_residual(&wrapped_seed),
+        None,
+        "D3: a seed-closure call is no longer a retained reason at any depth"
+    );
+    assert_eq!(
+        select_body_emission_authority(&wrapped_seed, &BTreeMap::new()),
+        BodyEmissionAuthority::FunctionizedUnits
     );
 
     let symbol = "decl:fixture::d5::closure".to_string();
@@ -10726,7 +10745,11 @@ fn d1_lexical_call_argument_recursor_witness() -> RuntimeExpr {
     }
 }
 
-/// A call whose callee is the retained non-lexical closure form.
+/// A call whose callee is the non-lexical closure seed form.
+///
+/// "Retained" is deliberately avoided here: `RT-SEED-CALL-PORT` `D3` retired the
+/// RESIDUAL, while the IR form itself is retained and ported. Calling the form
+/// "retained" now invites reading it as the retired residual lane.
 fn d1_seed_closure_call_witness() -> RuntimeExpr {
     RuntimeExpr::Call {
         callee: Box::new(RuntimeExpr::Closure {
@@ -10776,8 +10799,9 @@ fn d1_active_recursor() -> RuntimeExpr {
 /// instrument.**
 ///
 /// A variant no program reaches is a reportable gap in the measurement, not a
-/// variant that does not fire. Each of the five is named with the witness that
-/// exhibits it.
+/// variant that does not fire. Each SURVIVING variant is named with the witness
+/// that exhibits it, and the loop below is that list -- so the count lives in
+/// the code rather than in this sentence, where it has now gone stale twice.
 #[test]
 fn d1_each_residual_variant_is_observable() {
     let empty: BTreeMap<&str, &RuntimeDeclaration> = BTreeMap::new();
@@ -10794,10 +10818,6 @@ fn d1_each_residual_variant_is_observable() {
             d1_lexical_call_argument_recursor_witness(),
             RecursiveDescentResidual::LexicalCallArgumentRecursor,
         ),
-        (
-            d1_seed_closure_call_witness(),
-            RecursiveDescentResidual::SeedClosureCall,
-        ),
     ] {
         let reported = enumerate_recursive_descent_residuals(&witness, &empty);
         assert!(
@@ -10806,8 +10826,12 @@ fn d1_each_residual_variant_is_observable() {
         );
     }
 
-    // ⭐⭐ **`D6` RETIRED the fifth variant, and this is the row that proves the
-    // retirement is real rather than a name change.** The declaration route is
+    // ⭐⭐ **`D6` RETIRED `TransparentDeclarationClosure`, and this is the row
+    // that proves the retirement is real rather than a name change.** Named
+    // rather than numbered: it was "the fifth variant" until
+    // `RT-SEED-CALL-PORT` `D3` retired another one, and an ordinal into a
+    // moving population is exactly what goes quietly wrong. The declaration
+    // route is
     // still exercised, with the same closure-seed declaration that used to
     // report `TransparentDeclarationClosure` — and it must now report **nothing
     // at all**.
@@ -10816,13 +10840,16 @@ fn d1_each_residual_variant_is_observable() {
     // enumerator that had silently reclassified the head into some other
     // variant would satisfy `!contains(retired)` while still retaining the lane
     // for every closure-seed declaration in the program.
+    //
+    // `RT-SEED-CALL-PORT` `D3` added the second retired shape to this same
+    // assertion: the seed-closure call is now the expression-side twin of the
+    // declaration-side retirement below, and both must report the empty set for
+    // the same reason.
     let declaration = d1_transparent_declaration_closure_witness();
     let mut declarations: BTreeMap<&str, &RuntimeDeclaration> = BTreeMap::new();
     declarations.insert(declaration.symbol.as_str(), &declaration);
-    let reported = enumerate_recursive_descent_residuals(
-        &RuntimeExpr::Value(RuntimeValue::Bool(true)),
-        &declarations,
-    );
+    let reported =
+        enumerate_recursive_descent_residuals(&d1_seed_closure_call_witness(), &declarations);
     assert!(
         reported.is_empty(),
         "D6: a closure-seed transparent declaration whose body is a bare value must now \
@@ -10841,11 +10868,12 @@ fn d1_each_residual_variant_is_observable() {
 /// variants separates the two behaviours.
 ///
 /// ⛔ Asserts the **exact set**, not a length and not a subset: a walk that
-/// found three of four and a walk that found four would both satisfy "more than
-/// one".
+/// missed one variant and a walk that found them all would both satisfy "more
+/// than one".
 ///
-/// ⚠ `D6` retired the fifth variant, so the closure-seed declaration is still
-/// supplied here and now contributes **nothing** — which keeps this row a live
+/// ⚠ `D6` retired the declaration-head variant and `RT-SEED-CALL-PORT` `D3`
+/// retired the seed-closure-call variant. BOTH retired shapes are still
+/// supplied here and now contribute **nothing** — which keeps this row a live
 /// check on the declaration route rather than turning it into an
 /// expression-only walk.
 ///
@@ -10869,11 +10897,14 @@ fn d1_the_enumerator_reports_every_variant_not_the_first() {
     declarations.insert(declaration.symbol.as_str(), &declaration);
 
     let reported = enumerate_recursive_descent_residuals(&compound, &declarations);
+    // `RT-SEED-CALL-PORT` `D3`: three, not four. The compound still BUILDS the
+    // seed-closure call -- it is the last element of the `Let` chain above --
+    // and it now contributes nothing, so this row keeps witnessing the retired
+    // shape rather than forgetting it existed.
     let expected: BTreeSet<RecursiveDescentResidual> = [
         RecursiveDescentResidual::ProducerMatchCall,
         RecursiveDescentResidual::MatchScrutineeRecursor,
         RecursiveDescentResidual::LexicalCallArgumentRecursor,
-        RecursiveDescentResidual::SeedClosureCall,
     ]
     .into_iter()
     .collect();
@@ -10893,24 +10924,26 @@ fn d1_the_enumerator_reports_every_variant_not_the_first() {
 
 // ─── RT-SEED-CALL-PORT D1 / D1a — the class's real population ──────────────
 
-/// The constructor both `D1a` fixtures match on. `nc5`'s `adt-constructor-match`
+/// The constructor this fixture matches on. `nc5`'s `adt-constructor-match`
 /// seed uses the same one, so it is known to lower with an empty seed
 /// environment; a fresh name would make a refusal ambiguous between the
 /// fixture's shape and its metadata.
 #[cfg(test)]
 const SEED_CALL_PORT_SOME: &str = "ctor:fixture::Core::Option::Some";
 
-/// A program firing EXACTLY TWO residual variants: the `Match` scrutinee is
-/// directly a `Call` (`ProducerMatchCall`) and that `Call`'s callee is the
-/// retained non-lexical closure form (`SeedClosureCall`).
+/// A compiling program whose `Match` scrutinee is directly a `Call`, so it fires
+/// `ProducerMatchCall` -- and whose callee is a non-lexical closure seed, which
+/// fired a second variant until `RT-SEED-CALL-PORT` `D3` retired it.
 ///
-/// Two variants is the whole point. A one-variant program cannot separate the
-/// enumerator from its short-circuiting twin, because both answer identically on
-/// it -- which is why `D1a` cannot be discharged by a reachability control.
+/// **It fired exactly two variants at `D1` and fires exactly one now**, which is
+/// why `D1a`'s exact-set discrimination moved off it: a one-variant program
+/// cannot separate the enumerator from its short-circuiting twin, because both
+/// answer identically on it. The fixture is kept for the production-site row,
+/// where what matters is that it genuinely compiles.
 #[cfg(test)]
-fn seed_call_port_two_variant_example() -> RuntimeExample {
+fn seed_call_port_producer_match_example() -> RuntimeExample {
     RuntimeExample {
-        name: "seed-call-port-d1a-two-variant".to_string(),
+        name: "seed-call-port-producer-match".to_string(),
         checked_core_shape: "match ((\\x . Some x) 4) with Some y => y".to_string(),
         ir: RuntimeExpr::Match {
             scrutinee: Box::new(RuntimeExpr::Call {
@@ -10938,70 +10971,100 @@ fn seed_call_port_two_variant_example() -> RuntimeExample {
     }
 }
 
-/// **`RT-SEED-CALL-PORT` `D1` — the grounding result. The class FIRES.**
+/// **`RT-SEED-CALL-PORT` `D3` — THE POST-CONDITION, and the sentinel `D1` left
+/// for exactly this moment.**
 ///
-/// The frame predicted this node might close for free, on the ground that
-/// `RT-DECL-CLOSURE-PORT` subsumes the class. It does not: `nc5`'s
-/// `closure-capture-application` seed is a `Call` whose callee is a
-/// `RuntimeExpr::Closure`, it is compiled natively by
-/// `cranelift_runs_closure_seed_with_explicit_runtime_capture_environment`, and
-/// it is green on `main` today.
+/// At `D1` this row asserted `{SeedClosureCall}` and was labelled a transition
+/// sentinel naming `D3` as its retiring event. `D3` is that event, so the row is
+/// inverted rather than deleted: the same program, the same production entry,
+/// the opposite answer.
 ///
-/// **MEASURED:** compiling that seed through the production entry records the
-/// residual set `{SeedClosureCall}` at the selector site.
-/// **CLAIMED:** `SeedClosureCall`'s population on this tree is non-empty, so a
-/// close-on-absence is not available.
-/// **THE GAP:** this measures `ken-runtime`'s own test-profile compilations
-/// only. That bounds the population from BELOW, which is the direction the claim
-/// needs -- a wider domain can add members but cannot empty this one.
+/// It asserts all three halves of the post-condition at once, on the exact
+/// program `D1` named as firing the class:
 ///
-/// **Promise class: transition sentinel.** It goes red when `D3` retires the
-/// variant, which is exactly the event that should force a reader back here.
-/// Named for the boundary rather than the count, and the retiring event is `D3`.
+/// 1. the selector reports `FunctionizedUnits` (`AC-1a`);
+/// 2. the object builds and runs, reaching its declared observation (`AC-1b`);
+/// 3. the enumeration reports **no** `SeedClosureCall` -- asserted as the EMPTY
+///    set, not merely the variant's absence, so a reclassification into some
+///    other variant reds this instead of passing.
+///
+/// The port count is the fourth thing and it is what makes this an activation
+/// rather than a deletion: the program reaches the ported arm's handoff with no
+/// witness IN THE TREE at all. `D2` could only demonstrate that under a
+/// test-only selector mask; `D3` deleted the mask along with the variant, so
+/// there is nothing left to arm or disarm.
+///
+/// **Promise class: durable invariant.** The class is retired and this program
+/// compiles through the functionized lane. No planned extension re-fires it.
 #[test]
-fn seed_call_port_d1_seed_closure_call_fires_on_a_program_this_repository_compiles() {
+fn d3_the_d1_firing_population_now_selects_functionized_units_and_enumerates_no_residual() {
     set_residual_enumeration_mutation(ResidualEnumerationMutation::None);
     reset_observed_recursive_descent_residuals();
+    reset_seed_callee_unit_ports();
 
     let example = nc5_seed_examples()
         .into_iter()
         .find(|example| example.name == "closure-capture-application")
         .expect("seed exists");
+
+    // `AC-1a`, asserted rather than inferred from the empty residual set below.
+    // The two are related but not the same statement, and only this one names
+    // the authority the selector actually returns.
+    assert_eq!(
+        select_body_emission_authority(&example.ir, &BTreeMap::new()),
+        BodyEmissionAuthority::FunctionizedUnits,
+        "AC-1a: the ceiling moved -- the D1 firing population now selects FunctionizedUnits"
+    );
+
     let report = run_example_with_seed_observation(&example, &NativeSeedEnvironment::nc5_seed())
-        .expect("the seed compiles and runs natively on main");
+        .expect("AC-1b: the D1 firing population must still build and run");
     assert_eq!(
         report.observation, example.observation,
-        "the fixture must reach its expected observation, or the residual set below describes a \
-         program that never really compiled"
+        "AC-1b: the object must reach its declared observation, or the residual claim below \
+         describes a program that never really compiled"
     );
+    assert!(report.verifier_passed);
 
     assert_eq!(
         observed_recursive_descent_residuals(),
-        Some(BTreeSet::from([RecursiveDescentResidual::SeedClosureCall])),
-        "D1: SeedClosureCall fires on a real compiled program. This node does NOT close for free"
+        Some(BTreeSet::new()),
+        "D3 post-condition: this program must now enumerate NO residual at all. Asserting the \
+         empty set rather than the variant's absence -- a reclassification into another variant \
+         would satisfy the weaker check while still retaining the lane"
+    );
+    assert_eq!(
+        seed_callee_unit_ports(),
+        1,
+        "D3 is an ACTIVATION: the program must reach the ported arm's handoff with no selector \
+         witness in the tree. A zero here means the variant was removed while the port stayed dead"
     );
 }
 
-/// **`RT-SEED-CALL-PORT` `D1` / `AC-2` — the class's population, named in the
-/// tree and closed over the corpus that feeds the native backend.**
+/// **`RT-SEED-CALL-PORT` `D3` / `AC-2` — the seed corpus now fires NOTHING.**
+///
+/// `D1` measured this same population and found exactly one firing member,
+/// `closure-capture-application`, carrying `{SeedClosureCall}`. `D3` retires
+/// that variant, so the corpus fires nothing at all -- and the row is inverted
+/// rather than dropped, because an emptied population is a claim that deserves
+/// the same exactness the non-empty one got.
 ///
 /// `nc5_seed_examples()` is the gate, not a sample: it is the single production
-/// function that produces the seed corpus, and `values.rs`, `constructors.rs`,
+/// function producing the seed corpus, and `values.rs`, `constructors.rs`,
 /// `artifact/api/tests.rs` and `ken-interp`'s differentials all select from it
 /// by name. Enumerating at the gate and applying the classifier to each member
-/// is what makes this a population rather than a list of examples someone
-/// remembered.
+/// is what makes this a population rather than a list someone remembered.
 ///
-/// The assertion is over NAMES, not a count, and it is deliberately EXACT in
-/// both directions. A new seed example that fires a residual reds this row and
-/// forces the population to be re-stated -- which is the paired obligation the
-/// campaign doc's Trap 3 demands of any proof quantified over a population.
+/// The map is asserted EMPTY in both directions. A seed example that fires any
+/// remaining variant reds this row and forces the population to be re-stated --
+/// the paired obligation the campaign doc's Trap 3 demands of any proof
+/// quantified over a population, and the reason this is not simply deleted now
+/// that its own class is gone.
 ///
-/// **Promise class: transition sentinel.** Named for the boundary (which seeds
-/// fire) rather than a count. `D3` retires `SeedClosureCall` and is the event
-/// that rewrites this row.
+/// **Promise class: transition sentinel.** It reds when any campaign node lands
+/// a seed example firing a surviving residual, which is precisely when someone
+/// should look. `RT-DESCENT-RETIRE` retires it by removing the enum.
 #[test]
-fn seed_call_port_d1_the_seed_corpus_population_that_fires_a_residual_is_exactly_one_example() {
+fn d3_the_seed_corpus_fires_no_residual_at_all() {
     set_residual_enumeration_mutation(ResidualEnumerationMutation::None);
     let empty: BTreeMap<&str, &RuntimeDeclaration> = BTreeMap::new();
 
@@ -11014,74 +11077,69 @@ fn seed_call_port_d1_the_seed_corpus_population_that_fires_a_residual_is_exactly
         .filter(|(_, residuals)| !residuals.is_empty())
         .collect();
 
-    let expected = BTreeMap::from([(
-        "closure-capture-application".to_string(),
-        BTreeSet::from([RecursiveDescentResidual::SeedClosureCall]),
-    )]);
     assert_eq!(
-        firing, expected,
-        "D1: the seed corpus's firing population. A new member here is a program nobody has \
-         attributed to a residual-class owner -- report it rather than widening this expectation"
+        firing,
+        BTreeMap::new(),
+        "D3: with SeedClosureCall retired the seed corpus fires no residual at all. A member \
+         here is a program nobody has attributed to a residual-class owner -- report it rather \
+         than widening this expectation"
     );
 }
 
-/// **`RT-SEED-CALL-PORT` `D1a` — THE FREE-CLOSE GATE, discharged as an
-/// exact-set control on a real compiled program.**
+/// **`RT-SEED-CALL-PORT` `D1a`, CARRIED THROUGH `D3` — the exact-set control,
+/// retargeted because its own subject was retired.**
 ///
-/// The gate exists because an empty result is this node's *predicted* outcome,
-/// so a broken instrument produces the anticipated answer and nobody looks
-/// twice. It therefore has to discriminate the specific break that would produce
-/// it: an enumerator that silently short-circuits like the selector.
+/// At `D1` this ran on a program firing `{ProducerMatchCall, SeedClosureCall}`.
+/// `D3` removes the second, so that program now fires ONE variant -- and a
+/// one-variant program cannot separate the enumerator from its short-circuiting
+/// twin, which was the entire point. **Leaving it pointed at the same fixture
+/// would have kept it green while silently ceasing to discriminate.**
 ///
-/// **The three rows are one argument, and the third is the load-bearing one.**
+/// So it moves to the three surviving variants. Three later campaign nodes
+/// consume this instrument, and `RT-DESCENT-RETIRE`'s "no residual fires
+/// anywhere" becomes vacuous at exactly the moment it authorises deleting the
+/// lane if this walk has a gap.
 ///
-/// 1. The two-variant program reports the EXACT set it fires.
-/// 2. Under `ShortCircuitLikeTheSelector` that same program reports strictly
-///    less, so this control reds on the defect it exists to catch.
-/// 3. The one-variant program reports the SAME set mutated and unmutated. That
-///    is the measured reason a reachability control cannot discharge this gate:
-///    every single-variant witness is blind to short-circuiting by construction,
-///    and every `d1_*_witness` already in the tree is single-variant.
+/// The three rows are one argument, and the third is load-bearing:
 ///
-/// Row 3 is a positive control in the strict sense -- it proves the mutation
-/// switch is not simply breaking everything it touches, which a red-only proof
-/// cannot distinguish from a discriminating one.
+/// 1. a compound firing all three surviving variants reports the EXACT set;
+/// 2. under `ShortCircuitLikeTheSelector` it reports strictly less;
+/// 3. a ONE-variant program reports the same set either way -- the measured
+///    reason a reachability control cannot discharge this, and why every
+///    single-variant witness in the tree is blind to it.
+///
+/// Row 3 is a positive control in the strict sense: it proves the mutation is
+/// discriminating rather than simply breaking everything it touches.
 ///
 /// **Promise class: durable invariant.** It pins that the reported set equals
-/// the set the program exhibits. Retiring `SeedClosureCall` at `D3` changes the
-/// expected sets here, which is a deliberate, reviewed edit rather than drift.
+/// the set the program exhibits. `RT-DESCENT-RETIRE` rewrites it by deleting
+/// the enum.
 #[test]
-fn seed_call_port_d1a_the_exact_set_control_reds_under_short_circuiting() {
-    let two_variant = seed_call_port_two_variant_example();
+fn d3_the_exact_set_control_still_reds_under_short_circuiting() {
+    let empty: BTreeMap<&str, &RuntimeDeclaration> = BTreeMap::new();
+    let compound = RuntimeExpr::Let {
+        value: Box::new(d1_producer_match_call_witness()),
+        body: Box::new(RuntimeExpr::Let {
+            value: Box::new(d1_match_scrutinee_recursor_witness()),
+            body: Box::new(d1_lexical_call_argument_recursor_witness()),
+        }),
+    };
     let exact = BTreeSet::from([
         RecursiveDescentResidual::ProducerMatchCall,
-        RecursiveDescentResidual::SeedClosureCall,
+        RecursiveDescentResidual::MatchScrutineeRecursor,
+        RecursiveDescentResidual::LexicalCallArgumentRecursor,
     ]);
 
-    // Row 1 -- the exact set, and the fixture genuinely compiles. A refusal here
-    // would leave every assertion below describing a program that never lowered.
     set_residual_enumeration_mutation(ResidualEnumerationMutation::None);
-    reset_observed_recursive_descent_residuals();
-    let report =
-        run_example_with_seed_observation(&two_variant, &NativeSeedEnvironment::empty())
-            .expect("the two-variant fixture compiles and runs natively");
     assert_eq!(
-        report.observation, two_variant.observation,
-        "the two-variant fixture must reach its expected observation"
-    );
-    assert_eq!(
-        observed_recursive_descent_residuals(),
-        Some(exact.clone()),
+        enumerate_recursive_descent_residuals(&compound, &empty),
+        exact,
         "D1a: the enumeration must report the EXACT set this program fires, not the first variant"
     );
 
-    // Row 2 -- the same program under the one regression that would manufacture
-    // this node's predicted answer.
     set_residual_enumeration_mutation(ResidualEnumerationMutation::ShortCircuitLikeTheSelector);
-    reset_observed_recursive_descent_residuals();
-    let _ = run_example_with_seed_observation(&two_variant, &NativeSeedEnvironment::empty());
-    let short_circuited =
-        observed_recursive_descent_residuals().expect("the instrument still ran");
+    let short_circuited = enumerate_recursive_descent_residuals(&compound, &empty);
+    set_residual_enumeration_mutation(ResidualEnumerationMutation::None);
     assert_ne!(
         short_circuited, exact,
         "D1a: a short-circuiting enumerator MUST red this control -- that is the entire reason \
@@ -11093,59 +11151,77 @@ fn seed_call_port_d1a_the_exact_set_control_reds_under_short_circuiting() {
         "the short-circuiting twin reports exactly one reason; got {short_circuited:?}"
     );
 
-    // Row 3 -- the positive control. On a ONE-variant program the mutation is
-    // undetectable, which is the measured fact that makes rows 1 and 2 necessary.
-    let single_variant = nc5_seed_examples()
-        .into_iter()
-        .find(|example| example.name == "closure-capture-application")
-        .expect("seed exists");
-    let single_expected = BTreeSet::from([RecursiveDescentResidual::SeedClosureCall]);
-
-    set_residual_enumeration_mutation(ResidualEnumerationMutation::None);
-    reset_observed_recursive_descent_residuals();
-    let _ = run_example_with_seed_observation(&single_variant, &NativeSeedEnvironment::nc5_seed());
+    // Row 3 -- on a ONE-variant program the mutation is undetectable.
+    let single = d1_producer_match_call_witness();
+    let single_expected = BTreeSet::from([RecursiveDescentResidual::ProducerMatchCall]);
     assert_eq!(
-        observed_recursive_descent_residuals(),
-        Some(single_expected.clone()),
+        enumerate_recursive_descent_residuals(&single, &empty),
+        single_expected,
         "row 3 baseline"
     );
-
     set_residual_enumeration_mutation(ResidualEnumerationMutation::ShortCircuitLikeTheSelector);
-    reset_observed_recursive_descent_residuals();
-    let _ = run_example_with_seed_observation(&single_variant, &NativeSeedEnvironment::nc5_seed());
+    let single_mutated = enumerate_recursive_descent_residuals(&single, &empty);
+    set_residual_enumeration_mutation(ResidualEnumerationMutation::None);
     assert_eq!(
-        observed_recursive_descent_residuals(),
-        Some(single_expected),
-        "D1a: a single-variant witness reports the SAME set short-circuited or not. Any control \
+        single_mutated, single_expected,
+        "D1a: a single-variant program reports the SAME set short-circuited or not. Any control \
          built only on such witnesses is structurally blind to the defect row 2 catches"
     );
+}
 
+/// **`D3` — the production-site observation hook still records on a real
+/// compiled program.**
+///
+/// `D1`'s hook is the instrument three later nodes inherit, and every other row
+/// above now exercises the enumerator directly. This is the one that keeps the
+/// *production selector site* covered: a program that genuinely compiles, whose
+/// residual set is read back from where `compile_expr_into_module_with_root_
+/// projection` selects the authority.
+///
+/// The fixture used to fire two variants and now fires one, which is the
+/// retirement showing up as a changed number rather than as a deletion.
+#[test]
+fn d3_the_production_site_hook_still_observes_a_real_compiled_program() {
     set_residual_enumeration_mutation(ResidualEnumerationMutation::None);
+    reset_observed_recursive_descent_residuals();
+
+    let example = seed_call_port_producer_match_example();
+    let report = run_example_with_seed_observation(&example, &NativeSeedEnvironment::empty())
+        .expect("the fixture compiles and runs");
+    assert_eq!(report.observation, example.observation);
+    assert_eq!(
+        observed_recursive_descent_residuals(),
+        Some(BTreeSet::from([RecursiveDescentResidual::ProducerMatchCall])),
+        "D3: the hook must still record at the production selector site, and this program now \
+         carries only its producer-Match reason -- RT-PRODUCER-MATCH-PORT's population, which \
+         this node was masking"
+    );
 }
 
 // ─── RT-SEED-CALL-PORT D2 / AC-6 — the callee-position seed unit ───────────
 
-/// Run `example` with the `D2` selector witness armed, and report both the
-/// outcome and how many times the ported seed-callee arm reached its handoff
-/// point -- arity checked, captures resolved, inputs passed to the typed call
-/// path.
+/// Run `example` and report both the outcome and how many times the ported
+/// seed-callee arm reached its handoff point -- arity checked, captures
+/// resolved, inputs passed to the typed call path.
 ///
 /// **The count is not an emission oracle.** It is taken before
 /// `call_declared_unit`, which can still refuse, so the pair matters: a
 /// successful outcome WITH count 1 is the evidence for a completed typed unit
 /// call, and count 0 is the evidence for a refusal that preceded the handoff.
 ///
-/// The witness is armed and disarmed around a single run so a panic inside one
-/// control cannot leak the masked selector into the next test on this thread.
+/// **`D3` removed the selector witness this helper used to arm.** Every `AC-6`
+/// control below therefore now reaches the ported arm the way production does
+/// -- because `SeedClosureCall` is gone from the classifier, not because a
+/// test-only mask suppressed it. That is a strictly stronger route than the one
+/// they were accepted on at `D2`, and it applies to all three rows rather than
+/// to one added control.
 #[cfg(test)]
 fn d2_run_ported(
     example: &RuntimeExample,
     seed_env: &NativeSeedEnvironment,
 ) -> (Result<CraneliftRunReport, CraneliftBackendError>, usize) {
     reset_seed_callee_unit_ports();
-    set_seed_closure_call_selector_witness(true);
     let outcome = run_example_with_seed_observation(example, seed_env);
-    set_seed_closure_call_selector_witness(false);
     (outcome, seed_callee_unit_ports())
 }
 
@@ -11183,11 +11259,13 @@ fn d2_order_sensitive_example() -> RuntimeExample {
 /// **`AC-6.1` — the canonical explicit-seed-env positive, through the port.**
 ///
 /// The reachability count is what makes this a control rather than a
-/// restatement that the seed still works. `closure-capture-application` returns
-/// `7` on the `RecursiveDescent` lane too, so the observation alone cannot tell
-/// the two lanes apart. The paired zero -- same program, witness disarmed, the
-/// arm never reaching its handoff -- is the half that proves the count is
-/// measuring the port and not merely counting compilations.
+/// restatement that the seed still works: `closure-capture-application` returned
+/// `7` on the `RecursiveDescent` lane too, so the observation alone never told
+/// the two lanes apart.
+///
+/// `D3` retired the variant, so this program has no route back to that lane and
+/// the count can no longer be discriminated here by disarming anything. `AC-7`
+/// carries that instead, reaching this same arm with no witness in the tree.
 ///
 /// **What the two assertions prove TOGETHER, and neither alone.** The count is
 /// taken before `call_declared_unit`, which can still refuse, so a count of 1
@@ -11213,32 +11291,27 @@ fn d2_ac6_1_the_canonical_seed_runs_through_the_ported_callee_unit() {
     assert!(report.verifier_passed);
     assert_eq!(
         ports, 1,
-        "AC-6.1: the ported arm must reach its handoff exactly once -- a zero here means the \
-         assertion above passed on the RecursiveDescent lane and says nothing about D2. With the \
-         successful run asserted above, this pair is the evidence for a completed typed unit call"
+        "AC-6.1: the ported arm must reach its handoff exactly once. With the successful run \
+         asserted above, this pair is the evidence for a completed typed unit call"
     );
 
-    // The discriminating half: without the witness the selector still routes
-    // this program to `RecursiveDescent`, so the port must NOT run.
-    reset_seed_callee_unit_ports();
-    let unported = run_example_with_seed_observation(&example, &NativeSeedEnvironment::nc5_seed())
-        .expect("the seed still runs on the retained lane");
-    assert_eq!(
-        unported.observation, example.observation,
-        "the retained lane is unchanged by D2"
-    );
-    assert_eq!(
-        seed_callee_unit_ports(),
-        0,
-        "without the witness the selector retains the lane, so the port must not run. A nonzero \
-         here means the count is not measuring what AC-6.1 claims"
-    );
+    // `RT-SEED-CALL-PORT` `D3` INVERTED this half, and the inversion is the
+    // activation. At `D2` it read: witness disarmed, the selector retains the
+    // lane, the port must NOT run -- and that was the discriminating proof the
+    // count measured the port rather than compilations.
+    //
+    // With `SeedClosureCall` retired there is no route back to the retained
+    // lane for this program, so the old assertion is not merely stale, it is
+    // unstatable. The discriminator moves to `AC-7` below, which reaches this
+    // same arm with no witness in the tree at all.
 }
 
 /// **`AC-6.2` — the missing-capture loud refusal, raised by the port itself.**
 ///
-/// With the witness armed the refusal now comes from `D2`'s arm resolving a seed
-/// symbol through `lower_seed_capture`, not from the retained lane. The port
+/// The refusal comes from `D2`'s arm resolving a seed symbol through
+/// `lower_seed_capture`, not from the retained lane -- and since `D3` retired
+/// the variant there is no longer any route back to that lane for this program,
+/// so no witness is involved. The port
 /// count must be **zero**: the arm counts at its handoff point, after arity and
 /// every capture have resolved, so a capture refusal lands strictly before the
 /// count. That zero is evidence of refusal BEFORE the handoff -- a distinct and
@@ -11296,8 +11369,8 @@ fn d2_ac6_3_the_ported_unit_receives_parameters_before_captures() {
     let report = outcome.expect("the order-sensitive fixture compiles and runs");
     assert_eq!(
         ports, 1,
-        "AC-6.3: the fixture must reach the ported arm's handoff, or the value below is about \
-         the retained lane"
+        "AC-6.3: the fixture must reach the ported arm's handoff, or the value below is not \
+         about the ported transport at all"
     );
     assert_eq!(
         report.observation,
@@ -11314,13 +11387,18 @@ fn d2_ac6_3_the_ported_unit_receives_parameters_before_captures() {
 // ⭐ Every control below runs the SAME program. What varies is one mutation,
 // applied at one plane, so a refusal names the plane that refused.
 //
-// ⛔⛔ **The selector witness is what makes any of this reachable.** Production
-// cannot enter the `FunctionizedUnits` declaration-call seam before `D6`,
-// because `TransparentDeclarationClosure` fires for every closure-seed
-// transparent declaration and a checked recursive declaration call REQUIRES a
-// closure-seed declaration. ⇒ A control that "fails before emission" without
-// the witness proves nothing about `D5`: it can fail earlier, for the
-// selector's ordinary reason, and never reach the validator at all.
+// ⛔⛔ **This preamble described a selector witness that no longer exists.** It
+// read: production cannot enter the `FunctionizedUnits` declaration-call seam
+// before `D6`, because `TransparentDeclarationClosure` fires for every
+// closure-seed transparent declaration, so a control that "fails before
+// emission" without the witness proves nothing about `D5`.
+//
+// `D6` retired that variant and removed the witness with it, and
+// `RT-SEED-CALL-PORT` `D3` did the same for the seed-closure-call witness. ⇒
+// Every control below now reaches the seam the way production does, which is
+// strictly stronger than the hooked route they were written against. The
+// caution is kept as history because it explains why the fixtures are shaped
+// the way they are, not because anything still needs arming.
 
 #[cfg(test)]
 const D5_DECLARATION: &str = "decl:fixture::d5::loop";
@@ -11554,9 +11632,9 @@ fn d5_compile(
 //
 // ⛔ It asserts the **empty set** and not merely the retired variant's absence.
 // The `D5` fixture is a closure-seed transparent declaration containing a
-// checked recursive declaration call — precisely the shape the campaign's other
-// four variants also key on — so "no residual fires" is a real claim about all
-// five classifiers on a nontrivial program, not a restatement of the deletion.
+// checked recursive declaration call — precisely the shape the campaign's
+// surviving variants also key on — so "no residual fires" is a real claim about
+// every classifier on a nontrivial program, not a restatement of the deletion.
 
 #[test]
 fn d6_the_governed_fixture_reports_no_residual_and_selects_functionized_units() {
@@ -11571,7 +11649,7 @@ fn d6_the_governed_fixture_reports_no_residual_and_selects_functionized_units() 
         enumerate_recursive_descent_residuals(&entry, &declarations),
         BTreeSet::new(),
         "D6: with the declaration-head variant retired, this fixture must carry NO residual at \
-         all. A residual here is one of the four RETAINED variants firing on a program that \
+         all. A residual here is one of the RETAINED variants firing on a program that \
          used to be masked past them -- report it rather than tuning it away, because it means \
          the campaign has a second reason to hold this lane that nobody has enumerated"
     );
@@ -11754,25 +11832,24 @@ fn d5_planned_callable_declaration_origins(
         .collect()
 }
 
-// ── Control 3: the witness masks ONE variant, it does not force authority ──
+// ── Control 3: a second residual retains RecursiveDescent ─────────────────
 
 #[test]
-fn d5_c3_a_second_residual_leaves_witness_mode_on_recursive_descent() {
+fn d5_c3_a_second_residual_retains_recursive_descent() {
     let entry = d5_entry();
     let declaration = d5_declaration();
     let carrier = d5_frame_carrier();
-    // A seed-closure call — a residual the witness has no business masking.
+    // A second residual, and the authority must stay on RecursiveDescent.
+    //
+    // `RT-SEED-CALL-PORT` `D3`: this was a seed-closure call until that variant
+    // was retired. The property under test is that a SECOND residual keeps the
+    // authority on `RecursiveDescent` -- it was never about which residual, so
+    // the fixture moves to a surviving variant rather than the control being
+    // dropped. A producer-`Match` is the cheapest one that still fires.
     let second = RuntimeDeclaration {
         symbol: "decl:fixture::d5::second".to_string(),
         kind: RuntimeDeclarationKind::Transparent {
-            body: RuntimeExpr::Call {
-                callee: Box::new(RuntimeExpr::Closure {
-                    captures: Vec::new(),
-                    params: vec!["y".to_string()],
-                    body: Box::new(RuntimeExpr::Var(0)),
-                }),
-                args: vec![RuntimeExpr::Value(RuntimeValue::Int((1).into()))],
-            },
+            body: d1_producer_match_call_witness(),
         },
         metadata: RuntimeSymbolMetadata {
             lowerability: Some(RuntimeLowerabilityStatus::Supported),
@@ -11787,10 +11864,10 @@ fn d5_c3_a_second_residual_leaves_witness_mode_on_recursive_descent() {
     assert_eq!(
         select_body_emission_authority(&entry, &declarations),
         BodyEmissionAuthority::RecursiveDescent,
-        "D5 control 3: the witness masks ONE residual variant. If it forced \
-         the authority instead, this would read FunctionizedUnits — and \
-         control 2's positive would be an artefact of the hook rather than \
-         evidence about the seam"
+        "D5 control 3: a SECOND residual still holds the authority on RecursiveDescent. This \
+         read \"the witness masks ONE residual variant\" until D6 removed that witness and \
+         RT-SEED-CALL-PORT D3 removed the last one; the property it guards is unchanged, and it \
+         is now guarded against the real classifier rather than against a hook"
     );;
 }
 
