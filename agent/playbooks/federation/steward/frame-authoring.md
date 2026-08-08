@@ -163,6 +163,39 @@ forever. Re-scope the oracle to its own historical set and let a live-anchored
 property cover new files — confirming that live net exists first, or you trade
 a rubber stamp for a hole.
 
+### (c-prime) Never publish a bare `:line`. A coordinate is a time-sensitive operand.
+
+**Promoted 2026-08-08 from `RT-CONTSPEC-LEDGER`, and it binds the frame author
+first because that is where the defect originated.**
+
+Cite a source site as **`path:line` measured at the SHA you are handing off**,
+or **by a grep-able phrase with no number at all.** Prefer the phrase.
+
+**A scoping header does not qualify a coordinate ninety lines below it.** That
+frame opened with *"All anchors are in `…/planning/static_transition.rs`"* and
+its `D4` then cited bare `:4729` and `:6304`. Downstream those acquired the
+wrong filename, and an auditor checking whether `D4` discharged would have
+opened live unrelated production code and concluded the deliverable never
+landed.
+
+⇒ **A citation pointing at a real thing that is not the thing is worse than one
+pointing at nothing.** A bad path 404s and gets fixed; a plausible-but-wrong
+path gets believed, and it fails in the direction of "the work is missing" when
+the work is present.
+
+**Both numbers were also stale on the day they were written** — grepped at one
+`main` and published in a frame based three merges later. Ask the frame's own
+standing question of the coordinate: **which state was this measured in?** We
+routinely ask it of a before/after figure and forget that a line number is the
+same kind of operand — **and one destroyed by the very change the deliverable
+performs.** A frame whose job is editing those lines has guaranteed its own
+coordinates are wrong by the time anyone checks them. That is the spent-oracle
+trap wearing a different hat.
+
+**The phrase is the durable instrument.** It survives the edit; the number does
+not. Where a number genuinely helps a reader navigate, write it as *"at
+`<sha>`, around `path:NNNN`"* — an anchor to re-find, never a value to check.
+
 ### (d) Reuse must be proved behaviorally, not structurally
 
 When a WP is framed as a specialization of landed substrate ("consume CC1-CC6,
