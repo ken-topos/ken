@@ -5096,12 +5096,13 @@ fn the_body_authority_selector_narrows_only_completed_ports_and_stays_fail_close
     let declarations = BTreeMap::new();
 
     // Promise class: durable invariant. Any new RuntimeExpr form must be
-    // classified explicitly, while these two completed ports and the retained
-    // producer-Match residual remain part of the migration boundary.
+    // classified explicitly, while the completed ports and the SURVIVING
+    // residuals remain part of the migration boundary.
     //
-    // MEASURED: recursive computational positions and a source Trap select
-    // functionized emission, while an otherwise ordinary Match whose producer
-    // is a Call selects recursive descent.
+    // MEASURED: recursive computational positions, a source Trap, and -- since
+    // `RT-PRODUCER-MATCH-PORT` `D3` -- an ordinary Match whose producer is a
+    // Call all select functionized emission, while a Match consuming an active
+    // computational recursor still selects recursive descent.
     // CLAIMED: D3 removed only the two predicates backed by D1 and D2 and did
     // not turn absence from a functionized allow-list into admission.
     // THE GAP: this pin measures the source-only selector. S1 and S2 separately
@@ -5177,7 +5178,7 @@ fn the_body_authority_selector_narrows_only_completed_ports_and_stays_fail_close
         "a completed terminal-trap port still selected retained authority"
     );
 
-    let unported_producer_match = RuntimeExpr::Match {
+    let ported_producer_match = RuntimeExpr::Match {
         scrutinee: Box::new(RuntimeExpr::Call {
             callee: Box::new(RuntimeExpr::LexicalClosure {
                 captures: Vec::new(),
@@ -5200,7 +5201,7 @@ fn the_body_authority_selector_narrows_only_completed_ports_and_stays_fail_close
     // about this particular shape -- it is that an UNPORTED shape is refused by
     // default -- so it moves to a surviving one rather than being dropped.
     assert_eq!(
-        select_body_emission_authority(&unported_producer_match, &declarations),
+        select_body_emission_authority(&ported_producer_match, &declarations),
         BodyEmissionAuthority::FunctionizedUnits,
         "a completed producer-Match port still selected retained authority"
     );
@@ -5695,11 +5696,11 @@ fn typed_trap_exit_identity_and_caller_protocol_mutations_are_discriminating() {
 fn the_generated_root_translates_a_runtime_reached_trap_exactly() {
     let trap = RuntimeTrap {
         code: RuntimeTrapCode::PatternMatchFailure,
-        message: "retained producer Match root trap".to_string(),
+        message: "generated root Match trap".to_string(),
     };
     let fixture = RuntimeExample {
-        name: "recursive-descent-root-trap".to_string(),
-        checked_core_shape: "D2 retained root trap translation fixture".to_string(),
+        name: "generated-root-trap".to_string(),
+        checked_core_shape: "generated root trap translation fixture".to_string(),
         // `RT-PRODUCER-MATCH-PORT` `D3` CHANGED WHAT THIS ROW MEASURES, and
         // the change is a real coverage loss reported rather than papered over.
         //
@@ -10953,16 +10954,17 @@ fn d1_the_enumerator_reports_every_variant_not_the_first() {
 #[cfg(test)]
 const SEED_CALL_PORT_SOME: &str = "ctor:fixture::Core::Option::Some";
 
-/// A compiling program whose `Match` scrutinee is directly a `Call`, so it fires
-/// `ProducerMatchCall` until `RT-PRODUCER-MATCH-PORT` `D3` retired it -- and
-/// whose callee is a non-lexical closure seed, which
-/// fired a second variant until `RT-SEED-CALL-PORT` `D3` retired it.
+/// A compiling program whose `Match` scrutinee is directly a `Call` and whose
+/// callee is a non-lexical closure seed. Both of those were residual classes
+/// once: `SeedClosureCall` until `RT-SEED-CALL-PORT` `D3`, `ProducerMatchCall`
+/// until this node's `D3`.
 ///
-/// **It fired exactly two variants at `D1` and fires exactly one now**, which is
-/// why `D1a`'s exact-set discrimination moved off it: a one-variant program
-/// cannot separate the enumerator from its short-circuiting twin, because both
-/// answer identically on it. The fixture is kept for the production-site row,
-/// where what matters is that it genuinely compiles.
+/// **It fired two variants at `D1` and fires NONE now.** `D1a`'s exact-set
+/// discrimination moved off it while it still fired one, because a one-variant
+/// program cannot separate the enumerator from its short-circuiting twin. The
+/// fixture is kept for the production-site row, where what matters is that it
+/// genuinely compiles -- and it is now the paired negative for two retirements
+/// rather than a firing member of either.
 #[cfg(test)]
 fn seed_call_port_producer_match_example() -> RuntimeExample {
     RuntimeExample {
@@ -11113,10 +11115,11 @@ fn d3_the_seed_corpus_fires_no_residual_at_all() {
 /// retargeted because its own subject was retired.**
 ///
 /// At `D1` this ran on a program firing `{ProducerMatchCall, SeedClosureCall}`.
-/// `D3` removes the second, so that program now fires ONE variant -- and a
+/// `RT-SEED-CALL-PORT` `D3` removed the second, leaving one variant -- and a
 /// one-variant program cannot separate the enumerator from its short-circuiting
 /// twin, which was the entire point. **Leaving it pointed at the same fixture
-/// would have kept it green while silently ceasing to discriminate.**
+/// would have kept it green while silently ceasing to discriminate.** This
+/// node's `D3` then retired the first as well, so that program now fires none.
 ///
 /// So it moves to the two surviving variants. Three later campaign nodes
 /// consume this instrument, and `RT-DESCENT-RETIRE`'s "no residual fires
@@ -11200,8 +11203,8 @@ fn d3_the_exact_set_control_still_reds_under_short_circuiting() {
 /// residual set is read back from where `compile_expr_into_module_with_root_
 /// projection` selects the authority.
 ///
-/// The fixture used to fire two variants and now fires one, which is the
-/// retirement showing up as a changed number rather than as a deletion.
+/// The fixture fired two variants at `D1` and fires none now, which is two
+/// retirements showing up as a changed number rather than as a deletion.
 #[test]
 fn d3_the_production_site_hook_still_observes_a_real_compiled_program() {
     set_residual_enumeration_mutation(ResidualEnumerationMutation::None);
@@ -11456,12 +11459,16 @@ fn d1_producer_match_call_masking_witness() -> RuntimeExpr {
 /// be re-measured here -- the variant no longer exists to name -- so it is
 /// asserted about nothing and only written down.
 ///
-/// **`D4` is a real-program before/after measurement and this witness cannot
-/// supply it.** The subject is a hand-built `RuntimeExpr`, and campaign Trap 1 is
-/// explicit that such a witness establishes what the classifier can see, never
-/// what any program exhibits. What is proved below is the capability: with the
-/// class retired, the selector walks past the `Match` node and both remaining
-/// classes are visible to the enumeration.
+/// **`D4` IS this post-retirement capability evidence.** The Steward withdrew
+/// the before-figure and restated the deliverable: no before/after successor
+/// handoff is owed by anyone, and `RT-RECURSOR-TRANSPORT` measures its own
+/// population against its own named base rather than inheriting a number. So
+/// nothing here is a placeholder for a measurement someone still has to take.
+///
+/// The subject is a hand-built `RuntimeExpr`, so by campaign Trap 1 it
+/// establishes what the classifier can see and never what any program exhibits.
+/// That bounds what is proved below -- with the class retired, the selector
+/// walks past the `Match` node and both remaining classes are visible.
 ///
 /// **Promise class: durable invariant.** It pins that no reason is hidden behind
 /// a retired class on this shape. `RT-DESCENT-RETIRE` removes the enum that
@@ -11526,7 +11533,8 @@ fn d1_census_insert(
 /// **`D1` / `AC-2` -- the measured population, enumerated at its gates.**
 ///
 /// One production gate -- `nc5_seed_examples()` -- plus the one in-tree program
-/// that genuinely compiles while firing this class. Each member is enumerated
+/// that compiles and fired this class until `D3` retired it. Each member is
+/// enumerated
 /// with the non-short-circuiting walk, so a member firing a second class is
 /// reported rather than hidden, and each is added through [`d1_census_insert`]
 /// so a name collision fails loudly instead of shrinking the population.
