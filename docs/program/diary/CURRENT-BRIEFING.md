@@ -41,12 +41,29 @@ correction; both successor nodes are filed and framed.
 | item | state |
 |---|---|
 | `8efdfdb3` | **NOT merged and not merging.** Architect withdrew approval mid-publish (`evt_38bz22cqd7e48`); **`dec_6nsrbyw1wjpb` is void**; PR #1609 closed pre-merge, synthetic branch deleted from origin |
-| what lands instead | a **bounded child** over `8efdfdb3` narrowing every class-wide `D2`/`D1` claim to the exact witness. No production change, no test-logic change. Fresh SHA, QA, Architect, Decision. Dispatched `evt_gkyfgre7b3tg` |
+| what lands instead | a **bounded child** over `8efdfdb3` — dispatched `evt_gkyfgre7b3tg`, **returned at `0003cb5bd67c7489b180e8c9200fa490df1898a8`** on `wp/RT-RECURSOR-TRANSPORT-d2-record`. Two files; `lowering/core.rs` **byte-identical to base**. **In review — I am waiting on its resolved Decision, owed by runtime-leader**, and I publish the same turn |
 | branch tip `10369776` | **held evidence only** — not a candidate, not a repair base, not to be continued |
 | [[RT-MATCH-RECURSOR-CONSUMERS]] | **`ready`, framed** — row 6 / Position A completion. **Releases first** |
 | [[RT-LEXICAL-RECURSOR-CONSUMERS]] | **`draft`, framed and shovel-ready** — rows 1-5. Flips `ready` the moment the A node merges |
 | `D3` | blocked on **both**. `RT-DESCENT-RETIRE` downstream of that |
 | `#[ignore]` on this arc | **zero, ruled.** Not discouraged — ruled out |
+| [[RT-CENSUS-CAVEAT-GUARD]] | filed `ready` (PR #1611). The last unowned finding from this window; blocks nothing, contends on `core/tests/control.rs`, so it schedules after this arc |
+
+**Merged this window: #1610** (the partition) and **#1611** (the census-guard
+node). `main` moved `c7693a7c` → `5d4c623e` → `5939c46d`.
+
+> ### MY NEXT ACTION, so a cold resume does not have to re-derive it
+>
+> **When the `D2` correction merges: compact the runtime team, then kick
+> [[RT-MATCH-RECURSOR-CONSUMERS]].** Its frame is written at
+> `docs/program/wp/RT-MATCH-RECURSOR-CONSUMERS.md` — **do not re-frame it.** The
+> kick is a top-level post and must carry the COORDINATION §4b anchor line.
+> **Then flip [[RT-LEXICAL-RECURSOR-CONSUMERS]] to `ready`** the moment the A
+> node merges; its frame is written too.
+>
+> **The wait has an address (§1a):** a resolved `dec_` on `0003cb5b`, owed by
+> `runtime-leader`. If that is absent and the ring is quiet, that is the stall
+> to chase — not a re-frame.
 
 > ### THE CENSUS PARTITIONED SIX REDS INTO TWO POPULATIONS AND TWO SEAMS
 >
