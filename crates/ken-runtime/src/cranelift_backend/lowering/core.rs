@@ -245,6 +245,20 @@ thread_local! {
     /// not as "the seat was never reached" -- a negative check passes for any
     /// reason, and this is its positive control.
     static RT_D2_SEAT_WITH_PENDING: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// Backedge values SEEN at this seat, counted **before** the production
+    /// guard, so suppression cannot make it zero.
+    ///
+    /// ⛔ Without this the suppression arm proves nothing: the production guard
+    /// is `!suppress && matches!(..)`, which SHORT-CIRCUITS, so under
+    /// suppression the `matches!` is never evaluated and a zero propagation
+    /// count is guaranteed by construction rather than measured. The A/B needs
+    /// the mutated side to show the detector *would* have fired.
+    static RT_D2_BACKEDGE_MATCHES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn rt_d2_backedge_matches() -> usize {
+    RT_D2_BACKEDGE_MATCHES.with(std::cell::Cell::get)
 }
 
 #[cfg(test)]
@@ -266,6 +280,7 @@ pub(in crate::cranelift_backend) fn rt_d2_backedge_propagations() -> usize {
 pub(in crate::cranelift_backend) fn reset_rt_d2_backedge_propagations() {
     RT_D2_BACKEDGE_PROPAGATIONS.with(|count| count.set(0));
     RT_D2_SEAT_WITH_PENDING.with(|count| count.set(0));
+    RT_D2_BACKEDGE_MATCHES.with(|count| count.set(0));
 }
 
 #[cfg(test)]
@@ -1924,6 +1939,17 @@ impl<'a> Lowering<'a> {
         // `Carried`, not any ordinary specialized variant. A pending active
         // continuation over an ordinary value still consumes its next
         // eliminator.
+        // ⛔ Counted BEFORE the guard, and deliberately not folded into it: the
+        // guard short-circuits on `!suppress`, so a suppressed run would never
+        // evaluate the `matches!` and its zero would be an artifact of the
+        // mutation rather than a measurement.
+        #[cfg(test)]
+        if matches!(
+            &value,
+            LoweringOperand::Specialized(Lowered::RecursiveBackedge)
+        ) {
+            RT_D2_BACKEDGE_MATCHES.with(|count| count.set(count.get() + 1));
+        }
         #[cfg(test)]
         let suppress = rt_d2_suppress_propagation();
         #[cfg(not(test))]

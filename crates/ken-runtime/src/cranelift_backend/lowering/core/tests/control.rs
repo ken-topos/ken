@@ -11283,78 +11283,64 @@ fn rt_d2_position_a_executes_on_both_lanes_and_agrees() {
     );
 }
 
-/// **`D2` control 3/4 — the propagation applies EXACTLY ONCE, and suppressing
-/// only it replays the exact `D1` refusal.**
+/// **`D2` controls 3 and 4 — exact arrival, match and propagation counts, and
+/// an A/B whose mutated side is measured rather than assumed.**
 ///
-/// ⛔ The seat denominator is what makes the zeros mean something. A run that
-/// never reaches `resume_active_continuation` with a pending suffix would also
-/// report zero propagations, and reading that as "the guard correctly declined"
-/// would be measuring absence. Every zero below is paired with a positive
-/// arrival count.
+/// ⛔ **The denominator is not uniform, and saying so is the point.** Two
+/// different zeros appear below and they mean different things:
+/// - position A retained *arrives* at the seat and the guard declines — a
+///   measured decline, paired with a positive arrival count;
+/// - position B and the non-recursive control **never arrive** (arrivals `0`),
+///   so their zero propagations are *scope* evidence and say nothing about the
+///   guard's behaviour.
+///
+/// ⛔ **Why the suppressed run counts MATCHES and not just propagations.** The
+/// production guard is `!suppress && matches!(..)` and short-circuits, so under
+/// suppression the `matches!` is never evaluated and a zero propagation count
+/// is guaranteed by construction. Asserting that zero alone would be an A/B
+/// whose mutated side proves nothing. The match counter is incremented *before*
+/// the guard, so the suppressed run shows the detector **would** have fired —
+/// one match, one arrival, zero completed propagations.
 ///
 /// **Promise class: durable invariant** for the counts; the suppression arm is
-/// the A/B proof that the guard is what repairs position A.
+/// the A/B that attributes position A's repair to this guard specifically.
 #[test]
-fn rt_d2_the_propagation_applies_once_and_suppressing_it_replays_the_refusal() {
+fn rt_d2_exact_counts_and_the_suppression_ab() {
     use crate::cranelift_backend::lowering::core::{
-        reset_rt_d2_backedge_propagations, rt_d2_backedge_propagations, rt_d2_seat_with_pending,
-        set_rt_d2_suppress_propagation,
+        reset_rt_d2_backedge_propagations, rt_d2_backedge_matches, rt_d2_backedge_propagations,
+        rt_d2_seat_with_pending, set_rt_d2_suppress_propagation,
     };
+    use crate::cranelift_backend::lowering::{reset_d5a_trace, take_d5a_trace};
     struct Restore;
     impl Drop for Restore {
         fn drop(&mut self) {
             set_rt_d2_suppress_propagation(false);
         }
     }
-
     let witness = rt_match_scrutinee_recursor_executable();
 
-    // Functionized position A: exactly one propagation.
+    // (arrivals, matches, propagations) asserted EXACTLY, not as lower bounds:
+    // a duplicated seat consumption would still satisfy `> 0` while the record
+    // claims one.
     reset_rt_d2_backedge_propagations();
     let functionized =
         rt_run_functionized(&witness, RecursiveDescentResidual::MatchScrutineeRecursor);
-    assert_eq!(functionized, "OK Returned(Int(Small(7)))", "unmutated must execute");
+    assert_eq!(functionized, "OK Returned(Int(Small(7)))");
     assert_eq!(
-        rt_d2_backedge_propagations(),
-        1,
-        "exactly one propagation on the functionized position-A witness"
+        (rt_d2_seat_with_pending(), rt_d2_backedge_matches(), rt_d2_backedge_propagations()),
+        (1, 1, 1),
+        "functionized position A: one arrival, one backedge match, one propagation"
     );
 
-    // Retained lane: the seat is reached, and the guard declines.
     reset_rt_d2_backedge_propagations();
-    let retained = rt_run(&witness);
-    assert_eq!(retained, "OK Returned(Int(Small(7)))");
+    assert_eq!(rt_run(&witness), "OK Returned(Int(Small(7)))");
     assert_eq!(
-        rt_d2_backedge_propagations(),
-        0,
-        "no propagation on the retained lane"
+        (rt_d2_seat_with_pending(), rt_d2_backedge_matches(), rt_d2_backedge_propagations()),
+        (1, 0, 0),
+        "retained position A ARRIVES and the guard declines: a measured decline, not an \
+         unvisited seat"
     );
 
-    // SAME-SEAT NON-BACKEDGE CONTROL. The retained lane of the SAME program
-    // arrives at this seat with a pending suffix and a non-backedge value: the
-    // guard declines, the eliminator is still consumed, and the program
-    // executes. That is what makes the zero above a declined guard rather than
-    // an unvisited seat.
-    reset_rt_d2_backedge_propagations();
-    let retained_again = rt_run(&witness);
-    let retained_arrivals = rt_d2_seat_with_pending();
-    assert_eq!(retained_again, "OK Returned(Int(Small(7)))");
-    assert_eq!(
-        rt_d2_backedge_propagations(),
-        0,
-        "an ordinary value at this seat must NOT return early"
-    );
-    assert!(
-        retained_arrivals > 0,
-        "POSITIVE CONTROL: the non-backedge run must actually REACH this seat with a pending \
-         suffix, or its zero propagations measure absence rather than a declined guard. \
-         arrivals: {retained_arrivals}"
-    );
-
-    // ⛔ Stated rather than implied: position B and the non-recursive control
-    // report zero propagations because they NEVER REACH this seat -- measured
-    // arrivals are 0 for both. Their zeros are therefore evidence that the
-    // repair is scoped, and NOT evidence that the guard declined on them.
     for (label, expr, excluded) in [
         (
             "position B",
@@ -11364,39 +11350,53 @@ fn rt_d2_the_propagation_applies_once_and_suppressing_it_replays_the_refusal() {
         ("non-recursive control", rt_match_over_nonrecursive_computational_match(), None),
     ] {
         reset_rt_d2_backedge_propagations();
-        let _ = match excluded {
+        let outcome = match excluded {
             Some(variant) => rt_run_functionized(&expr, variant),
             None => rt_run(&expr),
         };
+        assert!(outcome.starts_with("OK "), "{label} must execute: {outcome}");
         assert_eq!(
-            rt_d2_backedge_propagations(),
-            0,
-            "{label} must not propagate"
-        );
-        assert_eq!(
-            rt_d2_seat_with_pending(),
-            0,
-            "{label} is expected never to reach this seat; if it starts arriving, its zero \
-             propagation count changes meaning and this control must be re-read"
+            (rt_d2_seat_with_pending(), rt_d2_backedge_matches(), rt_d2_backedge_propagations()),
+            (0, 0, 0),
+            "{label} never reaches this seat; its zeros are SCOPE evidence and are not evidence \
+             about the guard's behaviour"
         );
     }
 
-    // A/B: suppress ONLY this propagation and the D1 refusal returns verbatim.
+    // A/B — suppress only the propagation. The mutated side must show the
+    // detector would have fired, and must reproduce the exact D1 refusal
+    // together with the E event that refusal is downstream of.
     reset_rt_d2_backedge_propagations();
+    reset_d5a_trace();
     set_rt_d2_suppress_propagation(true);
     let _restore = Restore;
     let suppressed =
         rt_run_functionized(&witness, RecursiveDescentResidual::MatchScrutineeRecursor);
+    let trace = take_d5a_trace();
     assert_eq!(
-        rt_d2_backedge_propagations(),
-        0,
-        "the suppression must actually suppress; a non-zero here means the A/B proved nothing"
+        (rt_d2_seat_with_pending(), rt_d2_backedge_matches(), rt_d2_backedge_propagations()),
+        (1, 1, 0),
+        "the suppressed run must ARRIVE once and MATCH once while completing zero propagations; \
+         a zero-match reading would mean the suppression skipped the detector rather than the \
+         return, and the A/B would prove nothing"
     );
     assert!(
         suppressed.contains("scrutinee is not a constructor value after ordinary expression \
 lowering"),
-        "suppressing only this guard must replay the exact D1 refusal, which is what attributes \
-         the repair to this guard and not to something else that moved. got: {suppressed}"
+        "suppressing only this guard must replay the exact D1 refusal: {suppressed}"
+    );
+    let e_events = trace
+        .iter()
+        .filter(|entry| {
+            entry.contains("RT-D2 E COMPOSED-CONSUMER")
+                && entry.contains("actual_kind=RecursiveBackedge")
+        })
+        .count();
+    assert_eq!(
+        e_events, 1,
+        "the suppressed run must produce EXACTLY ONE composed-consumer event carrying the marker \
+         -- that event is what the refusal is downstream of, and asserting the message alone \
+         would let a different failure with the same substring pass. trace: {trace:#?}"
     );
 }
 

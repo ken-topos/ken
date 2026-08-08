@@ -193,13 +193,17 @@ eliminator work, so the predecessor-free path emits no suffix block,
 allocation, call, claim or occurrence-plan consumption. It matches
 `Specialized(RecursiveBackedge)` only.
 
-| run | seat arrivals | propagations | result |
-|---|---:|---:|---|
-| position A, functionized | 1 | **1** | `Returned(Int(Small(7)))` |
-| position A, retained | 1 | 0 | `Returned(Int(Small(7)))` |
-| position A, propagation suppressed | 1 | 0 | the exact `D1` refusal, replayed |
-| non-recursive control | **0** | 0 | executes; never reaches this seat |
-| position B | **0** | 0 | executes; never reaches this seat |
+| run | seat arrivals | backedge matches | propagations | result |
+|---|---:|---:|---:|---|
+| position A, functionized | 1 | 1 | **1** | `Returned(Int(Small(7)))` |
+| position A, retained | 1 | 0 | 0 | `Returned(Int(Small(7)))` |
+| position A, propagation suppressed | 1 | **1** | 0 | the exact `D1` refusal, replayed |
+| non-recursive control | **0** | 0 | 0 | executes; never reaches this seat |
+| position B | **0** | 0 | 0 | executes; never reaches this seat |
+
+**Every figure in this table is asserted exactly by
+`rt_d2_exact_counts_and_the_suppression_ab`, not as a lower bound.** A
+duplicated seat consumption would satisfy `> 0` while this table claimed one.
 
 **Both lanes now agree on position A's executed answer.**
 
@@ -213,16 +217,35 @@ allocation, call, claim or occurrence-plan consumption. It matches
   and manufacturing a carrier or constructor for it would have duplicated a
   path that had already jumped.
 
-### The seat denominator, and why the zeros needed one
+### Two different zeros, and the counter that separates them
 
-The zeros above are only meaningful beside an arrival count. A program that
-never reaches `resume_active_continuation` with a pending suffix also reports
-zero propagations, and reading that as "the guard correctly declined" would be
-measuring absence. **Position B and the non-recursive control arrive zero
-times**, so their zeros say the repair is scoped, not that the guard declined
-on them; that is stated in the control rather than implied. The genuine
-same-seat non-backedge control is **position A's own retained lane**, which
-arrives, is declined, and still consumes its eliminator.
+A zero propagation count has two possible causes, and they are not the same
+finding:
+
+- **the guard declined** — position A's retained lane *arrives* at the seat
+  with a non-backedge value, is declined, and still consumes its eliminator.
+  This is the genuine same-seat non-backedge control.
+- **the seat was never reached** — position B and the non-recursive control
+  have arrivals `0`. Their zeros are **scope** evidence and say nothing about
+  the guard's behaviour.
+
+⛔ Not every zero is paired with a positive arrival count, and an earlier draft
+of this record said it was. Two of the rows are explicitly zero-arrival, which
+is the point of showing arrivals at all.
+
+### Why the suppressed run counts MATCHES, not just propagations
+
+The production guard is `!suppress && matches!(..)` and **short-circuits**. Under
+suppression the `matches!` is never evaluated, so a zero propagation count is
+guaranteed *by construction* — an A/B whose mutated side asserts only that zero
+proves nothing about whether the detector would have fired.
+
+The backedge-match counter is incremented **before** the guard, so the
+suppressed run shows one arrival and **one match** with zero completed
+propagations. That is what makes the suppression a real A/B, and it is why the
+mutated arm also asserts exactly one `RT-D2 E COMPOSED-CONSUMER` event carrying
+`actual_kind=RecursiveBackedge`: asserting the error message alone would let a
+different failure with the same substring pass.
 
 ### Validation
 
