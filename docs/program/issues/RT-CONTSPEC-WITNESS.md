@@ -6,7 +6,7 @@ owner: runtime
 size: M
 gate: none
 depends_on: [RT-CONTSPEC-LEDGER]
-blocks: [RT-RECURSOR-TRANSPORT, RT-DECL-CLOSURE-PORT]
+blocks: [RT-RECURSOR-TRANSPORT]
 github: null
 origin: "Architect ownership/sizing ruling evt_1yymw1gdszpbs (2026-08-02), outcome (c) on RT-CONTSPEC-LOWER, seam 4 of four — the terminal seam that inherits RT-CONTSPEC-LOWER's tracker closure (three nodes as originally scoped; two as at 2026-08-08, RT-DECL-CLOSURE-PORT having merged separately). Steward-filed (agents cannot create tracked work per COORDINATION section 2)."
 ---
