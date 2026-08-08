@@ -260,8 +260,23 @@ the population and therefore this figure are unchanged from `392e883a` — which
 is why binding to the parent evidence SHA is stable and avoids a commit trying
 to name its own hash.
 
-Every count in this document names the SHA it was measured on — `812` and `814`
-at `2e5e6a8b`, `816` at `392e883a` — and none is labelled by role. A suite
-figure is destroyed by the next commit that adds a test, so a count bound to a
-position rather than to an object is stale the moment it is true. This document
-asserted that rule while breaking it twice; the SHAs above are the fix.
+Every count in this document names the SHA it was measured on, and none is
+labelled by role:
+
+| figure | object | what it is |
+|---:|---|---|
+| 812 / 0 / 4 | `f4212c2c` | the delta-free `D0` baseline, taken with an empty worktree |
+| 814 / 0 / 4 | `2e5e6a8b` | the `D1` checkpoint — the baseline plus the two `D1` witnesses |
+| 816 / 0 / 4 | `392e883a` | the `D2` evidence checkpoint — plus the two `D2` controls |
+
+A suite figure is destroyed by the next commit that adds a test, so a count
+bound to a position rather than to an object is stale the moment it is true.
+
+⛔ **This footer previously grouped `812` and `814` together at `2e5e6a8b`.
+`812` was measured at `f4212c2c`, before any edit of mine existed** — that is
+the whole point of a delta-free baseline, and mislabelling it attaches the
+baseline to a tree that already contains the change it is supposed to be a
+baseline of. The error was in the sentence asserting the rule, which is the
+form these keep taking: a summary restating measurements loosely enough to be
+wrong while reading as a tidy conclusion. The table above replaces the prose
+because a table cannot group two figures under one object by accident.
